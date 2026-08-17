@@ -1,56 +1,201 @@
-# Which test suites use the shared framework, and which still carry a case
-# runner of their own.
+# Which test suites still run a case their own way, and how many times each.
 #
-# tests/testlib.ps is the one place a case that may raise is run, and the
-# one place that puts the world back afterwards. A suite asks for it with
+# tests/testlib.ps is the one place a case that may raise is run, and the one
+# place that puts the world back afterwards. A suite asks for it with
 # `%!testlib` on its first line; run-ps-test.sh prepends it to those and to
 # nothing else, because some suites here assert that a program's own
 # dictionary starts empty or count the dictionary stack, and six read their
 # own source through currentfile.
 #
-# This file is the list of suites that have NOT moved, with the shapes each
-# one's own runner takes -- which is what a conversion has to preserve if
-# the move is to be checked by diffing the suite's output rather than by
-# reading it. The list is held to the tree in BOTH directions: a suite that
-# grows its own runner and is not named here fails, and a name here whose
-# suite no longer has one fails too. So the list can only shrink, and it
-# shrinks by conversion rather than by editing.
+# WHAT IS COUNTED, and why it is not a list of names. Naming the suites that
+# define a procedure called works, refuses, raises or outcome -- the shared
+# framework's own names -- finds only the copies spelled like the shared one,
+# and a runner is renamed as easily as it is written. `/erris` is a
+# raises-clone under another name, defined in twenty-four suites here. A
+# register derived by name shrinks when a runner is renamed rather than
+# converted, and says nothing about a suite already on the framework that
+# kept a runner of its own.
 #
-# The guard also refuses the one mistake that would undo all of this: a
-# suite that asks for the framework and then defines one of its names
-# anyway. That shadows the shared runner with a local one silently, which
-# is exactly the arrangement that let a false pass sit in a hundred and
-# forty-six files.
+# What is counted now is `stopped`, the operator any such runner has to
+# reach -- it is the only way a PostScript program catches an error -- so no
+# choice of name can dodge it. Occurrences, not lines, because five lines
+# here carry two; and an occurrence is counted only when no % precedes it on
+# the line, so prose about the operator is not read as a use of it.
 #
-# TWO DISPOSITIONS, and the second is why this file is a register rather
-# than a to-do list. `own` is a suite that has not moved yet. `cannot` is
-# one that must not move, and carries the reason: a suite whose subject is
-# the state of a program's own dictionary cannot be handed a framework
-# defined into that dictionary, because the framework is then what it
-# reports. Without somewhere to say that, the only records of it would be
-# a conversion that failed and whoever next tried the same thing.
+# The COUNT is part of the entry, and it is what makes this a measure rather
+# than a list. A suite converted case by case has its count fall, so partial
+# progress is visible; a suite that grows a new hand-rolled case fails even
+# though it is already listed, which a list of names could not catch. The
+# register is held to the tree in both directions, so a count can only be
+# changed by changing the suite.
 #
-# HOW A CONVERSION IS CHECKED, and what the check does not cover. Every
-# suite moved here was run through the harness before and after and required
-# to print the same bytes. That is a strong check on behaviour and no check
-# at all on strength: a suite whose own runner fixed the expected error name
-# inside itself, converted to a shared runner that accepts any error, goes
-# on printing SUCCESS while asking a weaker question. So a conversion that
-# changes which question a case asks must also show the case failing when
-# the answer is wrong.
+# A high count is not by itself a defect. Some of these suites have
+# `stopped` as their SUBJECT -- the error dictionary's contents, stop and
+# stopped themselves, what an error leaves on the stacks -- and those will
+# end as `cannot` with the reason written down. None of them has been
+# examined yet, so they are all `own`: not yet looked at, rather than judged
+# convertible.
+#
+# TWO DISPOSITIONS. `own` is a suite that has not moved. `cannot` is one
+# that must not move, and carries the reason: a suite whose subject is the
+# state of a program's own dictionary cannot be handed a framework defined
+# into that dictionary, because the framework is then what it reports.
+# Without somewhere to say that, the only records of it would be a
+# conversion that failed and whoever next tried the same thing.
+#
+# HOW A CONVERSION IS CHECKED, and what the check does not cover. A suite
+# being moved is run through its own harness before and after and required to
+# print the same bytes. That is a strong check on behaviour and no check at
+# all on strength: a suite whose own runner fixed the expected error name
+# inside itself, converted to a shared runner that accepts any error, goes on
+# printing SUCCESS while asking a weaker question. So a conversion that
+# changes which question a case asks must also show the case failing when the
+# answer is wrong.
 #
 # The prose above ends at the two legend lines below, and the guard checks
-# they are still there. A rewrite of this file that generates the register
-# by finding the first `own` in it truncates the header at the word in
-# `own source through currentfile` and merges the first entry onto the
-# comment, which nothing reading only the uncommented lines can see.
+# they are still there. A rewrite of this file that generates the register by
+# finding the first `own` in it truncates the header at the word in `own
+# source through currentfile` and merges the first entry onto the comment,
+# which nothing reading only the uncommented lines can see.
 #
-#   own    <suite>  <runner>[ <runner>...]
-#   cannot <suite>  <runner>[ <runner>...]  <reason>
+# Regenerate with:  sh tests/check-testlib.sh . --derive
+# which is the same derivation the check enforces, so the two cannot drift.
+#
+#   own    <suite>  <cases run its own way>
+#   cannot <suite>  <cases run its own way>  <reason>
 
-own    op_radix_test.ps               outcome
+own    access_test.ps                         7
+own    array_swap_range_test.ps               1
+own    binary_token_test.ps                   4
+own    bind_packed_test.ps                    1
+own    blit_access_test.ps                    2
+own    blit_range_test.ps                     3
+own    build_personality_test.ps              2
+own    cacheparams_range_test.ps              1
+own    callback_reentry_test.ps               4
+own    cli_sandbox_test.ps                    1
+own    clip_region_test.ps                    2
+own    colorspace_matrix_test.ps              1
+own    colour_range_test.ps                   3
+own    colour_space_family_test.ps            2
+own    composite_limit_test.ps                1
+own    counttomark_test.ps                    4
+own    dct_truncated_test.ps                  7
+own    dev_gray_row_test.ps                   3
+own    device_completion_test.ps              1
+own    device_contract_test.ps                4
+own    device_destroy_test.ps                 1
+own    device_dictstack_test.ps               1
+own    device_getpix_destroyed_test.ps        2
+own    device_ground_test.ps                  1
+own    device_private_test.ps                 2
+own    device_restore_retired_test.ps         1
+own    device_retire_restored_test.ps         2
+own    empty_clip_test.ps                     6
+own    entity_limit_test.ps                   6
+own    error_dict_test.ps                     3
+own    error_unwind_test.ps                   79
+own    execform_cache_test.ps                 2
+own    file_lifetime_test.ps                  5
+own    file_refusal_test.ps                   1
+own    filenameforall_large_test.ps           4
+own    fill_span_test.ps                      1
+own    fillpoly_arity_test.ps                 3
+own    filter_abandon_test.ps                 10
+own    filter_close_eod_test.ps               8
+own    filter_conformance_test.ps             3
+own    filter_encode_pad_test.ps              7
+own    filter_leak_test.ps                    7
+own    filter_proc_test.ps                    7
+own    filter_source_life_test.ps             1
+own    font_cache_bound_test.ps               1
+own    font_face_release_test.ps              1
+own    font_leak_test.ps                      6
+own    font_name_steer_probe.ps               1
+own    font_name_steer_test.ps                1
+own    font_private_test.ps                   2
+own    font_type1_noaccess_test.ps            1
+own    forall_large_test.ps                   2
+own    fused_equivalence_test.ps              1
+own    gc_large_dict_test.ps                  1
+own    global_vm_invariant_test.ps            4
+own    graphics_regression_test.ps            33
+own    gstate_object_test.ps                  1
+own    halftone_cell_test.ps                  3
+own    halftone_matrix_test.ps                2
+own    imaging_bbox_test.ps                   5
+own    internal_debug_ops_test.ps             5
+own    isolation_test.ps                      13
+own    large_object_test.ps                   3
+own    loop_exit_test.ps                      7
+own    mask_cache_range_test.ps               2
+own    namespace_test.ps                      1
+own    nographics_test.ps                     3
+own    numstring_decode_test.ps               1
+own    op_closed_read_test.ps                 1
+own    op_compare_test.ps                     1
+own    op_context_test.ps                     4
+own    op_control_test.ps                     7
+own    op_cvi_test.ps                         4
+own    op_cvn_test.ps                         2
+own    op_dictstack_test.ps                   2
+own    op_dispatch_typecheck_test.ps          1
+own    op_env_test.ps                         3
+own    op_error_restore_test.ps               14
+own    op_file_access_test.ps                 3
+own    op_file_edges_test.ps                  9
+own    op_file_limit_test.ps                  2
+own    op_filenameforall_test.ps              4
+own    op_fontcache_test.ps                   2
+own    op_glyphcontext_test.ps                5
+own    op_index_type_test.ps                  1
+own    op_initgraphics_test.ps                2
+own    op_math_test.ps                        4
+own    op_matrix_gstate_test.ps               3
+own    op_operand_shapes_test.ps              2
+own    op_packing_test.ps                     1
+own    op_path_test.ps                        2
+own    op_printdepth_test.ps                  8
+own    op_radix_test.ps                       6
+own    op_readline_test.ps                    1
+own    op_readstring_test.ps                  1
+own    op_rect_test.ps                        6
+own    op_resource_test.ps                    9
+own    op_showstate_test.ps                   5
+own    op_string_filter_test.ps               1
+own    op_userparams_test.ps                  2
+own    op_vm_param_test.ps                    8
+own    op_vmreclaim_test.ps                   1
+own    op_wrapsig_test.ps                     1
+own    operator_dictstack_test.ps             1
+own    oversize_page_test.ps                  2
+own    page_extent_test.ps                    2
+own    page_handlers_test.ps                  5
+own    path_bounds_test.ps                    4
+own    path_recycle_test.ps                   1
+own    path_walk_cost_test.ps                 1
+own    pdf_append_fail_test.ps                1
+own    privatedict_install_test.ps            2
+own    raster_row_test.ps                     1
+own    record_replay_test.ps                  2
+own    record_short_test.ps                   3
+own    refusal_report_test.ps                 2
+own    reloc_stress_test.ps                   2
+own    render_classes_test.ps                 14
+own    save_restore_matrix_test.ps            1
+own    scanner_eof_test.ps                    2
+own    semantics_test.ps                      32
+own    setpagedevice_failure_test.ps          1
+own    svg_append_fail_test.ps                1
+own    tamper_dispatch_test.ps                5
+own    thin_stroke_test.ps                    1
+own    trapping_test.ps                       2
+own    vm_test.ps                             1
+own    vm_threshold_test.ps                   1
+own    window_device_test.ps                  4
+own    wrapped_save_test.ps                   1
 
-cannot startup_surface_test.ps        raises  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
+cannot startup_surface_test.ps                6  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
 
-owns 1
+owns 130
 cannots 1
