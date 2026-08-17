@@ -657,6 +657,27 @@ currentglobal true setglobal
             sp length 1 gt { sp 1 get //.xpostsys /.csvalidate get exec } if
         } if
     }{
+        % a tint space reaches its alternative space by calling a
+        % procedure the program supplied (PLRM 4.8.5), so a fourth
+        % element that cannot be called is not a tint transform and the
+        % array is not a colour space. The refusal is here because this
+        % is the last moment the operator that supplied it is still the
+        % one the program named; called later, the failure would be
+        % reported against whichever painting operator reached it.
+        %
+        % The two special colorant names do not exempt it. A Separation
+        % named All or None ignores its alternative space and transform,
+        % and PLRM still requires dummy values to be provided; a dummy
+        % of a kind that could never be called is not one, and admitting
+        % it here would admit it for every colorant name alike.
+        sp //.xpostsys /.spacekind get exec /tint eq {
+            sp length 4 lt
+                { /setcolorspace cvx /typecheck signalerror } if
+            sp 3 get
+            dup type dup /arraytype eq exch /packedarraytype eq or
+            exch xcheck and not
+                { /setcolorspace cvx /typecheck signalerror } if
+        } if
         /sp sp //.xpostsys /.spacereduce get exec def
         % an array still standing here names a family nothing reduced
         sp type /arraytype eq { /sp sp 0 get def } if

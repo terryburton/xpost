@@ -48,6 +48,24 @@
                        /WhitePoint [0.9505 1.0 1.089] >> ] }
     (CIEBasedABC)  { [ /CIEBasedABC <<
                        /WhitePoint [0.9505 1.0 1.089] >> ] }
+    % The two pre-extensions carry a lookup table their colour is read
+    % out of, so they are the only members whose construction is more
+    % than a name and a range. PLRM 4.8.3: a DEF table is an array of
+    % NH strings of 3 x NI x NJ bytes, a DEFG table an array of NH
+    % arrays of NI strings of 3 x NJ x NK bytes -- one more level of
+    % nesting, which is the difference between the two families.
+    (CIEBasedDEF)  { [ /CIEBasedDEF <<
+                       /WhitePoint [0.9505 1.0 1.089]
+                       /Table [ 2 2 2
+                         [ <000000FF000000FF000000FFFF>
+                           <FFFFFF808080404040000000FF> ] ] >> ] }
+    (CIEBasedDEFG) { [ /CIEBasedDEFG <<
+                       /WhitePoint [0.9505 1.0 1.089]
+                       /Table [ 2 2 2 2
+                         [ [ <000000FF000000FF000000FFFF>
+                             <FFFFFF808080404040000000FF> ]
+                           [ <101010202020303030404040FF>
+                             <505050606060707070808080FF> ] ] ] >> ] }
     (Indexed)      { [ /Indexed /DeviceRGB 1 <FF000000FF00> ] }
     (Separation)   { [ /Separation /Spot /DeviceGray { } ] }
     (DeviceN)      { [ /DeviceN [ /A /B ] /DeviceRGB
@@ -95,6 +113,35 @@
     n 0 gt
     nm (enters its space holding a colour) assert
 } eachmember
+
+% ---- a tint space's transform must be a procedure
+%
+% PLRM 4.8.5 gives Separation a tintTransform and DeviceN a
+% tintTransform, and both are procedures the interpreter calls to reach
+% the alternative space. A value that is not a procedure cannot be
+% called, so a space carrying one is not a colour space; the refusal
+% belongs where the space is set, because that is the last moment the
+% program is still holding the operator that supplied it.
+%
+% The two special colorant names do not exempt it. PLRM 4.8.5 says a
+% Separation named All or None ignores the alternative space and the
+% transform, "though dummy values must still be provided" -- a dummy
+% that could never be called is not a value of the right kind, and a
+% space accepted here would be accepted for every colorant name alike.
+{ [ /Separation /Spot /DeviceGray 42 ] setcolorspace } outcome /typecheck eq
+(Separation) (refuses a tint transform that is not a procedure) assert
+{ [ /Separation /None /DeviceGray 42 ] setcolorspace } outcome /typecheck eq
+(Separation /None) (refuses one too, its transform being unused not unneeded) assert
+{ [ /Separation /All /DeviceGray 42 ] setcolorspace } outcome /typecheck eq
+(Separation /All) (refuses one too) assert
+{ [ /DeviceN [ /A /B ] /DeviceRGB 42 ] setcolorspace } outcome /typecheck eq
+(DeviceN) (refuses a tint transform that is not a procedure) assert
+
+% and a procedure is still accepted, so the check refuses only what it means to
+{ [ /Separation /Spot /DeviceGray { } ] setcolorspace } outcome /ok eq
+(Separation) (still takes a procedure) assert
+{ [ /DeviceN [ /A /B ] /DeviceRGB { pop pop 0 0 0 } ] setcolorspace } outcome /ok eq
+(DeviceN) (still takes a procedure) assert
 
 failcount 0 eq { (SUCCESS\n) print }{
     (FAILURES: ) print failcount 8 string cvs print (\n) print } ifelse
