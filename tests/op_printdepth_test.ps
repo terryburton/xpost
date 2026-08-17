@@ -33,12 +33,10 @@ q 0 p put
 
 % --------------------------------------------------------- finite structures
 
-{ [ 1 [ 2 [ 3 [ 4 [ 5 ] ] ] ] ] == } stopped not
-    (a finitely nested array prints) assert
+{ [ 1 [ 2 [ 3 [ 4 [ 5 ] ] ] ] ] == } (a finitely nested array prints) works
 { [ 1 2 3 ] == } stopped not (a flat array prints) assert
 { { 1 2 add } == } stopped not (a procedure prints) assert
-{ [ (a) /b 1 2.5 true null ] == } stopped not
-    (an array of every simple type prints) assert
+{ [ (a) /b 1 2.5 true null ] == } (an array of every simple type prints) works
 
 % nesting well beyond anything ordinary, still finite, still entered
 % rather than abbreviated: twelve deep

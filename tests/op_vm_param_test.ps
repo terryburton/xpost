@@ -66,31 +66,17 @@ lmodeused gbankused sub abs 65536 ge
 
 % --- vmreclaim takes the five values it defines, and no others ---
 clear
-{ -2 vmreclaim } stopped not
-    (vmreclaim disables collection in both banks) assert
-{ -1 vmreclaim } stopped not
-    (vmreclaim disables collection in local memory) assert
-{ 0 vmreclaim } stopped not
-    (vmreclaim enables collection) assert
-{ 1 vmreclaim } stopped not
-    (vmreclaim collects local memory) assert
-{ 2 vmreclaim } stopped not
-    (vmreclaim collects both banks) assert
+{ -2 vmreclaim } (vmreclaim disables collection in both banks) works
+{ -1 vmreclaim } (vmreclaim disables collection in local memory) works
+{ 0 vmreclaim } (vmreclaim enables collection) works
+{ 1 vmreclaim } (vmreclaim collects local memory) works
+{ 2 vmreclaim } (vmreclaim collects both banks) works
 clear
 
 % anything outside that range is a rangecheck, and a non-integer a typecheck
-{ 3 vmreclaim } stopped (a value above the range is refused) assert
-$error /errorname get /rangecheck eq
-    (a value above the range is a rangecheck) assert
-clear
-{ -3 vmreclaim } stopped (a value below the range is refused) assert
-$error /errorname get /rangecheck eq
-    (a value below the range is a rangecheck) assert
-clear
-{ (x) vmreclaim } stopped (a non-integer operand is refused) assert
-$error /errorname get /typecheck eq
-    (a non-integer operand is a typecheck) assert
-clear
+{ 3 vmreclaim } /rangecheck (a value above the range is refused) raises
+{ -3 vmreclaim } /rangecheck (a value below the range is refused) raises
+{ (x) vmreclaim } /typecheck (a non-integer operand is refused) raises
 
 % --- an immediate collection leaves the program running over it ---
 % the collector reclaims what nothing reaches; everything the program can

@@ -398,8 +398,7 @@ fe.e (41) writestring
 { fe.e flushfile } stopped not (flushfile on an encode filter is accepted) assert
 { fe.e resetfile } stopped not (resetfile on an encode filter is accepted) assert
 fe.e status (resetfile leaves an encode filter open) assert
-{ fe.e (42) writestring } stopped not
-    (an encode filter still writes after resetfile) assert
+{ fe.e (42) writestring } (an encode filter still writes after resetfile) works
 fe.e closefile fe.f closefile
 
 /fe.d (4142) /ASCIIHexDecode filter def
