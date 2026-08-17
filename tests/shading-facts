@@ -46,36 +46,40 @@ types 7
 # The widths the packed reader accepts, and the widths the
 # specification allows.
 #
-# The four stream types share one reader, and the reader walks the
-# DataSource a BYTE at a time. PLRM allows a coordinate to be 1, 2, 4, 8,
-# 12, 16, 24 or 32 bits and a colour component to be 1, 2, 4, 8, 12 or
-# 16, padding only at the end of each vertex -- so within a vertex the
-# fields are packed against each other and most of those widths put a
-# field across a byte boundary. A byte-walking reader cannot read them.
+# The four stream types share one reader. PLRM allows a coordinate to be
+# 1, 2, 4, 8, 12, 16, 24 or 32 bits, a colour component 1, 2, 4, 8, 12 or
+# 16, and an edge flag 2, 4 or 8; the fields of one vertex are packed
+# against each other with no gaps, and only the end of a vertex -- or of
+# a patch -- is padded to a byte. So most of those widths put a field
+# across a byte boundary, and the reader counts bits to reach them.
 #
 # Which widths this interpreter takes is PROBED rather than read, one
-# shading per width, and held to these lines. A width that starts being
-# accepted, or stops, fails here rather than passing as an improvement
-# nobody wrote down.
+# shading per width with its data packed the way that width requires,
+# and held to these lines. A width that stops being accepted fails here
+# rather than being discovered by a program whose data will not load.
 #
 #   width <entry> <bits> <takes|refuses>
 
-width BitsPerCoordinate 1   refuses
-width BitsPerCoordinate 2   refuses
-width BitsPerCoordinate 4   refuses
-width BitsPerCoordinate 8   refuses
-width BitsPerCoordinate 12  refuses
+width BitsPerCoordinate 1   takes
+width BitsPerCoordinate 2   takes
+width BitsPerCoordinate 4   takes
+width BitsPerCoordinate 8   takes
+width BitsPerCoordinate 12  takes
 width BitsPerCoordinate 16  takes
-width BitsPerCoordinate 24  refuses
+width BitsPerCoordinate 24  takes
 width BitsPerCoordinate 32  takes
-width BitsPerComponent  1   refuses
-width BitsPerComponent  2   refuses
-width BitsPerComponent  4   refuses
+width BitsPerComponent  1   takes
+width BitsPerComponent  2   takes
+width BitsPerComponent  4   takes
 width BitsPerComponent  8   takes
-width BitsPerComponent  12  refuses
+width BitsPerComponent  12  takes
 width BitsPerComponent  16  takes
 
-widths 14
+width BitsPerFlag       2   takes
+width BitsPerFlag       4   takes
+width BitsPerFlag       8   takes
+
+widths 17
 
 # The values each painter's edge flag may take.
 #
@@ -129,8 +133,6 @@ flagmaxes 2
 # heading  being changed now
 
 missing-required  settled  PLRM gives shfill the errors rangecheck and undefinedresult, and a shading dictionary missing an entry its type requires raises undefined here instead, because the entry is fetched and the fetch is what fails. ADJUDICATED against both implementations: a type 2 without its Function raises undefined in both of them as well. The letter of the error list is followed by nobody, and changing it would make this the odd one out rather than the conforming one
-byte-aligned-reader  thorn  The packed reader walks whole bytes, so of the widths PLRM allows it takes 16 and 32 for a coordinate and 8 and 16 for a component, and refuses the rest. Two of the refused ones are whole bytes and are simply missing: a coordinate of 8 bits, and one of 24 that no part of the value scaling has a case for. The others put a field across a byte boundary and are out of reach until the reader counts bits rather than bytes. ADJUDICATED, and the two implementations do not agree with each other, so both answers are written down. Eight-bit coordinates: both paint, this refuses -- the same triangle paints 544 of 1024 pixels here at 16 bits and 544 in the first of them, and at 8 bits that one paints 545 while this raises rangecheck; so this is the outlier and the gap is real. Twelve-bit components: the second paints them, the first raises rangecheck as this does. PLRM allows 12, so the majority here is not the standard, and what the twelve-bit case wants is a bit-counting reader rather than another entry in the list of widths. Relaxing the eight-bit refusal on its own paints 559 rather than 545, so even the whole-byte gap is more than one check away from closed
-flag-width  thorn  BitsPerFlag is not checked at all, and PLRM allows 2, 4 and 8. The reader asks for the flag in whole bytes, so 2 and 4 are read as a field of no bytes: the flag comes back 0 for every vertex and the rest of the stream is read from the wrong place. Nothing refuses it and nothing reports it. ADJUDICATED with BitsPerFlag 4: both implementations paint, and so does this, so the difference is not in what is accepted but in what is drawn -- this paints 63 of 1024 pixels where the one that can be measured pixel for pixel paints 48. Whether the same dictionary paints at all or raises rangecheck depends only on whether the misreading happens to run off the end of the data, which is the worst shape a difference can have: it is silent when the data is long and it blames the program when it is short
 mesh-depth  thorn  The two stream painters decide how finely to subdivide in different ways. The patch painter transforms its boundary points into device space and takes a step count from how large they are, clamped between 3 and 12. The triangle painter uses the constant 4, under a comment saying the depth comes from the mesh's device scale. So a triangle mesh is subdivided the same amount whether it covers four pixels or the whole page, and the comment says otherwise
 
-divergences 4
+divergences 2

@@ -171,30 +171,40 @@ D5=0000000000FFFF0000400000FFFF80FFFFFFFFFF
 D6=0000000000111122222222444433336666444488885555AAAA6666CCCC7777EEEE8888111099993332AAAA5554BBBB7776004080FF
 D7=0000000000111122222222444433336666444488885555AAAA6666CCCC7777EEEE8888111099993332AAAA5554BBBB7776CCCC9998DDDDBBBAEEEEDDDCFFFFFFFE004080FF
 
-# Three free-form vertices at a stated field width: the same triangle
-# every time, written to fit. A width probe cannot reuse one string --
-# data sized for sixteen-bit coordinates runs out under thirty-two-bit
-# ones, and running out raises the same error as being refused, which
-# would report every wider width as unsupported.
-meshdata() {        # <coordinate bits> <component bits> -> hex
-    awk -v CB="$1" -v MB="$2" '
-        function field(frac, bytes,    v, i, s, p) {
-            v = int(frac * (256 ^ bytes - 1) + 0.5)
-            s = ""
-            for (i = bytes; i >= 1; i--) {
-                p = 256 ^ (i - 1)
-                s = s sprintf("%02X", int(v / p) % 256)
-            }
-            return s
+# Three free-form vertices at stated field widths: the same triangle
+# every time, packed the way PLRM 4.9.3 says. The fields of a vertex are
+# packed against each other with no gaps and only the END of the vertex
+# is padded to a byte, so a probe cannot reuse one string and cannot
+# lay the fields out a byte at a time either -- data of the wrong shape
+# runs out, and running out raises what being refused raises, which
+# would report every width the reader can walk as one it cannot.
+#
+# The coordinates are the ends of the field's range, which every width
+# represents exactly, so a page that changes with the width is the
+# reader and not the arithmetic.
+meshdata() {        # <coordinate bits> <component bits> [flag bits] -> hex
+    awk -v CB="$1" -v MB="$2" -v FB="${3:-8}" '
+        function putbits(v, n,   i) {
+            for (i = n - 1; i >= 0; i--)
+                bits = bits sprintf("%d", int(v / 2 ^ i) % 2)
         }
+        function align() { while (length(bits) % 8) bits = bits "0" }
         BEGIN {
-            cb = int((CB + 7) / 8); if (cb < 1) cb = 1
-            mb = int((MB + 7) / 8); if (mb < 1) mb = 1
-            split("0 1 0.5", x, " "); split("0 0 1", y, " ")
-            split("0 0.5 1", c, " ")
+            cmax = 2 ^ CB - 1; mmax = 2 ^ MB - 1
+            split("0 " cmax " 0", x, " ")
+            split("0 0 " cmax, y, " ")
+            split("0 " mmax " " mmax, c, " ")
+            bits = ""
+            for (i = 1; i <= 3; i++) {
+                putbits(0, FB); putbits(x[i], CB); putbits(y[i], CB)
+                putbits(c[i], MB); align()
+            }
             out = ""
-            for (i = 1; i <= 3; i++)
-                out = out "00" field(x[i], cb) field(y[i], cb) field(c[i], mb)
+            for (i = 1; i <= length(bits); i += 8) {
+                byte = 0
+                for (j = 0; j < 8; j++) byte = byte * 2 + substr(bits, i + j, 1)
+                out = out sprintf("%02X", byte)
+            }
             print out
         }'
 }
@@ -349,18 +359,20 @@ done < "$work/reg.detail"
 # which is a refusal by another name and is reported as a disagreement.
 : > "$work/got.width"
 while read -r entry bits verdict; do
+    fb=8
     case $entry in
         BitsPerCoordinate) cb=$bits; mb=8 ;;
         BitsPerComponent)  cb=16; mb=$bits ;;
+        BitsPerFlag)       cb=16; mb=8; fb=$bits ;;
         *)  echo "FAIL: the register has a width line for $entry, which is not"
             echo "      an entry of the packed reader"
             fail=1
             continue ;;
     esac
-    ds=$(meshdata "$cb" "$mb")
+    ds=$(meshdata "$cb" "$mb" "$fb")
     ans=$(paint "/ShadingType 4 $CS /DataSource <$ds>
                  /BitsPerCoordinate $cb /BitsPerComponent $mb
-                 /BitsPerFlag 8 /Decode [0 8 0 8 0 1]")
+                 /BitsPerFlag $fb /Decode [0 8 0 8 0 1]")
     case $ans in
         ink\ *) echo "$entry $bits takes" >> "$work/got.width" ;;
         rangecheck) echo "$entry $bits refuses" >> "$work/got.width" ;;
@@ -477,15 +489,6 @@ esac
 # a width PLRM allows that the reader refuses
 awk '$3 == "refuses" { found = 1 } END { exit !found }' "$work/reg.width" &&
     echo byte-aligned-reader >> "$work/got.diverge"
-
-# a flag width PLRM allows, taken without complaint and read as nothing.
-# The data is five vertices with the flag in the top half of its byte,
-# which is what PLRM's per-vertex padding makes of a four-bit flag.
-F4=00000000000000FFFF000080008000FFFFFF10FFFFFFFF40100000FFFF20
-ans=$(paint "/ShadingType 4 $CS /DataSource <$F4> $BITS /BitsPerFlag 4")
-case $ans in
-    ink\ *) echo flag-width >> "$work/got.diverge" ;;
-esac
 
 # an edge flag outside the three values PLRM allows, taken as if it were
 # one of them. The flag byte here is 16, which is 0 in its low two bits

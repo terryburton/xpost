@@ -324,18 +324,59 @@ currentglobal true setglobal
     end
 } def
 
-% mesh vertex readers: the packed DataSource walks byte-aligned
-% fields through a position held in the reader dictionary
-/.mrdbyte { % - . v
-    ds dp get /dp dp 1 add def
+% mesh vertex readers.
+%
+% A packed DataSource is a bit stream, not a byte stream: PLRM 4.9.3
+% lets a coordinate be 1, 2, 4, 8, 12, 16, 24 or 32 bits and a colour
+% component 1, 2, 4, 8, 12 or 16, and the fields of one vertex are
+% packed against each other with no gaps. Only the END of a vertex is
+% padded to a byte, and for a patch only the end of the patch.
+%
+% So the position is held in BITS. Two readers would drift, so there is
+% one, and the byte-at-a-time reading every stream written today needs
+% is a path through it rather than a second one: a field that begins on
+% a byte boundary and is a whole number of bytes is read a byte at a
+% time and everything else a bit at a time, which are the same number by
+% construction.
+% The field widths PLRM 4.9.3 allows, one set per entry. They are sets
+% rather than a range because the reader must be able to say which
+% widths it takes, and a program's data is unreadable if it guesses.
+/.mrdcoordbits << 1 true 2 true 4 true 8 true 12 true 16 true 24 true 32 true >> def
+/.mrdcompbits << 1 true 2 true 4 true 8 true 12 true 16 true >> def
+/.mrdflagbits << 2 true 4 true 8 true >> def
+% The position is the caller's, so this opens no dictionary of its own:
+% a local one would take the /bp definitions with it and the stream
+% would be read from the same place for ever.
+/.mrdbits { % nbits . v  (accumulated in a real, most significant first)
+    dup 8 mod 0 eq bp 8 mod 0 eq and {
+        8 idiv 0.0 exch {
+            256 mul ds bp 8 idiv get add
+            /bp bp 8 add def
+        } repeat
+    }{
+        0.0 exch {
+            2 mul
+            ds bp 8 idiv get 7 bp 8 mod sub neg bitshift 1 and
+            add
+            /bp bp 1 add def
+        } repeat
+    } ifelse
 } def
-/.mrdbits { % nbits . v  (16 or 32, accumulated in a real)
-    0.0 exch 8 idiv { 256 mul //.mrdbyte exec add } repeat
+% - .mrdalign -
+% Step over the padding at the end of a vertex or a patch: what follows
+% begins on a byte boundary whatever the fields before it came to.
+/.mrdalign {
+    litds not { /bp bp 7 add 8 idiv 8 mul def } if
+} def
+% - .mrdmore bool
+% whether any of the source is still unread, counted in whichever unit
+% this source is read by
+/.mrdmore {
+    litds { dp ds length lt }{ bp ds length 8 mul lt } ifelse
 } def
 /.mrddec { % k nbits . value  (field k of Decode applied)
     dup //.mrdbits exec
-    exch dup 8 eq { pop 255.0 }{
-         16 eq { 65535.0 }{ 4294967295.0 } ifelse } ifelse div
+    exch 2 exch exp 1 sub div
     /frv exch def /kk exch def
     dec kk 2 mul 1 add get dec kk 2 mul get sub frv mul
     dec kk 2 mul get add
@@ -367,6 +408,9 @@ currentglobal true setglobal
 } def
 /.mrdvertex { % - . [x y c0..cn-1]
     [ //.mrdpt exec aload pop //.mrdcolor exec aload pop ]
+    % a vertex occupies a whole number of bytes, and for a free-form
+    % mesh the flag read just before it belongs to the same one
+    //.mrdalign exec
 } def
 
 % sh flagrequired  .mrdinit  -
@@ -388,6 +432,7 @@ currentglobal true setglobal
     /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
     /ds sh /DataSource get def
     /dp 0 def
+    /bp 0 def
     /litds ds type /arraytype eq def
     litds {
         % an array DataSource: flag, coordinates and colours are literal
@@ -404,11 +449,12 @@ currentglobal true setglobal
             { sh /BitsPerFlag 2 copy known { get }{ pop pop 8 } ifelse }
             ifelse def
         /ncomp dec length 4 sub 2 idiv def
-        % the fields are walked a byte at a time, so a width that is not
-        % a whole number of bytes cannot be read, and neither can one the
-        % scaling above has no divisor for
-        bpc 16 eq bpc 32 eq or
-        bpcm 8 eq bpcm 16 eq or and not {
+        % a width the specification does not give is one no producer can
+        % have meant, and reading it would be reading somebody else's
+        % field
+        //.mrdcoordbits bpc known
+        //.mrdcompbits bpcm known and
+        flagreq { //.mrdflagbits bpf known and } if not {
             /shfill cvx /rangecheck signalerror
         } if
     } ifelse
@@ -483,7 +529,7 @@ currentglobal true setglobal
         /vpr sh /VerticesPerRow get def
         /prev null def
         {
-            dp ds length ge { exit } if
+            //.mrdmore exec not { exit } if
             /row [ vpr { //.mrdvertex exec } repeat ] def
             prev null ne {
                 0 1 vpr 2 sub { /i exch def
@@ -496,10 +542,10 @@ currentglobal true setglobal
     }{
         /va null def /vb null def /vc null def
         {
-            dp ds length ge { exit } if
+            //.mrdmore exec not { exit } if
             /flag //.mrdflag exec def
             flag 0 eq {
-                dp ds length ge { exit } if
+                //.mrdmore exec not { exit } if
                 /va //.mrdvertex exec def
                 //.mrdflag exec pop
                 /vb //.mrdvertex exec def
@@ -625,9 +671,9 @@ currentglobal true setglobal
     /g 16 array def
     /np tensor { 15 }{ 11 } ifelse def
     {
-        dp ds length ge { exit } if
+        //.mrdmore exec not { exit } if
         /flag //.mrdflag exec def
-        dp ds length ge { exit } if
+        //.mrdmore exec not { exit } if
         flag 0 eq {
             0 1 np { pts exch //.mrdpt exec put } for
             0 1 3 { cols exch //.mrdcolor exec put } for
@@ -643,6 +689,8 @@ currentglobal true setglobal
             0 1 3 { /k exch def pts k oldp k get put } for
             0 1 1 { /k exch def cols k oldc k get put } for
         } ifelse
+        % a patch, flag and all, occupies a whole number of bytes
+        //.mrdalign exec
         0 1 np { /k exch def g //.pgridmap k get pts k get put } for
         tensor not {
             % the Coons interior points, as ninths of boundary sums

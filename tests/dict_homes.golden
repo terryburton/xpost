@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 342
+entries 346
 
 # Graphics-state template slots (data/gstate.ps). The list is the whole
 # fails the check, so a new slot is declared here in the commit that adds
@@ -249,12 +249,16 @@ entries 342
 .xpostsys /.mcscale
 .xpostsys /.meshsh
 .xpostsys /.min
+.xpostsys /.mrdalign
 .xpostsys /.mrdbits
-.xpostsys /.mrdbyte
+.xpostsys /.mrdcompbits
+.xpostsys /.mrdcoordbits
 .xpostsys /.mrdcolor
 .xpostsys /.mrddec
 .xpostsys /.mrdflag
+.xpostsys /.mrdflagbits
 .xpostsys /.mrdinit
+.xpostsys /.mrdmore
 .xpostsys /.mrdpt
 .xpostsys /.mrdvertex
 .xpostsys /.mustbe
