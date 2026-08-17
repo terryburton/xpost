@@ -147,6 +147,23 @@ int xpost_op_file_filter (Xpost_Context *ctx,
     cname = xpost_string_allocate_cstring(ctx, namestr);
     if (!cname)
         return VMerror;
+    /* Two filters exist and cannot be built from a name alone: one is told
+       what ends the subfile it reads, the other the geometry of the image
+       it compresses, and neither has a default this could pick.  Asked for
+       by name they used to fall to the same answer a name this interpreter
+       has never heard of gets, so a program that named a real filter and
+       forgot its parameters was told the filter does not exist.
+
+       They are answered here, before the data source is examined, because
+       what the program got wrong is the operand it wrote and the answer
+       must not depend on the source it happened to supply.  The type error
+       says the operands were the wrong shape, which is what happened. */
+    if (strcmp(cname, "SubFileDecode") == 0 ||
+        strcmp(cname, "DCTEncode") == 0)
+    {
+        free(cname);
+        return typecheck;
+    }
     {
         size_t len = strlen(cname);
 

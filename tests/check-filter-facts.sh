@@ -207,7 +207,12 @@ while read -r name answer; do
     where=$(awk -v n="$name" '$1 == n { print $3; exit }' "$work/reg")
     [ -n "$said" ] || continue
     case "$said:$answer" in
-        plain:ok|needsdict:undefined)
+        plain:ok|needsdict:typecheck)
+            # a filter that needs parameters answers with the type error
+            # that says the operands were the wrong shape. It used to
+            # answer undefined, which is what a name the operator has
+            # never heard of answers, so a program that named a real
+            # filter and forgot its parameters was told it does not exist
             ;;
         plain:undefined)
             # a conditional filter absent from this build answers the
@@ -229,10 +234,18 @@ while read -r name answer; do
             echo "      had none for -- say so there -- or it is building"
             echo "      something it has not been told the shape of."
             fail=1 ;;
+        needsdict:undefined)
+            echo "FAIL: tests/filter-facts says $name needs a parameter"
+            echo "      dictionary and the interpreter answers undefined, which"
+            echo "      is what it answers for a name it does not know. A"
+            echo "      program that named a real filter and left out its"
+            echo "      parameters is then told the filter does not exist."
+            fail=1 ;;
         *)
-            echo "FAIL: $name answered $answer, which is neither the ok that"
-            echo "      would mean it built nor the undefined that would mean"
-            echo "      the operator does not know the name."
+            echo "FAIL: $name answered $answer, which is none of the three:"
+            echo "      ok would mean it built, typecheck that its operands"
+            echo "      were the wrong shape, undefined that the operator does"
+            echo "      not know the name."
             fail=1 ;;
     esac
 done < "$work/answers"
