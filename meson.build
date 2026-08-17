@@ -4775,6 +4775,18 @@ test('check-halftone-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# PLRM 4.9.3 names seven shading types and shfill sends each to a
+# painter, two of the painters taking two types apiece. What a program
+# gets differs across them in ways nothing wrote down: a field width one
+# takes and another cannot walk, an edge flag value nobody checks, and a
+# subdivision one painter reads off the device and the other holds
+# constant. The register carries each difference with the measurement
+# that found it and what is to become of it.
+test('check-shading-facts',
+  find_program('tests/check-shading-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,

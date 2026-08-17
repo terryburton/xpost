@@ -1,0 +1,99 @@
+# What each shading type is, which painter draws it, and where this
+# interpreter and the specification differ about it.
+#
+# PLRM 4.9.3 names seven shading types. They are not alike: three
+# describe a field of colour by a function of position, and four hand
+# over a packed stream of vertices and let the painter build the shape
+# out of them. A program meets those differences directly -- a type that
+# answers rangecheck is a type it cannot use, and a type read wrongly is
+# a page that is quietly not what it asked for -- so a feature given to
+# one of them is a question that has to be put to the rest.
+#
+# Membership is DERIVED, twice over and in opposite directions. The
+# painters are read out of the dispatch table in data/shade.ps, so a type
+# newly given a painter shows up here whether or not anyone remembered to
+# say so; and every type the table does not name is offered to shfill and
+# must be refused, so a type quietly wired up somewhere else fails too.
+#
+# Each line is
+#
+#   <type>  <paints|refused>  <painter>  <source>  <function>  <reason>
+#
+# painter   the procedure the dispatch table sends this type to, held to
+#           data/shade.ps. Two painters take two types each: what the
+#           pair share is the reading and the subdivision, and what
+#           differs is one number in the geometry, which is why they are
+#           one procedure and not two.
+# source    where the shape comes from. field: a function over an area.
+#           axis: two points and a blend along them. circles: two circles
+#           and a blend between them. stream: a packed DataSource of
+#           vertices or control points, read by the one reader.
+# function  whether the type demands a Function entry -- required or
+#           optional -- PROBED, not read. A required one absent must
+#           raise; an optional one absent must still paint.
+# reason    required. What the type is, in the specification's terms.
+
+1  paints  .fnsh      field    required  a colour for every point of a rectangular domain, given as a 2-in n-out function, PLRM Table 4.12
+2  paints  .axialsh   axis     required  a blend along the line between two points, optionally extended past either end, PLRM Table 4.13
+3  paints  .radialsh  circles  required  a blend between two circles, which is how a sphere or a cone is drawn, PLRM Table 4.14
+4  paints  .meshsh    stream   optional  free-form Gouraud triangles, each vertex carrying an edge flag saying how it joins the last, PLRM Table 4.15
+5  paints  .meshsh    stream   optional  the same triangles with the vertices in a lattice of stated width, so no flag is carried, PLRM Table 4.16
+6  paints  .patchsh   stream   optional  Coons patches, each bounded by four Bezier curves with twelve control points, PLRM Table 4.17
+7  paints  .patchsh   stream   optional  tensor-product patches: a type 6 with four more control points in the middle, PLRM 4.9.3
+
+types 7
+
+# The widths the packed reader accepts, and the widths the
+# specification allows.
+#
+# The four stream types share one reader, and the reader walks the
+# DataSource a BYTE at a time. PLRM allows a coordinate to be 1, 2, 4, 8,
+# 12, 16, 24 or 32 bits and a colour component to be 1, 2, 4, 8, 12 or
+# 16, padding only at the end of each vertex -- so within a vertex the
+# fields are packed against each other and most of those widths put a
+# field across a byte boundary. A byte-walking reader cannot read them.
+#
+# Which widths this interpreter takes is PROBED rather than read, one
+# shading per width, and held to these lines. A width that starts being
+# accepted, or stops, fails here rather than passing as an improvement
+# nobody wrote down.
+#
+#   width <entry> <bits> <takes|refuses>
+
+width BitsPerCoordinate 1   refuses
+width BitsPerCoordinate 2   refuses
+width BitsPerCoordinate 4   refuses
+width BitsPerCoordinate 8   refuses
+width BitsPerCoordinate 12  refuses
+width BitsPerCoordinate 16  takes
+width BitsPerCoordinate 24  refuses
+width BitsPerCoordinate 32  takes
+width BitsPerComponent  1   refuses
+width BitsPerComponent  2   refuses
+width BitsPerComponent  4   refuses
+width BitsPerComponent  8   takes
+width BitsPerComponent  12  refuses
+width BitsPerComponent  16  takes
+
+widths 14
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference. A difference the guard can see and this list
+# does not name is a failure; so is a line here naming a difference the
+# guard can no longer find, because a line that has outlived its defect
+# reads exactly like one that still holds.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+#
+# settled  the difference is deliberate and is not going to change
+# thorn    a known defect or gap, waiting on work
+# heading  being changed now
+
+missing-required  settled  PLRM gives shfill the errors rangecheck and undefinedresult, and a shading dictionary missing an entry its type requires raises undefined here instead, because the entry is fetched and the fetch is what fails. ADJUDICATED against both implementations: a type 2 without its Function raises undefined in both of them as well. The letter of the error list is followed by nobody, and changing it would make this the odd one out rather than the conforming one
+byte-aligned-reader  thorn  The packed reader walks whole bytes, so of the widths PLRM allows it takes 16 and 32 for a coordinate and 8 and 16 for a component, and refuses the rest. Two of the refused ones are whole bytes and are simply missing: a coordinate of 8 bits, and one of 24 that no part of the value scaling has a case for. The others put a field across a byte boundary and are out of reach until the reader counts bits rather than bytes. ADJUDICATED, and the two implementations do not agree with each other, so both answers are written down. Eight-bit coordinates: both paint, this refuses -- the same triangle paints 544 of 1024 pixels here at 16 bits and 544 in the first of them, and at 8 bits that one paints 545 while this raises rangecheck; so this is the outlier and the gap is real. Twelve-bit components: the second paints them, the first raises rangecheck as this does. PLRM allows 12, so the majority here is not the standard, and what the twelve-bit case wants is a bit-counting reader rather than another entry in the list of widths. Relaxing the eight-bit refusal on its own paints 559 rather than 545, so even the whole-byte gap is more than one check away from closed
+flag-width  thorn  BitsPerFlag is not checked at all, and PLRM allows 2, 4 and 8. The reader asks for the flag in whole bytes, so 2 and 4 are read as a field of no bytes: the flag comes back 0 for every vertex and the rest of the stream is read from the wrong place. Nothing refuses it and nothing reports it. ADJUDICATED with BitsPerFlag 4: both implementations paint, and so does this, so the difference is not in what is accepted but in what is drawn -- this paints 63 of 1024 pixels where the one that can be measured pixel for pixel paints 48. Whether the same dictionary paints at all or raises rangecheck depends only on whether the misreading happens to run off the end of the data, which is the worst shape a difference can have: it is silent when the data is long and it blames the program when it is short
+flag-value  thorn  PLRM allows an edge flag to be 0, 1 or 2 and says only the low two bits of the field are used. Nothing here checks the value: a flag of 16 is taken as the 0 its low bits make it, and the triangle is started afresh where the program asked for one joined to the last. ADJUDICATED, and the two implementations part company: one refuses the shading outright with rangecheck, the other paints it, and the pages differ -- 869 of 1024 pixels here against 544 for the one that paints. So there is no settled answer to copy, and what PLRM says is the only thing all three could be held to. Reading only the low two bits is what the specification describes, and this reads all eight
+mesh-depth  thorn  The two stream painters decide how finely to subdivide in different ways. The patch painter transforms its boundary points into device space and takes a step count from how large they are, clamped between 3 and 12. The triangle painter uses the constant 4, under a comment saying the depth comes from the mesh's device scale. So a triangle mesh is subdivided the same amount whether it covers four pixels or the whole page, and the comment says otherwise
+reader-setup-twice  heading  Setting up the packed reader -- the Function, the DataSource, the read position, whether the source is an array of literals, the Decode array, the three widths, the component count and the refusal of a width the reader cannot walk -- is written once in the triangle painter and again in the patch painter. It is the same fourteen lines but for one default, and the width refusal inside it is one rule in two places
+
+divergences 6
