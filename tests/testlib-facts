@@ -8,19 +8,18 @@
 # dictionary starts empty or count the dictionary stack, and six read their
 # own colour_sampling_test.ps           refuses
 
-own colour_sampling_test.ps           refuses
-own device_features_test.ps           works
-own filter_predictor_test.ps          refuses
-own function_matrix_test.ps           refuses works
-own halftone_matrix_test.ps           raises works
-own image_matrix_test.ps              refuses works
-own op_bind_test.ps                   raises
-own op_compare_test.ps                refuses
-own op_operand_shapes_test.ps         raises
-own op_operand_types_test.ps          refuses works
-own op_radix_test.ps                  outcome
-own op_wrapsig_test.ps                raises
-own privatedict_install_test.ps       refuses
-own startup_surface_test.ps           raises
+own    colour_sampling_test.ps        refuses
+own    device_features_test.ps        works
+own    filter_predictor_test.ps       refuses
+own    function_matrix_test.ps        refuses works
+own    halftone_matrix_test.ps        raises works
+own    image_matrix_test.ps           refuses works
+own    op_compare_test.ps             refuses
+own    op_operand_types_test.ps       refuses works
+own    op_radix_test.ps               outcome
+own    privatedict_install_test.ps    refuses
 
-owns 14
+cannot startup_surface_test.ps        raises  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
+
+owns 10
+cannots 1

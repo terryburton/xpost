@@ -1,3 +1,4 @@
+%!testlib
 % Standard operators reached by bind, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -24,9 +25,6 @@
 % they are operator objects. What is checked is that bind reaches them
 % and that the idiom terminates.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /OPS [ /setlinewidth /currentlinewidth /setlinecap /currentlinecap
        /setlinejoin /currentlinejoin /setmiterlimit /currentmiterlimit
@@ -181,11 +179,6 @@ restore
 % dispatcher enforces it before the body runs. PLRM gives setlinewidth a
 % number, and a string is not one, whatever cvr would have made of it.
 
-/raises { % {proc} /errname (what)
-    /r.w exch def /r.e exch def /r.p exch def
-    clear /r.p load stopped { $error /errorname get r.e eq }{ false } ifelse
-    r.w assert clear
-} def
 
 { (3) setlinewidth } /typecheck (setlinewidth refuses a string) raises
 { (3) setflat } /typecheck (setflat refuses a string) raises
@@ -205,4 +198,4 @@ clear
 [ 2 2 ] 1 setdash currentdash 1 eq exch length 2 eq and
     (setdash takes an array and an offset) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

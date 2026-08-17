@@ -1,3 +1,4 @@
+%!testlib
 % The operators taking more than one shape of operand list, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -15,19 +16,10 @@
 % which is the worse failure of the two and the one a test written only
 % from the error cases would not catch.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /accepts { % {proc} (what)
     /a.w exch def /a.p exch def
     clear /a.p load stopped not a.w assert clear
-} def
-/raises { % {proc} /errname (what)
-    /r.w exch def /r.e exch def /r.p exch def
-    clear
-    /r.p load stopped { $error /errorname get r.e eq }{ false } ifelse
-    r.w assert clear
 } def
 % the shape was accepted and the body took over: whatever went wrong
 % afterwards, it was not the dispatcher refusing the operands
@@ -180,4 +172,4 @@
 { 1 2 3 4 5 6 7 8 9 setcachedevice2 }
     /stackunderflow (setcachedevice2 reports a shortage) raises
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

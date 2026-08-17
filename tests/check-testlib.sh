@@ -102,10 +102,44 @@ if [ -s "$work/shadow" ]; then
 fi
 
 # ---- the register, held to the tree both ways
+#
+# Two dispositions. `own` is a suite that has not moved yet; `cannot` is one
+# that must not, and carries the reason. The distinction is the point: a
+# suite that asserts its own dictionary starts empty cannot be handed a
+# framework defined into that dictionary, and without somewhere to say so
+# the only records of that would be a conversion that failed and whoever
+# next tried it.
+#
+# Only the suite name and its runner shapes are compared. Everything after
+# them on a `cannot` line is the reason, which is prose and is not matched
+# against anything -- but it must be there, and the check below says so.
 grep -v '^[[:space:]]*#' "$src/tests/testlib-facts" \
-    | awk '$1 == "own" && NF >= 3 { $1 = ""; sub(/^ /, ""); print }' \
+    | awk '($1 == "own" || $1 == "cannot") && NF >= 3 {
+             printf "%s", $2
+             for (i = 3; i <= NF; i++) {
+                 if ($i !~ /^(works|works2|refuses|refuses2|raises|raises2|outcome)$/) break
+                 printf " %s", $i
+             }
+             printf "\n"
+           }' \
     | sed 's/[[:space:]][[:space:]]*/ /g' | LC_ALL=C sort > "$work/reg"
 sed 's/[[:space:]][[:space:]]*/ /g' "$work/own" | LC_ALL=C sort > "$work/own.n"
+
+# every `cannot` states a reason, because a suite recorded as unconvertible
+# without one is a suite nobody will ever try again and nobody can check
+grep -v '^[[:space:]]*#' "$src/tests/testlib-facts" \
+    | awk '$1 == "cannot" {
+             r = ""
+             for (i = 3; i <= NF; i++)
+                 if ($i !~ /^(works|works2|refuses|refuses2|raises|raises2|outcome)$/) r = r " " $i
+             if (r == "") print $2
+           }' > "$work/noreason"
+if [ -s "$work/noreason" ]; then
+    echo "FAIL: these suites are recorded as unable to use the shared"
+    echo "      framework and give no reason:"
+    sed 's/^/        /' "$work/noreason"
+    fail=1
+fi
 
 guard_held=0
 guard_hold "$work/reg" "$work/own.n" \
@@ -120,20 +154,23 @@ guard_hold "$work/reg" "$work/own.n" \
 nown=$(grep -c . "$work/own.n" || true)
 nsaid=$(awk '/^owns /{ print $2; found = 1 } END { if (!found) print "" }' \
     "$src/tests/testlib-facts")
-case $nsaid in
-    ''|*[!0-9]*)
-        echo "FAILURES: tests/testlib-facts has no 'owns <n>' line. Nothing"
-        echo "      else would stop the register being emptied, and two empty"
-        echo "      sets agree about everything"
+ncsaid=$(awk '/^cannots /{ print $2; found = 1 } END { if (!found) print "" }' \
+    "$src/tests/testlib-facts")
+case $nsaid$ncsaid in
+    *[!0-9]*|'')
+        echo "FAILURES: tests/testlib-facts needs both an 'owns <n>' and a"
+        echo "      'cannots <n>' line. Nothing else would stop the register"
+        echo "      being emptied, and two empty sets agree about everything"
         fail=1 ;;
-    *)  if [ "$nsaid" -ne "$nown" ]; then
-            echo "FAILURES: tests/testlib-facts records $nsaid suites carrying"
-            echo "      their own runner and the tree has $nown"
+    *)  if [ "$((nsaid + ncsaid))" -ne "$nown" ]; then
+            echo "FAILURES: tests/testlib-facts records $nsaid suites yet to move"
+            echo "      and $ncsaid that must not, which is $((nsaid + ncsaid))"
+            echo "      between them, and the tree has $nown carrying their own"
             fail=1
         fi ;;
 esac
 
 [ "$fail" = 0 ] || exit 1
-printf 'check-testlib: ok (%s suite(s) on the shared framework, %s still carrying their own)\n' \
-    "$(grep -c . "$work/asks" || true)" "$nown"
+printf 'check-testlib: ok (%s suite(s) on the shared framework, %s yet to move, %s that must not)\n' \
+    "$(grep -c . "$work/asks" || true)" "$nsaid" "$ncsaid"
 exit 0

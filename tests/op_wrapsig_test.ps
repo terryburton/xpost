@@ -1,3 +1,4 @@
+%!testlib
 % An operator written in PostScript stating the operands it takes, run
 % through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -13,9 +14,6 @@
 % ways: the plain wrapping accepts a string, the declared one refuses
 % it, and nothing in the body differs.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /ID 1183615869 internaldict def
 ID /.wrapop known (the plain wrapper is reachable) assert
@@ -26,14 +24,6 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 /plainop /plainop /body load ID /.wrapop get exec def
 /oneint /oneint /body load [ /integertype ] ID /.wrapopsig get exec def
 
-/raises { % {proc} /errname (what)
-    /r.w exch def /r.e exch def /r.p exch def
-    clear
-    /r.p load stopped
-        { $error /errorname get r.e eq }{ false } ifelse
-    r.w assert
-    clear
-} def
 /accepts { % {proc} (what)
     /a.w exch def /a.p exch def
     clear
@@ -142,4 +132,4 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 { /nosuchtype { } [ /notatypename ] ID /.wrapopsig get exec }
     /rangecheck (a name that is not a type) raises
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
