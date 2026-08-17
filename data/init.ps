@@ -1412,7 +1412,10 @@ setglobal
             % A recorder standing in for the device, at the page's own
             % extent: the marks are the device's coordinates and the
             % clip they are cut to is the page's.
-            /cap DEVICE /dimensions get aload pop
+            % the extent as whole pixels: a device that writes paths
+            % rather than pixels states its page as a measurement, and a
+            % recorder holds rows
+            /cap DEVICE /dimensions get aload pop cvi exch cvi exch
                 DEVICE //.internaldict /.newformrecord get exec def
             cap null ne {
                 % What the page weighs its own marks against, given to
