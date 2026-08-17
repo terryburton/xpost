@@ -98,7 +98,7 @@ own    error_unwind_test.ps                   79
 own    execform_cache_test.ps                 2
 own    file_lifetime_test.ps                  5
 own    file_refusal_test.ps                   1
-own    filenameforall_large_test.ps           4
+own    filenameforall_large_test.ps           3
 own    fill_span_test.ps                      1
 own    fillpoly_arity_test.ps                 3
 own    filter_abandon_test.ps                 10

@@ -19,6 +19,12 @@
 # testlib_run to the path to hand the interpreter: the suite itself when it
 # does not ask for the framework, and the two concatenated when it does.
 #
+# THE DIRECTORY MUST NOT BE ONE THE SUITE ITSELF INSPECTS. The combined
+# program is a file, and a suite whose subject is the contents of a directory
+# counts it: one suite here fills a scratch directory with 65535 names, runs
+# from inside it, and checks that exactly that many are enumerated. Hand this
+# somewhere separate whenever the suite looks at where it runs.
+#
 # Cleanup is the caller's, deliberately. Most of these runners already make a
 # work directory and remove it on exit, and a trap set here would replace the
 # one they set rather than joining it.

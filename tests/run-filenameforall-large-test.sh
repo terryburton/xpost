@@ -34,7 +34,14 @@ if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
     echo "SKIP: could not make a scratch directory (is TMPDIR writable?)"
     exit 77
 fi
-trap 'rm -rf "$work"' EXIT
+libwork=$(mktemp -d 2>/dev/null) || libwork=$work
+trap 'rm -rf "$work" "$libwork"' EXIT
+
+# The combined program goes OUTSIDE $work. The run happens in $work and this
+# suite counts every name it finds there, so a file of ours in that directory
+# is one more name than the count it is checking.
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$script" "$libwork"
 
 # `true` rather than `:`: a redirection that fails on a special built-in
 # ends a non-interactive shell outright, which would report the file
@@ -53,7 +60,7 @@ fi
 
 out=$(
     cd "$work" || exit 1
-    "$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1
+    "$xpost" -q --no-sandbox -d null "$testlib_run" </dev/null 2>&1
 )
 status=$?
 printf '%s\n' "$out"
