@@ -77,6 +77,45 @@ width BitsPerComponent  16  takes
 
 widths 14
 
+# The values each painter's edge flag may take.
+#
+# A flag says which edge of the shape before this one the new shape
+# shares. PLRM gives the two stream painters different sets: a triangle
+# joins along one of two edges or starts afresh (0, 1, 2, Table 4.15),
+# and a patch has a fourth side to join along (0, 1, 2, 3, Table 4.17).
+# So this is a difference between two members of one family that the
+# specification puts there, and the register carries it rather than
+# leaving it to be rediscovered.
+#
+# A value outside the set names an edge of a shape the data does not
+# describe. There is nothing to paint and nothing to guess, so it is
+# refused. ADJUDICATED, and the two implementations neither agree with
+# each other nor with themselves: one refuses every value outside the
+# set in its triangle painter -- which is what this now does, case for
+# case -- and masks to the low two bits in its patch painter, so that a
+# patch flag of 5 paints there and is refused here. The other draws
+# neither the offending shape nor an error, keeping what it had and
+# reading no further. Refusing says what happened, and rangecheck is
+# one of the two errors PLRM gives shfill.
+#
+# Masking is deliberately not done. PLRM says only the low two bits of
+# the field are used, and that sentence is about a field WIDER than the
+# flag -- which is unreachable here while the reader cannot read a flag
+# field narrower than eight bits at all. The high bits of an eight-bit
+# field are junk no producer can mean, so masking them away would turn a
+# malformed stream into a page. It belongs with a reader that counts
+# bits, and should arrive with one.
+#
+#   flagmax <painter> <largest value the flag may take>
+#
+# The painters are DERIVED: every painter of a type whose source is a
+# stream needs a line, and a line for any other painter fails.
+
+flagmax .meshsh   2
+flagmax .patchsh  3
+
+flagmaxes 2
+
 # Where this interpreter and the specification differ, and what is to
 # become of each difference. A difference the guard can see and this list
 # does not name is a failure; so is a line here naming a difference the
@@ -92,7 +131,6 @@ widths 14
 missing-required  settled  PLRM gives shfill the errors rangecheck and undefinedresult, and a shading dictionary missing an entry its type requires raises undefined here instead, because the entry is fetched and the fetch is what fails. ADJUDICATED against both implementations: a type 2 without its Function raises undefined in both of them as well. The letter of the error list is followed by nobody, and changing it would make this the odd one out rather than the conforming one
 byte-aligned-reader  thorn  The packed reader walks whole bytes, so of the widths PLRM allows it takes 16 and 32 for a coordinate and 8 and 16 for a component, and refuses the rest. Two of the refused ones are whole bytes and are simply missing: a coordinate of 8 bits, and one of 24 that no part of the value scaling has a case for. The others put a field across a byte boundary and are out of reach until the reader counts bits rather than bytes. ADJUDICATED, and the two implementations do not agree with each other, so both answers are written down. Eight-bit coordinates: both paint, this refuses -- the same triangle paints 544 of 1024 pixels here at 16 bits and 544 in the first of them, and at 8 bits that one paints 545 while this raises rangecheck; so this is the outlier and the gap is real. Twelve-bit components: the second paints them, the first raises rangecheck as this does. PLRM allows 12, so the majority here is not the standard, and what the twelve-bit case wants is a bit-counting reader rather than another entry in the list of widths. Relaxing the eight-bit refusal on its own paints 559 rather than 545, so even the whole-byte gap is more than one check away from closed
 flag-width  thorn  BitsPerFlag is not checked at all, and PLRM allows 2, 4 and 8. The reader asks for the flag in whole bytes, so 2 and 4 are read as a field of no bytes: the flag comes back 0 for every vertex and the rest of the stream is read from the wrong place. Nothing refuses it and nothing reports it. ADJUDICATED with BitsPerFlag 4: both implementations paint, and so does this, so the difference is not in what is accepted but in what is drawn -- this paints 63 of 1024 pixels where the one that can be measured pixel for pixel paints 48. Whether the same dictionary paints at all or raises rangecheck depends only on whether the misreading happens to run off the end of the data, which is the worst shape a difference can have: it is silent when the data is long and it blames the program when it is short
-flag-value  thorn  PLRM allows an edge flag to be 0, 1 or 2 and says only the low two bits of the field are used. Nothing here checks the value: a flag of 16 is taken as the 0 its low bits make it, and the triangle is started afresh where the program asked for one joined to the last. ADJUDICATED, and the two implementations part company: one refuses the shading outright with rangecheck, the other paints it, and the pages differ -- 869 of 1024 pixels here against 544 for the one that paints. So there is no settled answer to copy, and what PLRM says is the only thing all three could be held to. Reading only the low two bits is what the specification describes, and this reads all eight
 mesh-depth  thorn  The two stream painters decide how finely to subdivide in different ways. The patch painter transforms its boundary points into device space and takes a step count from how large they are, clamped between 3 and 12. The triangle painter uses the constant 4, under a comment saying the depth comes from the mesh's device scale. So a triangle mesh is subdivided the same amount whether it covers four pixels or the whole page, and the comment says otherwise
 
-divergences 5
+divergences 4

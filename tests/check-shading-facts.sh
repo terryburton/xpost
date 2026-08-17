@@ -114,6 +114,7 @@ awk '$1 ~ /^[0-9]+$/ { print $1 " " $3 }' "$work/reg" | sort -n > "$work/reg.typ
 awk '$1 ~ /^[0-9]+$/ { print $1 " " $2 " " $4 " " $5 }' "$work/reg" | sort -n \
     > "$work/reg.detail"
 awk '$1 == "width" { print $2 " " $3 " " $4 }' "$work/reg" | sort > "$work/reg.width"
+awk '$1 == "flagmax" { print $2 " " $3 }' "$work/reg" | sort > "$work/reg.flagmax"
 awk 'NF >= 3 && $2 ~ /^(settled|thorn|heading)$/ { print $1 }' "$work/reg" \
     | sort -u > "$work/reg.diverge"
 
@@ -151,6 +152,7 @@ count() {           # <keyword> <have>
 count types "$(grep -c . "$work/reg.type")"
 count widths "$(grep -c . "$work/reg.width")"
 count divergences "$(grep -c . "$work/reg.diverge")"
+count flagmaxes "$(grep -c . "$work/reg.flagmax")"
 
 # ---------------------------------------------------------------------
 # What the interpreter does
@@ -375,6 +377,87 @@ if ! cmp -s "$work/reg.width" "$work/got.width"; then
     echo "      arriving or leaving is a line to write either way."
     fail=1
 fi
+
+# ---------------------------------------------------------------------
+# The values each painter's edge flag may take
+#
+# Which painters need a line is derived: every painter of a type whose
+# source is a stream, and no other. Each is offered its largest legal
+# value, which must paint, and one above it, which must be refused --
+# so a line stating the wrong maximum fails on one side or the other
+# rather than being believed.
+awk '$1 ~ /^[0-9]+$/ && $4 == "stream" { print $3 }' "$work/reg" | sort -u \
+    > "$work/streamers"
+awk '{ print $1 }' "$work/reg.flagmax" | sort -u > "$work/flagmax.named"
+
+guard_held=0
+guard_hold "$work/flagmax.named" "$work/streamers" \
+    "given an edge flag maximum and painting no type that reads a
+      stream. A flag belongs to a stream; retire the line:" \
+    "painting a type that reads a stream and given no edge flag
+      maximum. Say in tests/shading-facts which values its flag may
+      take:"
+[ "$guard_held" -eq 0 ] || fail=1
+
+# a triangle stream: one whole triangle, then a unit carrying the flag
+# under test, then two more so that running out of data cannot be the
+# reason for a refusal
+tridata() {         # <flag> -> hex
+    printf '000000000000' ; printf '00FFFF000080' ; printf '008000FFFFFF'
+    printf '%02XFFFFFFFF40' "$1" ; printf '010000FFFF20' ; printf '014000800060'
+}
+# a patch stream: one whole patch, then a unit carrying the flag under
+# test with the eight further points a shared edge needs
+P12=00000000111122222222444433336666444488885555AAAA6666CCCC7777EEEE8888111099993332AAAA5554BBBB7776
+P8=00000000111122222222444433336666444488885555AAAA6666CCCC7777EEEE
+patchdata() {       # <flag> -> hex
+    printf '00%s004080FF' "$P12"
+    printf '%02X%s8040' "$1" "$P8"
+}
+: > "$work/flagmax.got"
+while read -r painter maxv; do
+    [ -n "$maxv" ] || continue
+    for v in "$maxv" $((maxv + 1)); do
+        case $painter in
+            .meshsh)
+                ds=$(tridata "$v" | tr -d ' ')
+                body="/ShadingType 4 $CS /DataSource <$ds> $BITS /BitsPerFlag 8" ;;
+            .patchsh)
+                ds=$(patchdata "$v")
+                body="/ShadingType 6 $CS /DataSource <$ds> $BITS /BitsPerFlag 8" ;;
+            *)  echo "FAIL: $painter has an edge flag maximum and this check has"
+                echo "      no stream of its shape to offer it"
+                fail=1
+                continue ;;
+        esac
+        ans=$(paint "$body")
+        case $ans in
+            ink\ *) echo "$painter $v paints" >> "$work/flagmax.got" ;;
+            *)      echo "$painter $v $ans" >> "$work/flagmax.got" ;;
+        esac
+    done
+done < "$work/reg.flagmax"
+
+while read -r painter maxv; do
+    [ -n "$maxv" ] || continue
+    at=$(awk -v p="$painter" -v v="$maxv" '$1 == p && $2 == v { print $3 }' \
+         "$work/flagmax.got")
+    over=$(awk -v p="$painter" -v v="$((maxv + 1))" '$1 == p && $2 == v { print $3 }' \
+           "$work/flagmax.got")
+    if [ "$at" != paints ]; then
+        echo "FAIL: $painter is recorded as taking an edge flag of $maxv and"
+        echo "      answered '$at' to one. A value the specification allows"
+        echo "      names an edge of the shape before it, and there is one."
+        fail=1
+    fi
+    if [ "$over" != rangecheck ]; then
+        echo "FAIL: $painter is recorded as taking an edge flag no larger than"
+        echo "      $maxv and answered '$over' to $((maxv + 1)). A value outside"
+        echo "      the set names an edge of a shape the data does not describe,"
+        echo "      so there is nothing to paint and nothing to guess."
+        fail=1
+    fi
+done < "$work/reg.flagmax"
 
 # ---------------------------------------------------------------------
 # The divergences, each with the probe that finds it

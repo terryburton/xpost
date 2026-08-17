@@ -346,6 +346,14 @@ currentglobal true setglobal
 /.mrdflag { % - . flag
     litds { ds dp get cvi /dp dp 1 add def }
           { bpf //.mrdbits exec cvi } ifelse
+    % PLRM gives each mesh type the values its edge flag may take -- 0, 1
+    % and 2 for a triangle, and 3 as well for a patch -- and flagmax is
+    % the painter's own. A value outside them says which edge is shared
+    % with a shape the data does not describe, so there is nothing to
+    % paint and nothing to guess
+    dup 0 lt 1 index flagmax gt or {
+        /shfill cvx /rangecheck signalerror
+    } if
 } def
 /.mrdpt { % - . [x y]
     litds { [ ds dp get ds dp 1 add get ] /dp dp 2 add def }
@@ -371,8 +379,10 @@ currentglobal true setglobal
 %
 % flagrequired says whether every type this painter takes carries a
 % per-vertex edge flag. A lattice mesh carries none, and its BitsPerFlag
-% may be absent; a patch mesh must state one.
+% may be absent; a patch mesh must state one. flagmax is the largest
+% value that flag may take for this painter's types.
 /.mrdinit {
+    /flagmax exch def
     /flagreq exch def
     /sh exch def
     /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
@@ -465,7 +475,7 @@ currentglobal true setglobal
     24 dict begin
     % a lattice (type 5) mesh carries no per-vertex flag, so BitsPerFlag
     % may be absent from one of the two types this paints
-    false //.mrdinit exec
+    false 2 //.mrdinit exec
     % subdivision depth from the mesh's device scale: two levels
     % within a few pixels, four when triangles are large
     /dpt 4 def
@@ -607,7 +617,7 @@ currentglobal true setglobal
     30 dict begin
     % both patch types carry a flag on every patch, so BitsPerFlag is
     % required of them
-    true //.mrdinit exec
+    true 3 //.mrdinit exec
     /tensor sh /ShadingType get 7 eq def
     % pts: p1..p16 as [x y] in data order; cols: c1..c4; g: the grid
     /pts 16 array def
