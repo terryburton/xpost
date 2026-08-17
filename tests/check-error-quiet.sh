@@ -15,13 +15,16 @@
 # stderr is searched for the internal marker, which carries a source path and
 # a line number. Finding one fails.
 #
+# The source tree is not an argument: every case here is a program written
+# below and run through the interpreter, so there is nothing in the tree for
+# this check to read, and taking a path it does not use would let a wrong one
+# pass unnoticed.
+#
 #   $1  path to the xpost binary
-#   $2  path to the source tree root
 set -u
-xpost=${1:?usage: check-error-quiet.sh <xpost> <srcroot>}
-src=${2:?usage: check-error-quiet.sh <xpost> <srcroot>}
+xpost=${1:?usage: check-error-quiet.sh <xpost>}
 . "$(dirname "$0")/guard-paths.sh"
-guard_require_srcroot "$src"
+guard_require_file "$xpost" "the interpreter"
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT

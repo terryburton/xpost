@@ -4957,7 +4957,7 @@ test('shared-helpers',
 # carries a source file and line.
 test('check-error-quiet',
   find_program('tests/check-error-quiet.sh'),
-  args: [ xpost_exe, meson.current_source_dir() ],
+  args: [ xpost_exe ],
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
