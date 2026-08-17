@@ -5214,6 +5214,25 @@ test('raster-buffer-format',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The same page, painted by a device that hands its raster to an
+# embedder and by one that writes a file, held to each other pixel for
+# pixel. The buffer devices are outside the golden-byte manifest because
+# they emit no file, so the file ppm emits stands in for one -- and ppm
+# is the right witness precisely because a consolidation of the buffer
+# devices cannot move it. Holding those two to each other instead would
+# pass whatever they did, so long as they did it together.
+raster_reference_exe = executable('raster_reference_test',
+  'tests/raster_reference_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('raster-reference',
+  raster_reference_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The lifetime of that buffer rather than its arrangement, asked of every
 # device that can hand one over rather than of one device at a time: the
 # page is the embedder's from the handoff, so it is read after the

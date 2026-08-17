@@ -329,6 +329,7 @@ tests/pdf_pipe_test.ps \
 tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
 tests/raster_buffer_format_test.c \
+tests/raster_reference_test.c \
 tests/raster_class_test.ps \
 tests/raster_extent_test.c \
 tests/raster_row_test.ps \
