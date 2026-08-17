@@ -47,6 +47,8 @@ tests/check-function-facts.sh \
 tests/function-facts \
 tests/check-colourspace-facts.sh \
 tests/colourspace-facts \
+tests/check-pattern-facts.sh \
+tests/pattern-facts \
 tests/check-c-held-objects.sh \
 tests/c_held_objects.register \
 tests/check-awk-portability.sh \

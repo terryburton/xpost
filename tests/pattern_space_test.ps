@@ -146,14 +146,18 @@
     basepat { 2 index 3 1 roll 1 index lk eq { pop pop pop }{ put } ifelse } forall
 } bind def
 
+% An entry PLRM marks required and the dictionary does not carry is
+% undefined, not out of range: there is no value to be out of the range
+% of. The two are asked for separately below so that a rule which starts
+% answering for both is visible here.
 0 1 REQNAMES length 1 sub {
     /ri exch def
-    { REQ ri get lacking matrix makepattern pop } outcome /rangecheck eq
+    { REQ ri get lacking matrix makepattern pop } outcome /undefined eq
     REQNAMES ri get (makepattern) (a pattern lacking) label assert
 } for
 
-% and a value outside the two the specification names, refused by the
-% same rule that refuses a missing one
+% and a value present but outside the range the specification names is
+% out of range, which is a different fault with a different name
 { basepat length dict basepat { 2 index 3 1 roll put } forall
   dup /TilingType 47 put matrix makepattern pop } outcome /rangecheck eq
     (TilingType 47) (makepattern) (a pattern with) label assert

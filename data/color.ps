@@ -488,9 +488,11 @@ setglobal
 % pattern itself is the operand stated.
 /setpattern [ /dicttype ] {
     % a pattern dictionary, which is one that has been through
-    % makepattern: without a PatternType there is nothing to paint with
-    dup /PatternType known not
-        { /setpattern cvx /typecheck signalerror } if
+    % makepattern. The same question makepattern asked, asked the same
+    % way: this operator is reached with dictionaries that never went
+    % through it, and one of those must be refused for the reason it is
+    % wrong rather than for whichever entry a later site happened to want
+    dup /setpattern /typecheck //.xpostsys /.patterntype get exec pop
     dup /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse not {
         [ /Pattern ] setcolorspace
     }{

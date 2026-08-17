@@ -3,6 +3,54 @@
 % (color.ps) selects, and the painting operators tile the cells over
 % whatever region they would have painted.
 
+% dict /operator /absent  .patterntype  int
+% The kind of pattern a dictionary describes. PLRM 4.9.1 defines two: 1 a
+% tiling pattern, 2 a shading pattern, and nothing else.
+%
+% The three faults are three different errors, because they are three
+% different mistakes. PLRM Table 4.9 marks the entry required, so a
+% dictionary without one is not a pattern dictionary and the entry is
+% undefined. The table types it as an integer, so a value of another type
+% is a type error. And a code this interpreter has no machinery to paint
+% is out of range -- refused here rather than painted as though it were
+% the other type, which is what a dictionary whose code is merely "not 2"
+% would otherwise get.
+%
+% The operator to name is stated by the caller, so the program is told
+% about the operator it wrote rather than about whichever piece of this
+% file reached the dictionary.
+%
+% What an ABSENT entry means is also the caller's to say, because it is
+% not the same fault at every operator. makepattern is handed a prototype
+% to check, and an entry its table marks required and the dictionary does
+% not carry is undefined. setpattern is handed something that must
+% already be a pattern -- PLRM 8.2 defines it as an equivalence for
+% setcolorspace and setcolor and gives it no error list of its own, and
+% says its operand is a dictionary instantiated by makepattern -- so a
+% dictionary carrying no type is not a deficient pattern but the wrong
+% kind of operand, which is a type error. The two reference
+% implementations consulted split on this, one each way, and the
+% specification leaves the name open; what it does not leave open is that
+% only one place should know the vocabulary.
+.xpostsys /.patterntype {
+    3 -1 roll
+    dup /PatternType known not
+        { pop exch cvx exch signalerror } if
+    /PatternType get
+    dup type /integertype ne
+        { pop pop cvx /typecheck signalerror } if
+    dup 1 lt 1 index 2 gt or
+        { pop pop cvx /rangecheck signalerror } if
+    exch pop exch pop
+} put
+
+% dict /operator /entry  .patternneed  -
+% A required entry is there, or the program is told which one is not.
+.xpostsys /.patternneed {
+    3 -1 roll 1 index known not
+        { exch cvx /undefined signalerror }{ pop pop } ifelse
+} put
+
 %   dict matrix  makepattern  pattern
 % instantiate a tiling pattern: a copy of the dictionary carrying the
 % pattern space -- the matrix concatenated with the CTM in effect
@@ -10,31 +58,56 @@
 % /Implementation
 /makepattern [ /dicttype /arraytype ] {
     exch
-    dup /PatternType 2 copy known { get }{ pop pop 1 } ifelse 2 eq {
-        dup /Shading known not {
-            /makepattern cvx /rangecheck signalerror
-        } if
+    dup /makepattern /undefined //.xpostsys /.patterntype get exec 2 eq {
+        dup /makepattern /Shading //.xpostsys /.patternneed get exec
     }{
-        dup /PaintProc known 1 index /BBox known and
-        1 index /XStep known and 1 index /YStep known and
-        1 index /PaintType known and 1 index /TilingType known and not {
-            /makepattern cvx /rangecheck signalerror
-        } if
+        % PLRM Table 4.9 marks six entries required of a tiling pattern.
+        % They are asked for one at a time so the program is told which
+        % one it left out rather than that something among six is absent.
+        dup /makepattern /PaintProc   //.xpostsys /.patternneed get exec
+        dup /makepattern /BBox        //.xpostsys /.patternneed get exec
+        dup /makepattern /XStep       //.xpostsys /.patternneed get exec
+        dup /makepattern /YStep       //.xpostsys /.patternneed get exec
+        dup /makepattern /PaintType   //.xpostsys /.patternneed get exec
+        dup /makepattern /TilingType  //.xpostsys /.patternneed get exec
         % TilingType names one of three spacings (PLRM 4.9.2). Nothing
         % here goes on to read it, which is the reason to ask for it
-        % rather than a reason to let it pass: a program that leaves it
-        % out, or names a spacing that does not exist, has written a
-        % pattern this interpreter cannot be told how to tile, and the
-        % other five entries are already held to being there.
+        % rather than a reason to let it pass: a program that names a
+        % spacing that does not exist has written a pattern this
+        % interpreter cannot be told how to tile.
         dup /TilingType get
         dup type /integertype ne { pop true }
                                  { dup 1 lt exch 3 gt or } ifelse {
+            /makepattern cvx /rangecheck signalerror
+        } if
+        % PaintType says whether the cells carry their own colour or take
+        % the colour set beneath them (PLRM Table 4.9), and there are two
+        % of those. A third value would be read as one or the other by
+        % whichever site asked, and the sites do not all ask alike.
+        dup /PaintType get
+        dup type /integertype ne { pop true }
+                                 { dup 1 lt exch 2 gt or } ifelse {
+            /makepattern cvx /rangecheck signalerror
+        } if
+        % XStep and YStep may be positive or negative but not zero (PLRM
+        % Table 4.9): a step of zero describes a tiling whose cells never
+        % advance. Refused here, because the tiling walk can only decline
+        % to paint, and a page that silently loses a pattern is worse
+        % than one that says why.
+        dup /XStep get 0 eq 1 index /YStep get 0 eq or {
             /makepattern cvx /rangecheck signalerror
         } if
     } ifelse
     dup length 1 add dict copy
     exch matrix currentmatrix matrix concatmatrix
     1 index exch /Implementation exch put
+    % PLRM 8.2: "Finally, makepattern makes the new dictionary read-only
+    % and returns it." The instantiated pattern is this interpreter's
+    % statement that the dictionary has been checked, and every later
+    % site relies on that; a program that could rewrite the type
+    % afterwards would reach machinery chosen for the type it no longer
+    % has.
+    readonly
 } //.xpostsys /.defop get exec
 
 % -  .patternactive  bool
@@ -62,7 +135,7 @@ currentglobal true setglobal
     /pat graphicsdict /currgstate get /patdict get def
     pat null ne {
     /pm pat /Implementation get def
-    pat /PatternType 2 copy known { get }{ pop pop 1 } ifelse 2 eq {
+    pat /setcolor /undefined //.xpostsys /.patterntype get exec 2 eq {
         % a shading pattern: the shading paints the whole clip under
         % the pattern space, no cells to step
         gsave

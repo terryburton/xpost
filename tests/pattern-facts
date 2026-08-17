@@ -1,0 +1,122 @@
+# What a pattern dictionary is, which of its entries this interpreter
+# reads, and where it and the specification differ.
+#
+# PLRM 4.9.1: "All pattern dictionaries contain an entry named
+# PatternType, whose value identifies the kind of pattern the dictionary
+# describes: type 1 denotes a tiling pattern, type 2 a shading pattern."
+# There are exactly two, and no PLRM table defines any other value.
+#
+# A pattern is also a colour space -- the Pattern family of PLRM 4.8 --
+# so this family and the colour space family are held to each other:
+# tests/colourspace-facts crosses an uncoloured pattern over every base
+# space, and this register asks what the pattern itself must be. Neither
+# list is the other's, and the defect each was written after was a
+# member absent from both.
+#
+# Membership is DERIVED: the guard offers every code from -3 to 20, and
+# the non-integer forms, and calls a type accepted when a pattern built
+# with it PAINTS. A third type implemented shows up whether or not
+# anyone remembered to say so.
+#
+#   <type>  <accepted|refused>  <errorname>  <reason>
+
+1  accepted  none  a tiling pattern, whose cells are painted by a procedure and stepped over the region, PLRM Table 4.9
+2  accepted  none  a shading pattern, which paints the region through a shading dictionary, PLRM Table 4.10
+
+types 2
+
+# What a value that is not a pattern type gets, and why the three
+# answers differ from one another.
+#
+# The two reference implementations consulted disagree about two of
+# these, so PLRM decides and the disagreement is recorded rather than
+# hidden: Table 4.9 types the entry as an integer, so a value of another
+# type is a type error and only an integer can be out of range.
+#
+#   badtype <case>  <errorname>
+
+badtype absent       undefined
+badtype zero         rangecheck
+badtype negative     rangecheck
+badtype three        rangecheck
+badtype twenty       rangecheck
+badtype real         typecheck
+badtype name         typecheck
+badtype string       typecheck
+
+badtypes 8
+
+# The entries each type carries, and what this does with each.
+#
+# Which are required is PROBED, one pattern per entry, by leaving that
+# entry out. An entry that quietly becomes optional, or quietly starts
+# being demanded, fails here rather than being discovered by a program.
+#
+#   entry <type> <name>  <required|optional>  <errorname|none>
+#
+# The error name is what leaving it out raises. PLRM's makepattern entry
+# lists undefined among its errors and a required entry that is absent
+# is exactly that case; a value present but outside its range is
+# rangecheck.
+
+entry 1 PatternType     required  undefined
+entry 1 PaintType       required  undefined
+entry 1 TilingType      required  undefined
+entry 1 BBox            required  undefined
+entry 1 XStep           required  undefined
+entry 1 YStep           required  undefined
+entry 1 PaintProc       required  undefined
+entry 1 XUID            optional  none
+entry 2 PatternType     required  undefined
+entry 2 Shading         required  undefined
+entry 2 XUID            optional  none
+
+entries 11
+
+# The values an entry may hold, where PLRM states a rule and a value
+# outside it would otherwise be painted or silently dropped.
+#
+#   value <entry> <case>  <takes|refuses>
+
+value XStep      zero      refuses
+value YStep      zero      refuses
+value XStep      negative  takes
+value PaintType  three     refuses
+value PaintType  one       takes
+value PaintType  two       takes
+value TilingType four      refuses
+value TilingType one       takes
+
+values 8
+
+# What is true of the dictionary makepattern hands back, as opposed to
+# the one the program supplied.
+#
+# PLRM 8.2: "Finally, makepattern makes the new dictionary read-only and
+# returns it." That is not a courtesy. The instantiated pattern is this
+# interpreter's statement that the dictionary has been checked, and every
+# later site relies on it; a program able to rewrite the type afterwards
+# would reach machinery chosen for a type the dictionary no longer has,
+# and be told about the failure by whichever internal helper got there.
+#
+#   instantiated <property>  <holds|absent>
+
+instantiated read-only    holds
+instantiated implementation holds
+
+instantiateds 2
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference. A difference the guard can find and this
+# list does not name is a failure; so is a line here naming a difference
+# the guard can no longer find.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+
+initial-colour-not-null  thorn  PLRM 4.9.1 says the initial colour value in a Pattern space "is a null object, which is treated as if it were a pattern dictionary representing an empty tiling pattern", and a program may set that value itself. The space is entered holding it and painting through it marks nothing, which is right; what is refused is a program writing it back with setcolor, because the operator's type gate admits a number or a dictionary and null is neither. MEASURED as typecheck in setcolor, where one reference implementation accepts it and paints nothing. What removes it is admitting null to that gate and routing it to the same place the entered value goes; the cost is that the gate is shared by every colour space, so admitting null there admits it for spaces where PLRM gives it no meaning, and the gate would have to become per-family to stay honest
+
+xuid-unread  settled  PLRM Table 4.9 offers XUID as a way for a pattern to carry a globally unique identity. Nothing here consults it, and a pattern is accepted with or without one. The identity a cached pattern is filed under is a serial this interpreter issues, for the same reason a form's is: an identifier the program supplies may be shared between two patterns, survives a copy, and may collide with one this interpreter chose. The entry is accepted so a program written for the specification is not turned away
+
+absent-entry-differs-by-operator  settled  A pattern dictionary carrying no PatternType is undefined at makepattern and a type error at setpattern, and that is deliberate. makepattern is handed a prototype to check, and PLRM Table 4.9 marks the entry required, so its absence is a missing entry. setpattern is handed something that must ALREADY be a pattern: PLRM 8.2 defines it as an equivalence for setcolorspace and setcolor, gives it no error list of its own, and says its operand is a dictionary instantiated by makepattern -- so a dictionary with no type is not a deficient pattern but the wrong kind of operand. The two reference implementations consulted split on this, one each way, and the specification leaves the name open; this interpreter also holds every operator to refusing an operand it cannot use with a type error, which decides it. One place knows the vocabulary and the caller states which fault it is reporting
+
+divergences 3

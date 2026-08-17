@@ -4818,6 +4818,17 @@ test('check-colourspace-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# PLRM 4.9.1 defines exactly two pattern types, a tiling and a shading.
+# The type was read in three places: two asked the same question with the
+# same absent-means-tiling default, and the third asked whether the entry
+# was there at all and answered it in a way that contradicted them, so a
+# pattern could be minted by one operator and refused by the next. One
+# helper answers it now, and this holds every type to whether it PAINTS.
+test('check-pattern-facts',
+  find_program('tests/check-pattern-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,
