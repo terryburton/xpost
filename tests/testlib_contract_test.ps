@@ -1,0 +1,136 @@
+%!testlib
+%!
+% The shared test framework, held to its own contract.
+%
+% Sixty-seven suites here run their cases through tests/testlib.ps. This is
+% where what it does is stated as checks rather than left to whichever suite
+% happens to notice a change.
+%
+% THIS FILE CANNOT USE THE FRAMEWORK TO REPORT ON THE FRAMEWORK. If the runner
+% under test is broken, a verdict printed through it says whatever the breakage
+% makes it say. So the checks here are recorded by a counter of this file's own,
+% named so as not to shadow anything the framework defines, and the final line
+% is printed from that counter. The framework's own failcount is added in, so a
+% FAIL the framework prints on its own account is not lost either.
+%
+% What is asked of it, in the order the contract is written in testlib.ps:
+%
+%   outcome answers /ok when the body returns, and the error's name when it
+%   raises -- the distinction the whole framework exists to make
+%
+%   the operand stack comes back to the depth the case started at, whether
+%   the case returned or raised, and whatever the case left behind
+%
+%   the dictionary stack comes back, for a case that opened a dictionary and
+%   never closed it
+%
+%   the graphics state is restored when the case RAISED and left alone when
+%   it RETURNED, which are two separate statements and are checked separately
+
+/ck.fail 0 def
+/ck.count 0 def
+/ck {                                   % bool (what)  .  -
+    /ck.count ck.count 1 add store
+    exch { pop }{
+        (FAIL: ) print print (\n) print flush
+        /ck.fail ck.fail 1 add store
+    } ifelse
+} bind def
+
+% ---- what outcome answers
+{ 42 pop } outcome /ok eq
+    (outcome answers ok for a body that returns) ck
+{ 1 0 div } outcome /undefinedresult eq
+    (outcome answers the error's own name for a body that raises) ck
+{ /nosuchname.zz load } outcome /undefined eq
+    (and a different error gets a different name) ck
+
+% ---- the operand stack comes back to where the case started
+%
+% Recorded by pushing a witness and counting from it rather than by trusting
+% a number computed the same way the runner computes one: if the runner and
+% the control share the arithmetic they share the mistake.
+count /ck.d0 exch def
+{ } outcome pop
+count ck.d0 eq
+    (a case that leaves nothing leaves the depth alone) ck
+{ 1 2 3 } outcome pop
+count ck.d0 eq
+    (a case that leaves three operands has them taken off) ck
+{ 1 2 3 1 0 div } outcome pop
+count ck.d0 eq
+    (a case that leaves operands AND raises has them taken off too) ck
+
+% and the operands BELOW the case are not the case's to discard
+7 8 9
+count /ck.d1 exch def
+{ 1 2 } outcome pop
+count ck.d1 eq
+    (operands under the case survive it) ck
+9 eq { 8 eq { 7 eq { true }{ false } ifelse }{ pop false } ifelse }
+     { pop pop false } ifelse
+    (and survive it unaltered, in order) ck
+
+% ---- the dictionary stack comes back
+countdictstack /ck.s0 exch def
+{ 3 dict begin 1 0 div } outcome pop
+countdictstack ck.s0 eq
+    (a case that opened a dictionary and raised has it closed) ck
+{ 3 dict begin } outcome pop
+countdictstack ck.s0 eq
+    (and one that opened a dictionary and returned, too) ck
+
+% ---- the graphics state, both ways round
+%
+% Compared element by element. `eq` on two matrix arrays compares whether
+% they are the same object, not whether they describe the same transform, so
+% a comparison written the obvious way reports a change for every case.
+/ck.same {                              % matrix matrix  .  bool
+    true 0 1 5 {
+        /ck.i exch def
+        2 index ck.i get 2 index ck.i get eq not { pop false } if
+    } for
+    exch pop exch pop
+} bind def
+
+gsave
+    initmatrix
+    matrix currentmatrix /ck.m0 exch def
+
+    % a case that RAISED did not mean what it did, so it is undone
+    { 3 4 scale 1 0 div } outcome pop
+    matrix currentmatrix ck.m0 ck.same
+        (a transform left by a raising case is put back) ck
+
+    % a case that RETURNED meant it, so it stands: a suite may select a font
+    % in one case and show text with it in the next
+    { 3 4 scale } outcome pop
+    matrix currentmatrix ck.m0 ck.same not
+        (a transform left by a returning case is left in force) ck
+grestore
+
+% ---- and the reporting helpers agree with the answers
+%
+% checkcount is what verdict reads to refuse a suite that checked nothing, so
+% a runner that reports without counting would make every empty suite pass.
+checkcount /ck.c0 exch def
+{ } (a passing case through works) works
+checkcount ck.c0 1 add eq
+    (works records one check) ck
+{ 1 0 div } (a raising case through refuses) refuses
+checkcount ck.c0 2 add eq
+    (refuses records one check) ck
+{ 1 0 div } /undefinedresult (a named error through raises) raises
+checkcount ck.c0 3 add eq
+    (raises records one check) ck
+
+% ---- the verdict, from this file's own counter plus anything the framework
+% reported on its own account
+ck.count 0 eq {
+    (FAILURES: this suite made no checks at all\n) print
+}{
+    ck.fail failcount add 0 eq { (SUCCESS\n) print }
+    { (FAILURES: ) print ck.fail failcount add 8 string cvs print (\n) print }
+    ifelse
+} ifelse
+flush

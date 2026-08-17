@@ -87,6 +87,7 @@ tests/check-shared-helpers.sh \
 tests/check-testlib.sh \
 tests/testlib-facts \
 tests/testlib-prepend.sh \
+tests/testlib_contract_test.ps \
 tests/testlib.ps \
 tests/check-colour-spaces.sh \
 tests/check-show-clip.sh \

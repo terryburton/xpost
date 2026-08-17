@@ -4958,6 +4958,17 @@ test('check-testlib',
   suite: cost_fast,
   timeout: 120)
 
+# The framework itself, held to what it promises. The check above is
+# structural -- who uses it, who kept a runner of their own -- and says
+# nothing about what it does when a case raises. This one runs cases through
+# it and reads the answers, and reports through a counter of its own so that
+# a broken runner cannot print its own verdict.
+test('testlib-contract',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/testlib_contract_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A colour space belongs to a family, and three tables in data/color.ps
 # each say something about those families. A family in one and missing
 # from another is one the machinery half knows: that is how the count of

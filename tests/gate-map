@@ -432,9 +432,14 @@ guards path tests/shared_helpers.exempt
 guards path tests/gate-map
 guards path tests/gate.sh
 guards path tests/check-gate-map.sh
+guards path tests/testlib.ps
+guards path tests/testlib-prepend.sh
+guards path tests/testlib-facts
+guards path tests/check-testlib.sh
 guards path tests/run-profile.sh
 guards path tests/listing.awk
 guards test check-*
+guards test testlib-contract
 guards test guard-paths
 guards test shared-helpers
 guards test c-held-objects
