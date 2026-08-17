@@ -1,3 +1,4 @@
+%!testlib
 %!
 % Every filter that can round-trip, asked the same question about where
 % it stops.
@@ -33,12 +34,6 @@
 % sentinel passed the first three and would have passed a test that
 % stopped there.
 
-/failcount 0 def
-/assert {                               % bool (name) (what)  .  -
-    3 -1 roll { pop pop }{
-        (FAIL: ) print exch print ( ) print print (\n) print
-        /failcount failcount 1 add store } ifelse
-} bind def
 
 /PLAIN (HELLO FILTER WORLD) def
 /SENTINEL (ZZ) def
@@ -46,10 +41,6 @@
 /TMPB (zzfilter-b.tmp) def
 
 % { proc }  outcome  /ok | /errorname
-/outcome {
-    mark exch stopped
-    { cleartomark $error /errorname get }{ cleartomark /ok } ifelse
-} bind def
 
 % (path)  slurp  (contents)
 % reads a whole file, in pieces, so no case depends on a buffer size
@@ -124,7 +115,7 @@
     /enc null def
     { /enc encname encoded def } outcome /ok eq
     dup not {
-        base (is in this build) assert
+        base (is in this build) assert2
     }{ pop
         % ---- lay the encoded bytes down followed by the sentinel
         TMPB (w) file
@@ -151,21 +142,20 @@
           basefile closefile
         } outcome /ok eq
         dup not {
-            base (round trips without raising) assert
+            base (round trips without raising) assert2
         }{ pop
             got PLAIN eq
-            base (decodes to what was encoded) assert
+            base (decodes to what was encoded) assert2
 
             holdas /strict eq {
                 rest SENTINEL eq
-                base (leaves the bytes after its end-of-data for the next reader) assert
+                base (leaves the bytes after its end-of-data for the next reader) assert2
             }{
                 rest SENTINEL ne
-                base (still eats the bytes after its end-of-data -- if this line failed, the defect in task 330 is fixed and the member is now /strict) assert
+                base (still eats the bytes after its end-of-data -- if this line failed, the defect in task 330 is fixed and the member is now /strict) assert2
             } ifelse
         } ifelse
     } ifelse
 } for
 
-failcount 0 eq { (SUCCESS\n) print }{
-    (FAILURES: ) print failcount 8 string cvs print (\n) print } ifelse
+verdict

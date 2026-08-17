@@ -1,3 +1,4 @@
+%!testlib
 %!
 % Every colour space, asked the same questions.
 %
@@ -18,25 +19,6 @@
 % was written for it. The answers here are what the interpreter gives
 % today; where one is wrong it is to be corrected here and in the
 % machinery together.
-
-/failcount 0 def
-/assert {                               % bool (name) (what)  .  -
-    3 -1 roll { pop pop }{
-        (FAIL: ) print exch print ( ) print print (\n) print
-        /failcount failcount 1 add store } ifelse
-} bind def
-
-% { proc }  outcome  /ok | /errorname
-% brackets the graphics state and every stack the case touched: a case
-% that raises never reaches its own cleanup, and the next case would
-% otherwise inherit it
-/outcome {                              % { proc }  .  /ok | /errorname
-    gsave
-    mark exch
-    stopped { cleartomark $error /errorname get }
-            { cleartomark /ok } ifelse
-    grestore
-} bind def
 
 % A CONSTRUCTOR per member, not a shared value: a case that mutates or
 % poisons its space cannot reach the next one.
@@ -85,14 +67,14 @@
 {                                       % (name) { space }  .  -
     /sp exch def /nm exch def
     { sp setcolorspace } outcome /ok eq
-    nm (is accepted by setcolorspace) assert
+    nm (is accepted by setcolorspace) assert2
 } eachmember
 
 % ---- and what it reports can be handed straight back to it
 {
     /sp exch def /nm exch def
     { sp setcolorspace currentcolorspace setcolorspace } outcome /ok eq
-    nm (survives a currentcolorspace round trip) assert
+    nm (survives a currentcolorspace round trip) assert2
 } eachmember
 
 % ---- and it is entered holding a colour, whatever that colour is.
@@ -111,7 +93,7 @@
         } ifelse
     grestore
     n 0 gt
-    nm (enters its space holding a colour) assert
+    nm (enters its space holding a colour) assert2
 } eachmember
 
 % ---- only a pattern space takes null as a colour
@@ -136,18 +118,18 @@
     gsave sp setcolorspace currentcolorspace 0 get grestore
     /Pattern eq { /ok }{ /typecheck } ifelse
     eq
-    nm (answers for null exactly as its family should) assert
+    nm (answers for null exactly as its family should) assert2
 } eachmember
 
 % and the pattern space's own null round-trips through currentcolor,
 % which is what makes the entered colour and a program-set one the same
 % value rather than two that merely both paint nothing
 { [ /Pattern ] setcolorspace currentcolor } outcome /ok eq
-(Pattern) (reports the colour it was entered holding) assert
+(Pattern) (reports the colour it was entered holding) assert2
 [ /Pattern ] setcolorspace currentcolor type /nulltype eq
-(Pattern) (is entered holding the null object itself) assert
+(Pattern) (is entered holding the null object itself) assert2
 { [ /Pattern ] setcolorspace currentcolor setcolor } outcome /ok eq
-(Pattern) (takes that colour back through setcolor) assert
+(Pattern) (takes that colour back through setcolor) assert2
 
 % ---- a tint space's transform must be a procedure
 %
@@ -164,19 +146,18 @@
 % that could never be called is not a value of the right kind, and a
 % space accepted here would be accepted for every colorant name alike.
 { [ /Separation /Spot /DeviceGray 42 ] setcolorspace } outcome /typecheck eq
-(Separation) (refuses a tint transform that is not a procedure) assert
+(Separation) (refuses a tint transform that is not a procedure) assert2
 { [ /Separation /None /DeviceGray 42 ] setcolorspace } outcome /typecheck eq
-(Separation /None) (refuses one too, its transform being unused not unneeded) assert
+(Separation /None) (refuses one too, its transform being unused not unneeded) assert2
 { [ /Separation /All /DeviceGray 42 ] setcolorspace } outcome /typecheck eq
-(Separation /All) (refuses one too) assert
+(Separation /All) (refuses one too) assert2
 { [ /DeviceN [ /A /B ] /DeviceRGB 42 ] setcolorspace } outcome /typecheck eq
-(DeviceN) (refuses a tint transform that is not a procedure) assert
+(DeviceN) (refuses a tint transform that is not a procedure) assert2
 
 % and a procedure is still accepted, so the check refuses only what it means to
 { [ /Separation /Spot /DeviceGray { } ] setcolorspace } outcome /ok eq
-(Separation) (still takes a procedure) assert
+(Separation) (still takes a procedure) assert2
 { [ /DeviceN [ /A /B ] /DeviceRGB { pop pop 0 0 0 } ] setcolorspace } outcome /ok eq
-(DeviceN) (still takes a procedure) assert
+(DeviceN) (still takes a procedure) assert2
 
-failcount 0 eq { (SUCCESS\n) print }{
-    (FAILURES: ) print failcount 8 string cvs print (\n) print } ifelse
+verdict

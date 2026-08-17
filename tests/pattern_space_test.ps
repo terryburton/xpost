@@ -1,3 +1,4 @@
+%!testlib
 %!
 % A Pattern colour space over every base it can be built on, against every
 % operator that paints with one.
@@ -21,9 +22,6 @@
 % The bases are listed once and every operator is asked over that one
 % list, so a base added here is added to every case at once.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } bind def
 
 % What a procedure raised, with everything it disturbed put back.
 %
@@ -36,16 +34,6 @@
 % colour space left in force by a case that failed is inherited by every
 % case after it, which turns one failure into a column of them and points
 % every one of them at the wrong thing.
-/outcome { % proc . /ok | /errorname
-    /P exch def
-    gsave
-    mark
-    { P exec } stopped { $error /errorname get }{ /ok } ifelse
-    /R exch def
-    cleartomark
-    grestore
-    R
-} bind def
 
 % The bases. Each entry is a procedure that BUILDS the space, and a
 % procedure leaving the components a colour in that space takes.
@@ -164,4 +152,4 @@
 
 showpage
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

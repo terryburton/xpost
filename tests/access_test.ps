@@ -1,3 +1,4 @@
+%!testlib
 % Access-attribute enforcement conformance, run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every access check matches the PostScript
 % language semantics. readonly, executeonly and noaccess reduce the value and
@@ -11,14 +12,6 @@ faildict /n 0 put
 % run proc under stopped and report the outcome as a name: /ok on success, or
 % the raised errorname. the operand stack is left as it was found, so a caught
 % error's leftover operands do not unbalance the following checks.
-/outcome { % proc -> /ok | /errorname
-    /P exch def
-    mark
-    { P exec } stopped { $error /errorname get }{ /ok } ifelse
-    /R exch def
-    cleartomark
-    R
-} bind def
 
 /chk { % proc /expected (label) . -
     /L exch def /E exch def
