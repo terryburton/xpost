@@ -1,3 +1,4 @@
+%!testlib
 % Every resource operator against every resource category, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -14,25 +15,6 @@
 % only the questions that leave them as they were found, so the suite
 % cannot damage the state it runs in.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
-
-/bad 0 def
-/note { % (what) (category)
-    (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store
-} def
-/works { % {proc} (what) (category)
-    /r.c exch def /r.w exch def
-    stopped { r.w r.c note } if
-    clear
-} def
-/refuses { % {proc} (what) (category)
-    /r.c exch def /r.w exch def
-    stopped not { r.w r.c note } if
-    clear
-} def
 
 % Every category the interpreter admits to, asked for by the category of
 % categories rather than listed here, so a category added later is held
@@ -105,6 +87,4 @@ cats {
     { pop pop } { } ifelse }
     (an unknown category) (resourcestatus) refuses
 
-bad 0 eq (every resource operator works for every category) assert
-
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

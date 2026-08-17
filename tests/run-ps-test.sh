@@ -36,13 +36,34 @@ define=${3:-}
 # capture the interpreter's exit status as well as its output: a run that
 # reports SUCCESS and then dies during teardown -- a crash, an assertion,
 # a sanitizer abort -- must not be recorded as a pass
+# The shared framework (tests/testlib.ps) is prepended to a suite whose
+# first line asks for it, and to no other. It has to be asked for: some
+# suites here assert that a program's own dictionary starts empty or count
+# the dictionary stack, and a framework defined into userdict for one of
+# those would be the thing it reports -- and six read their own source
+# through currentfile, which prepending would shift. So the opt-in is a
+# marker in the file, where a reader of the file can see it, rather than a
+# list kept over here.
+run=$script
+lib=$(dirname "$0")/testlib.ps
+case $(head -n 1 "$script" 2>/dev/null) in
+    '%!testlib'*)
+        if [ ! -f "$lib" ]; then
+            echo "FAILURES: $script asks for the test framework and"
+            echo "      $lib is not there"
+            exit 1
+        fi
+        run=$(mktemp "${TMPDIR:-/tmp}/xpost-testlib-XXXXXX.ps") || exit 1
+        trap 'rm -f "$run"' EXIT INT TERM
+        cat "$lib" "$script" > "$run" || exit 1 ;;
+esac
 # A definition is passed only when one was asked for: every other suite
 # here asserts that a program's own dictionary starts empty, and a
 # definition made for one of them would be the thing that filled it.
 if [ -n "$define" ]; then
-    out=$("$xpost" -q --no-sandbox -d null "-D$define" "$script" </dev/null 2>&1)
+    out=$("$xpost" -q --no-sandbox -d null "-D$define" "$run" </dev/null 2>&1)
 else
-    out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
+    out=$("$xpost" -q --no-sandbox -d null "$run" </dev/null 2>&1)
 fi
 status=$?
 printf '%s\n' "$out"

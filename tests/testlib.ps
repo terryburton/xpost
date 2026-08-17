@@ -1,0 +1,166 @@
+% The shared test framework, prepended by run-ps-test.sh to any test whose
+% first line is `%!testlib`.
+%
+% It is OPT-IN, and it has to be. Several suites here assert that a
+% program's own dictionary starts empty or count the dictionary stack, and
+% a framework defined into userdict for them would be the thing they
+% report. A test that asks for the framework accepts that its userdict
+% carries these names; a test that does not ask is prepended nothing and
+% runs exactly as it did before. Six suites also read their own source
+% through currentfile, and prepending would shift what they read.
+%
+% WHY THIS EXISTS. Every one of these procedures was written out again in
+% file after file -- /assert alone in a hundred and forty-six of them, in
+% bodies differing only in whitespace, a comment, or which counter they
+% increment. That is not merely repetition: it means a fault found in one
+% copy is fixed in one copy. The graphics-state unwind below was added to a
+% single file after a refused case there left a singular transform behind
+% and five later cases raised undefinedresult, which that file's harness
+% read as those cases correctly refusing the thing they were actually
+% testing. One false pass, and a hundred and forty-five other files with
+% the same shape and no reason to be looked at.
+%
+% So the rule this file exists to keep is: a case that may raise is run in
+% ONE place, and that place puts the world back.
+
+% The framework's own state, in a dictionary of its own rather than in
+% userdict. A case that opens a dictionary and raises leaves it on the
+% dictionary stack, and a def while it sits there writes into the case's
+% leavings instead of here -- so the answers this framework has to keep
+% across an unwind are kept somewhere an unwind cannot move.
+/.testlib 8 dict def
+
+% ---- the verdict
+%
+% A count rather than a flag, so a run says how much is wrong rather than
+% that something is. In userdict, where a suite can read them.
+/failcount 0 def
+/checkcount 0 def
+
+% bool (what)  assert  -
+% Record one check. The message prints only on failure, because a suite
+% that prints a line per success buries the one line that matters.
+/assert {                               % bool (what)  .  -
+    /checkcount checkcount 1 add store
+    exch { pop }{
+        (FAIL: ) print print (\n) print flush
+        /failcount failcount 1 add store
+    } ifelse
+} bind def
+
+% bool (name) (what)  assert2  -
+% The same, for suites that name the subject and the question separately
+% and print them together.
+/assert2 {                              % bool (name) (what)  .  -
+    /checkcount checkcount 1 add store
+    3 -1 roll { pop pop }{
+        (FAIL: ) print exch print ( ) print print (\n) print flush
+        /failcount failcount 1 add store
+    } ifelse
+} bind def
+
+% -  verdict  -
+% Print the one line the harness reads. A suite that reaches here having
+% checked nothing says so: a suite whose cases all failed to run is not a
+% suite that passed, and reporting success for it is the failure mode this
+% whole file is about.
+/verdict {
+    checkcount 0 eq {
+        (FAILURES: this suite made no checks at all\n) print
+    }{
+        failcount 0 eq { (SUCCESS\n) print }
+        { (FAILURES: ) print failcount 8 string cvs print (\n) print } ifelse
+    } ifelse
+    flush
+} bind def
+
+% ---- running a case that may raise
+%
+% Three things a raising case leaves behind, and all three are the NEXT
+% case's problem rather than its own, because a case that raises never
+% reaches its own cleanup:
+%
+%   the operand stack, holding whatever the case had built
+%   the dictionary stack, holding any dictionary the case opened
+%   the graphics state stack, holding any state the case saved
+%
+% The third does the real damage, because the state is not inert: a
+% transform, a clip or a colour left in force silently becomes the
+% environment every later case runs in, and a case failing for that reason
+% looks exactly like a case failing for its own.
+%
+% The unwind goes all the way rather than by one level. A case may open
+% more than it closed, and the next case is entitled to the world the
+% suite started in -- which, for a test program with no save of its own
+% outstanding, is what grestoreall restores. A suite deliberately holding
+% an outer graphics state across its cases must therefore not use these.
+
+% -  .testlib.unwind  -
+% Put the world back, whatever the case left of it.
+.testlib /unwind {
+    clear
+    grestoreall
+    countdictstack //.testlib /depth get sub
+    dup 0 gt { { end } repeat }{ pop } ifelse
+} bind put
+
+% { body }  outcome  /ok | /errorname
+% Run a case and say how it ended. The error NAME is the answer, not a
+% boolean, because "it raised" and "it raised the right thing" are
+% different questions, and a test that can only ask the first passes when
+% the interpreter starts raising something else.
+%
+% The answer is parked in the framework's dictionary before the unwind,
+% because the unwind clears the operand stack and the answer is on it.
+/outcome {                              % { body }  .  /ok | /errorname
+    mark exch stopped
+    { cleartomark $error /errorname get }{ cleartomark /ok } ifelse
+    //.testlib exch /answer exch put
+    //.testlib /unwind get exec
+    //.testlib /answer get
+} bind def
+
+% { body } (what) (subject)  works  -
+% The case must not raise. Two strings because that is the shape the
+% cross-product suites already use: one names the question, the other the
+% member being asked, and printing them together is what makes a failure
+% in a table of a hundred cells readable.
+/works {                                % { body } (what) (subject)  .  -
+    //.testlib exch /subject exch put
+    //.testlib exch /what exch put
+    outcome /ok eq
+    //.testlib /subject get //.testlib /what get assert2
+} bind def
+
+% { body } (what) (subject)  refuses  -
+% The case must raise, and this asks no more than that. It is the shape
+% the existing suites use and it is the weaker question: a test satisfied
+% by "some error" goes on passing when the operator starts refusing for
+% the wrong reason, which is how a rangecheck quietly becomes a typecheck.
+% Prefer `raises` below, which names the error; this exists so that a suite
+% written before the distinction was drawn can be moved here unchanged
+% rather than have its expectations rewritten in the same step.
+/refuses {                              % { body } (what) (subject)  .  -
+    //.testlib exch /subject exch put
+    //.testlib exch /what exch put
+    outcome /ok ne
+    //.testlib /subject get //.testlib /what get assert2
+} bind def
+
+% { body } /errorname (what) (subject)  raises  -
+% The case must raise THAT error. This is the question worth asking, and
+% the one a new case should use: the error name is part of the contract,
+% and a test that does not check it cannot tell a correct refusal from a
+% refusal for the wrong reason.
+/raises {                               % { body } /errorname (what) (subject)  .  -
+    //.testlib exch /subject exch put
+    //.testlib exch /what exch put
+    //.testlib exch /want exch put
+    outcome //.testlib /want get eq
+    //.testlib /subject get //.testlib /what get assert2
+} bind def
+
+% The dictionary-stack depth the suite starts at, read after the
+% framework's own definitions so the framework is never counted as
+% something a case leaked.
+.testlib /depth countdictstack put
