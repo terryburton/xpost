@@ -4775,6 +4775,18 @@ test('check-halftone-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# A halftone dictionary may carry a transfer function that overrides the
+# one the graphics state holds (PLRM Table 7.4). Three separable things
+# have to be true of it -- it applies, it replaces rather than composes,
+# and it belongs to the screen rather than to the graphics state, so a
+# device that does not screen takes no effect from it. The counts this
+# holds the interpreter to were taken from two other implementations,
+# which agreed with each other on every case.
+test('check-halftone-transfer',
+  find_program('tests/check-halftone-transfer.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A Type 42 font dictionary owes the glyph complement PLRM Table 5.7
 # states, whether or not the TrueType file behind it names its glyphs,
 # and what it publishes has to be what the face can be asked to paint.

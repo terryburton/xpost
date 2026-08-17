@@ -38,6 +38,12 @@ userdict begin
     /ucr {}
     /colorrendering 0 dict
     /transfer {}
+    % a halftone dictionary's own transfer function, null unless the
+    % installed screen carried one. It is not the slot above and does
+    % not replace it: settransfer keeps its own, currenttransfer keeps
+    % answering with it, and this one is consulted only where a colour
+    % meets the screen
+    /halftonetransfer null
     % colour transfer functions; the unprefixed grey slot above is
     % shared with settransfer and is the one painting applies
     /redtransfer {}
@@ -558,6 +564,7 @@ setglobal
     graphicsdict /currgstate get exch /redscreenangle exch put
     graphicsdict /currgstate get exch /redscreenfreq exch put
     graphicsdict /currgstate get /halftone null put
+    graphicsdict /currgstate get /halftonetransfer null put
 } put
 
 % The spot function is the program's, and a screen installed from inside
@@ -954,6 +961,7 @@ setglobal
     graphicsdict /currgstate get exch /screenangle exch put
     graphicsdict /currgstate get exch /screenfreq exch put
     graphicsdict /currgstate get /halftone null put
+    graphicsdict /currgstate get /halftonetransfer null put
     //.xpostsys /.spreadgrayscreen get exec
     graphicsdict /currgstate get /screenfreq get dup 0 gt {
         graphicsdict /currgstate get /screenangle get
@@ -1096,6 +1104,8 @@ setglobal
     out /Width L put
     out /Height L put
     out /Thresholds cell put
+    src /TransferFunction 2 copy known
+        { get out exch /TransferFunction exch put }{ pop pop } ifelse
     out
     end
 } put
@@ -1251,6 +1261,31 @@ put
     bad
     end
     { /sethalftone cvx /rangecheck signalerror } if
+} bind put
+
+% name  .marktransfer  proc
+% The function a colour component goes through on its way to a mark:
+% the graphics state slot the name asks for, unless the halftone in
+% force carries one of its own.
+%
+% A halftone dictionary's TransferFunction OVERRIDES the one settransfer
+% or setcolortransfer put in the graphics state (PLRM Table 7.4) -- it
+% replaces it rather than composing with it, so a graphics state
+% function is not consulted at all while one is in force. It belongs to
+% the screen and not to the graphics state, and so it stands only where
+% there is a screen: a device that declares ScreenPaint takes it, a
+% continuous-tone device takes no effect from it whatever, and
+% currenttransfer goes on answering with the function settransfer put
+% there. It lasts exactly as long as the halftone that carried it;
+% installing any other screen puts the graphics state's own back.
+.xpostsys /.marktransfer {
+    DEVICE /ScreenPaint known {
+        graphicsdict /currgstate get /halftonetransfer 2 copy known
+            { get }{ pop pop null } ifelse
+    }{ null } ifelse
+    dup null eq
+        { pop graphicsdict /currgstate get exch get }
+        { exch pop } ifelse
 } bind put
 
 % ht [ keys ]  .htrequire  -
@@ -1468,6 +1503,13 @@ put
         graphicsdict /currgstate get /screenangle 0 put
     } ifelse
     graphicsdict /currgstate get /screenproc ht put
+    % whatever dictionary ended up being the screen is the one whose
+    % transfer function stands. A type 2 or a type 4 cannot reach here
+    % carrying one: the grey triple is read into a fresh dictionary and
+    % the entry PLRM says is unavailable to them is not among the keys
+    % copied over
+    graphicsdict /currgstate get /halftonetransfer
+        ht /TransferFunction 2 copy known { get }{ pop pop null } ifelse put
     end
     //.xpostsys /.spreadgrayscreen get exec
 } //.xpostsys /.defop get exec

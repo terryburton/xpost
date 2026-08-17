@@ -63,6 +63,8 @@ entries 10
 # thorn    a known defect or gap, waiting on work
 # heading  being changed now
 
-transfer       thorn    PLRM makes TransferFunction optional in types 1, 3, 6, 10 and 16, unavailable in 2 and 4, and required for a type 5 component standing for a nonprimary or a DeviceN colorant. Nothing in this tree reads the entry: a dictionary carrying one is accepted, the procedure is kept as inert data and never overrides settransfer, and a type 5 component that PLRM says must have one is accepted without it
 
-divergences 1
+transfer-required  settled  PLRM Table 7.4 says a TransferFunction is REQUIRED of a type 5 component standing for a nonprimary colorant or a component of a DeviceN space. Neither implementation this is adjudicated against enforces that: both accept such a component without one, as this interpreter does. Refusing it would turn away programs both of them run, so the letter is not followed here and the reason is that following it would be the divergence
+screen-extras      thorn    AccurateScreens, ActualFrequency and ActualAngle are named nowhere in the tree. A dictionary carrying AccurateScreens is accepted and it survives currenthalftone as inert data; PLRM says sethalftone sets ActualFrequency and ActualAngle if present, and currenthalftone reports neither. HalftoneName appears only inside a comment
+
+divergences 2

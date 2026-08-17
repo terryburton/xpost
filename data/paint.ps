@@ -26,20 +26,23 @@
 .xpostsys /.applytransfer {
     //.xpostsys /.refreshscreencell get exec
     counttomark 3 eq {
-        graphicsdict /currgstate get /bluetransfer get exec
+        /bluetransfer //.xpostsys /.marktransfer get exec exec
         3 1 roll
-        graphicsdict /currgstate get /greentransfer get exec
+        /greentransfer //.xpostsys /.marktransfer get exec exec
         3 1 roll
-        graphicsdict /currgstate get /redtransfer get exec
+        /redtransfer //.xpostsys /.marktransfer get exec exec
         3 1 roll
     }{
     counttomark 4 eq {
-        currenttransfer exec 4 1 roll
-        graphicsdict /currgstate get /bluetransfer get exec 4 1 roll
-        graphicsdict /currgstate get /greentransfer get exec 4 1 roll
-        graphicsdict /currgstate get /redtransfer get exec 4 1 roll
+        /transfer //.xpostsys /.marktransfer get exec exec 4 1 roll
+        /bluetransfer //.xpostsys /.marktransfer get exec exec 4 1 roll
+        /greentransfer //.xpostsys /.marktransfer get exec exec 4 1 roll
+        /redtransfer //.xpostsys /.marktransfer get exec exec 4 1 roll
     }{
-        counttomark { currenttransfer exec counttomark 1 roll } repeat
+        counttomark {
+            /transfer //.xpostsys /.marktransfer get exec exec
+            counttomark 1 roll
+        } repeat
     } ifelse } ifelse
     counttomark { //.xpostsys /.cunit get exec counttomark 1 roll } repeat
 } put

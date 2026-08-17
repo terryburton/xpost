@@ -244,6 +244,7 @@ entries 339
 .xpostsys /.loadresource
 .xpostsys /.makerasterclass
 .xpostsys /.maskcapture
+.xpostsys /.marktransfer
 .xpostsys /.mcscale
 .xpostsys /.meshsh
 .xpostsys /.min
@@ -399,6 +400,7 @@ gstate /greenscreenfreq
 gstate /greenscreenproc
 gstate /greentransfer
 gstate /halftone
+gstate /halftonetransfer
 gstate /linecap
 gstate /linejoin
 gstate /linewidth
