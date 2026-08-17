@@ -91,7 +91,6 @@ own    device_private_test.ps                 2
 own    device_restore_retired_test.ps         1
 own    device_retire_restored_test.ps         2
 own    empty_clip_test.ps                     6
-own    entity_limit_test.ps                   6
 own    error_dict_test.ps                     3
 own    error_unwind_test.ps                   79
 own    execform_cache_test.ps                 2
@@ -143,7 +142,6 @@ own    op_operand_shapes_test.ps              1
 own    op_packing_test.ps                     1
 own    op_printdepth_test.ps                  1
 own    op_radix_test.ps                       6
-own    op_rect_test.ps                        6
 own    op_resource_test.ps                    8
 own    op_showstate_test.ps                   5
 own    op_string_filter_test.ps               1
@@ -177,7 +175,8 @@ own    vm_threshold_test.ps                   1
 own    window_device_test.ps                  4
 own    wrapped_save_test.ps                   1
 
+cannot entity_limit_test.ps                   6  its subject is the entity limit, and it exhausts virtual memory deliberately. MEASURED: converted, the framework's own definitions consume entities the suite is counting and it raises limitcheck on a string it means to allocate
 cannot startup_surface_test.ps                6  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
 
-owns 112
-cannots 1
+owns 110
+cannots 2

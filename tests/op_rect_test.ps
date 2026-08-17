@@ -1,3 +1,4 @@
+%!testlib
 % Rectangle-operator forms (PLRM 8.2), run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
@@ -6,8 +7,6 @@
 % rectstroke also takes an optional trailing matrix. Geometry is checked through
 % rectclip + clippath, whose bounding box is deterministic.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /near { sub abs 1e-3 lt } def
 /bbox4 { /ury exch def /urx exch def /lly exch def /llx exch def } def
 /clipbox4 { initgraphics newpath exec clippath pathbbox bbox4 } def
@@ -27,12 +26,12 @@ llx 10 near lly 10 near and urx 80 near and ury 80 near and (two-rectangle numar
 llx 10 near lly 20 near and urx 40 near and ury 60 near and (numstring rectclip bbox) assert
 
 % --- rectfill / rectstroke accept every form without error ---
-{ initgraphics 10 10 30 30 rectfill } stopped not (rectfill four numbers) assert
-{ initgraphics [10 10 20 20 50 50 30 30] rectfill } stopped not (rectfill numarray) assert
-{ initgraphics 10 10 30 30 rectstroke } stopped not (rectstroke four numbers) assert
-{ initgraphics [10 10 20 20 50 50 30 30] rectstroke } stopped not (rectstroke numarray) assert
+{ initgraphics 10 10 30 30 rectfill } (rectfill four numbers) works
+{ initgraphics [10 10 20 20 50 50 30 30] rectfill } (rectfill numarray) works
+{ initgraphics 10 10 30 30 rectstroke } (rectstroke four numbers) works
+{ initgraphics [10 10 20 20 50 50 30 30] rectstroke } (rectstroke numarray) works
 % rectstroke with an optional trailing matrix, in both the number and array forms
-{ initgraphics 10 10 30 30 [1 0 0 1 0 0] rectstroke } stopped not (rectstroke four numbers + matrix) assert
-{ initgraphics [10 10 20 20 50 50 30 30] [1 0 0 1 0 0] rectstroke } stopped not (rectstroke numarray + matrix) assert
+{ initgraphics 10 10 30 30 [1 0 0 1 0 0] rectstroke } (rectstroke four numbers + matrix) works
+{ initgraphics [10 10 20 20 50 50 30 30] [1 0 0 1 0 0] rectstroke } (rectstroke numarray + matrix) works
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
