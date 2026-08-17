@@ -327,7 +327,14 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
         if ((mem->threshold -= sz) <= 0)
         {
             mem->threshold = mem->threshold_bytes;
-            return XPOST_FREE_WANT_COLLECTION;
+            /* A collection is due: ask for one, and carry on to the free
+               list. The count paces collection; it says nothing about
+               whether this request can be met from memory already free,
+               and refusing the list here would take fresh memory for a
+               block that is sitting in it. The interpreter runs the
+               collection at its safe point between operators. */
+            if (mem->garbage_collect_is_installed)
+                mem->garbage_collect_pending = 1;
         }
     }
 

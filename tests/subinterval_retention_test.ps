@@ -10,11 +10,11 @@
 % back; full price means it was not.
 
 % COLLECTION: this reads REUSE rather than a difference -- the header
-% below says why -- so a collection cannot make a reading mean
-% something else. It is NOT insensitive to collection frequency: below
-% the shipped count the freed block is not reused at any request size,
-% and the cause is not settled. It passes at the shipped count and
-% above. Turning collection off was tried and did not change it.
+% below says why -- so a collection cannot make a reading mean something
+% else, and the reading does not depend on how often collection runs. The
+% case at the end holds that: it repeats the measurement with VMThreshold
+% set far below the block it allocates, which is where a request that
+% exhausts the count meets a free list holding exactly what it asks for.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
@@ -84,5 +84,30 @@ swin length 42 eq (a string subinterval survives its host being dropped) assert
 % a large buffer and keeps the window keeps the buffer, which in a context
 % that serves many jobs reads as a leak. Asserting the present behaviour
 % would freeze it, so it is written down for the collector work instead.
+
+% --- reuse does not depend on how often collection is asked for ---------
+%
+% A request that takes the count of bytes allocated since the last
+% collection to zero asks for a collection. That is a statement about
+% pacing, not about where this block comes from: a block of the right
+% size already on the free list is still the answer. With the threshold
+% set below twice the block, the second allocation here is exactly such a
+% request.
+%
+% Restore the threshold afterwards: it is a user parameter, and the cases
+% above run at the default.
+currentuserparams /VMThreshold get /th0 exch def
+100000 setvmthreshold
+/c 60000 array def
+/c null def
+1 vmreclaim
+/mark4 used def
+/d 60000 array def
+1 vmreclaim
+used mark4 sub 0 eq
+    (a freed block is reused however often collection is asked for) assert
+/d null def
+th0 setvmthreshold
+1 vmreclaim
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
