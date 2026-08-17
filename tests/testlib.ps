@@ -99,8 +99,21 @@
 % Put the operand and dictionary stacks back. Called after every case,
 % whether it returned or raised, because leftovers on either belong to the
 % case that made them and not to the next one.
+%
+% The operand stack is popped back to the depth the case STARTED at, not
+% cleared. Clearing also throws away whatever the suite had on the stack
+% below the case, which is not the case's to discard: a suite that records
+% the depth and then checks a case left it unchanged is measuring this
+% runner, and with a wholesale clear it can only ever measure zero. The
+% depth is recorded in `base` by outcome, before the case runs.
+%
+% This needs no mark, which is the reason it is done by counting. A mark is
+% visible to the case -- a body that reads `count`, or lays and clears a
+% mark of its own, gets a different answer with one of ours underneath it,
+% and suites here have bodies that do exactly that.
 .testlib /unwind {
-    clear
+    count //.testlib /base get sub
+    dup 0 gt { { pop } repeat }{ pop } ifelse
     countdictstack //.testlib /depth get sub
     dup 0 gt { { end } repeat }{ pop } ifelse
 } bind put
@@ -151,6 +164,7 @@
 % do exactly that.
 /outcome {                              % { body }  .  /ok | /errorname
     //.testlib /gs get currentgstate pop
+    count 1 sub //.testlib exch /base exch put
     stopped
     { //.testlib /gs get setgstate $error /errorname get }{ /ok } ifelse
     //.testlib exch /answer exch put
@@ -231,3 +245,7 @@
 % the framework runs inside the suite's virtual memory and a suite that
 % counts what it allocated should not be counting this.
 .testlib /gs gstate put
+
+% The depth a case starts at, so an unwind that has not been through outcome
+% still has a number to pop back to rather than raising on a missing key.
+.testlib /base 0 put
