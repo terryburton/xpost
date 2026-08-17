@@ -44,6 +44,14 @@
     clear
 } def
 
+% A file of n zero bytes, for the types whose thresholds must arrive
+% through one rather than in a string: the hexadecimal for them, decoded.
+/zerofile { % n  ->  file
+    dup 2 mul string /zf.s exch def
+    0 1 zf.s length 1 sub { zf.s exch 48 put } for
+    pop zf.s /ASCIIHexDecode filter
+} def
+
 % ----------------------------------------------------- the whole dictionaries
 % Each type this interpreter screens with, complete, is accepted.
 
@@ -274,6 +282,25 @@
 { << /HalftoneType 10 /Xsquare 4 /Ysquare 2
      /Thresholds <000102030405060708090A0B0C0D0E0F0011223344> >>
   sethalftone } (a type 10 whose squares share a factor of two) works
+
+% A type 10 and a type 16 can describe the same cell: two squares of side
+% X and Y are the rectangles X by X and Y by Y, and the count of places
+% is the same determinant read from the same four sides. Whichever way it
+% is written the answer must be the same one. Sixteen and sixteen tells a
+% tile measured before the sides' common factor is taken out from one
+% measured after: five hundred and twelve places, a factor of sixteen, and
+% a tile thirty-two on a side.
+{ << /HalftoneType 10 /Xsquare 16 /Ysquare 16 /Thresholds 512 string >>
+  sethalftone } (a type 10 whose squares are sixteen) works
+{ << /HalftoneType 16 /Width 16 /Height 16 /Width2 16 /Height2 16
+     /Thresholds 1024 zerofile >>
+  sethalftone } (the same cell written as a type 16) works
+
+% A cell with no places has no tile to reduce to. Saying so is the
+% validator's job rather than the arithmetic's: the sides are refused,
+% not divided by.
+{ << /HalftoneType 10 /Xsquare 0 /Ysquare 0 /Thresholds <> >>
+  sethalftone } /rangecheck (a type 10 with no places) raises
 
 { << /HalftoneType 5
      /Gray << /HalftoneType 1 /Frequency 60 /Angle 45

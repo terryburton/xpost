@@ -674,6 +674,70 @@ setglobal
     { dup 0 eq { pop exit } if exch 1 index mod } loop
 } put
 
+% W H W2 H2  .celldet  n
+% the number of places in a cell that repeats along (W, H2) and
+% (-W2, H): the determinant of those two vectors, W*H + W2*H2. Every
+% cell shape the language describes is that one expression with sides
+% shared or absent. An axis-aligned W by H cell has no second rectangle,
+% so W2 and H2 are zero and the count is W*H. Two squares of side X and
+% Y are the rectangles X by X and Y by Y, so it is X*X + Y*Y. A lattice
+% chosen from a frequency and an angle repeats along (a, b) and (-b, a),
+% so it is a*a + b*b. Writing them apart is how they come to disagree.
+.xpostsys /.celldet {
+    mul 3 1 roll mul add
+} bind put
+
+% W H W2 H2  .cellside  n
+% the side of the axis-aligned tile that repeats such a cell. The cell
+% lattice always contains (d, 0) and (0, d) for d the determinant, so a
+% tile of that side works, but it is not the smallest: sides that share
+% a factor describe a smaller cell scaled up, and the tile reduces by
+% that factor. Zero is answered for a cell with no places at all, which
+% has no tile -- the caller refuses those rather than dividing by them.
+.xpostsys /.cellside {
+    3 index 1 index //.xpostsys /.gcd get exec
+    2 index 4 index //.xpostsys /.gcd get exec
+    //.xpostsys /.gcd get exec
+    5 1 roll //.xpostsys /.celldet get exec
+    dup 0 eq { exch pop }{ exch idiv } ifelse
+} bind put
+
+% The lattices a screen is chosen from do not depend on the screen. The
+% pair (a, b) ranges over the same small square whatever frequency and
+% angle are asked for; the angle a pair stands for, the size of the cell
+% it makes, and whether it is usable at all -- a tile no wider than
+% sixty-four, a cell no smaller than a pixel and a half -- follow from
+% the pair alone. So the usable ones are worked out once, here, instead
+% of at every setscreen, and worked out by the same two helpers that
+% measure the lattice finally chosen, so the search filters on exactly
+% the quantities it selects by. Each entry is four numbers: a, b, the
+% angle, and the cell size.
+.xpostsys /.latticecands
+{ 8 dict begin
+    /span 25 def
+    /buf span dup mul 4 mul array def
+    /m 0 def
+    0 1 span 1 sub {
+        /a exch def
+        0 1 span 1 sub {
+            /b exch def
+            a 0 eq b 0 eq and not {
+                /sz a a b b //.xpostsys /.celldet get exec sqrt def
+                /per a a b b //.xpostsys /.cellside get exec def
+                per 64 le sz 1.5 ge and {
+                    buf m       a put
+                    buf m 1 add b put
+                    buf m 2 add b a atan dup 90 ge { 90 sub } if put
+                    buf m 3 add sz put
+                    /m m 4 add def
+                } if
+            } if
+        } for
+    } for
+    buf 0 m getinterval
+    end
+} exec put
+
 % freq ang  .screenlattice  a b L q quad
 % the rotated integer lattice the screen tiles the device plane with:
 % the angle becomes the nearest rational tangent b/a whose cell
@@ -687,34 +751,26 @@ setglobal
 % rendered threshold cell both build from this, so they sample the
 % same points.
 .xpostsys /.screenlattice {
-    12 dict begin
+    16 dict begin
     /ang exch def /freq exch def
     /n DEVICE /defaultmatrix get 0 get abs 72 mul freq div
        round cvi dup 2 lt { pop 2 } if dup 48 gt { pop 48 } if def
     /th ang 90 div dup floor sub 90 mul def
     /quad ang 90 div floor cvi 4 mod dup 0 lt { 4 add } if def
+    /cands //.xpostsys /.latticecands get def
     /besta n def /bestb 0 def /bestscore 1e9 def
-    0 1 24 { /aa exch def
-        0 1 24 { /bb exch def
-            aa 0 eq bb 0 eq and not {
-                /cand bb aa atan dup 90 ge { 90 sub } if def
-                /sz aa dup mul bb dup mul add sqrt def
-                /per aa dup mul bb dup mul add
-                     aa abs bb abs //.xpostsys /.gcd get exec idiv def
-                per 64 le sz 1.5 ge and {
-                    /score cand th sub abs
-                           sz n sub abs n div 30 mul add def
-                    score bestscore lt {
-                        /bestscore score def
-                        /besta aa def /bestb bb def
-                    } if
-                } if
-            } if
-        } for
+    0 4 cands length 1 sub {
+        /k exch def
+        /score cands k 2 add get th sub abs
+               cands k 3 add get n sub abs n div 30 mul add def
+        score bestscore lt {
+            /bestscore score def
+            /besta cands k get def /bestb cands k 1 add get def
+        } if
     } for
     /a besta def /b bestb def
-    /q a dup mul b dup mul add def
-    /L q a abs b abs //.xpostsys /.gcd get exec idiv def
+    /q a a b b //.xpostsys /.celldet get exec def
+    /L a a b b //.xpostsys /.cellside get exec def
     a b L q quad
     end
 } put
@@ -982,18 +1038,11 @@ setglobal
         /W src /Width get def   /H src /Height get def
         /W2 src /Width2 get def /H2 src /Height2 get def
     } ifelse
-    /N W H mul W2 H2 mul add def
+    /N W H W2 H2 //.xpostsys /.celldet get exec def
     /th src /Thresholds get def
-    % The tile that repeats the cell is not N on a side but N divided by
-    % what the four sides share, which is the reduction .screenlattice
-    % already makes when it takes q over the common divisor of the
-    % lattice it picked. Sides sharing a factor describe a smaller cell
-    % scaled up, and the smaller tile holds it exactly: N over g on a
-    % side, carrying g fewer copies of nothing.
-    /g W H2 //.xpostsys /.gcd get exec
-       W2 H //.xpostsys /.gcd get exec
-       //.xpostsys /.gcd get exec def
-    /L N g idiv def
+    % The tile that repeats the cell is not N on a side but N reduced by
+    % what the sides share, which .cellside answers for any cell shape.
+    /L W H W2 H2 //.xpostsys /.cellside get exec def
 
     % where the cell repeats inside that tile
     /seen L L mul string def
@@ -1089,13 +1138,19 @@ setglobal
             /wide ht /HalftoneType 2 copy known { get }{ pop pop 0 } ifelse
                   16 eq def
             /httype ht /HalftoneType 2 copy known { get }{ pop pop 0 } ifelse def
-            /nsamp httype 10 eq {
-                       ht /Xsquare get dup mul ht /Ysquare get dup mul add
-                   }{
-                       httype 16 eq ht /Width2 known and {
-                           htw hth mul ht /Width2 get ht /Height2 get mul add
-                       }{ htw hth mul } ifelse
-                   } ifelse def
+            % the four sides the type names, in whatever shape it names
+            % them: two squares are two square rectangles, and a type
+            % that describes no second rectangle has none
+            /hw2 0 def /hh2 0 def
+            httype 10 eq {
+                /htw ht /Xsquare get def /hth htw def
+                /hw2 ht /Ysquare get def /hh2 hw2 def
+            }{
+                httype 16 eq ht /Width2 known and {
+                    /hw2 ht /Width2 get def /hh2 ht /Height2 get def
+                } if
+            } ifelse
+            /nsamp htw hth hw2 hh2 //.xpostsys /.celldet get exec def
             /nbytes nsamp wide { 2 mul } if def
             nsamp 0 gt nbytes 65535 le and {
                 nbytes string
@@ -1140,6 +1195,22 @@ setglobal
     { 1 index exch known not
         { /sethalftone cvx /undefined signalerror } if } forall
     pop
+} bind put
+
+% W H W2 H2  .htcelllimit  -
+% An angled cell is screened by expanding it onto the axis-aligned tile
+% that repeats it, so what has to fit is the tile and not the cell. A
+% cell with no places has no tile, and is refused for its sides rather
+% than divided by. One whose tile will not fit a string is refused here
+% rather than truncated into a screen that is not the one asked for.
+% Both shapes that describe an angled cell come through here, so neither
+% can acquire a limit the other does not have.
+.xpostsys /.htcelllimit {
+    //.xpostsys /.cellside get exec
+    dup 0 eq
+        { /sethalftone cvx /rangecheck signalerror } if
+    dup mul 65535 gt
+        { /sethalftone cvx /limitcheck signalerror } if
 } bind put
 
 % ht  .htvalidate  -
@@ -1229,13 +1300,12 @@ setglobal
         % truncated into a screen that is not the one asked for
         ht /Thresholds get type /stringtype eq {
             ht /Thresholds get length
-            ht /Xsquare get dup mul ht /Ysquare get dup mul add lt
+            ht /Xsquare get dup ht /Ysquare get dup
+            //.xpostsys /.celldet get exec lt
                 { /sethalftone cvx /rangecheck signalerror } if
         } if
-        ht /Xsquare get dup mul ht /Ysquare get dup mul add
-        ht /Xsquare get ht /Ysquare get //.xpostsys /.gcd get exec idiv
-        dup mul 65535 gt
-            { /sethalftone cvx /limitcheck signalerror } if
+        ht /Xsquare get dup ht /Ysquare get dup
+        //.xpostsys /.htcelllimit get exec
     }{ dup 16 eq {
         pop
         % the same file-borne threshold array as a type 6, at two bytes
@@ -1260,10 +1330,8 @@ setglobal
             ht /Width2 get type /integertype eq
             ht /Height2 get type /integertype eq and not
                 { /sethalftone cvx /typecheck signalerror } if
-            ht /Width get ht /Height get mul
-            ht /Width2 get ht /Height2 get mul add
-            dup mul 65535 gt
-                { /sethalftone cvx /limitcheck signalerror } if
+            ht /Width get ht /Height get ht /Width2 get ht /Height2 get
+            //.xpostsys /.htcelllimit get exec
         } if
     }{ 5 eq {
         % a composite dictionary: one halftone per colorant, and the
