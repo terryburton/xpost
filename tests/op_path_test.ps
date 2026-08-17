@@ -58,7 +58,7 @@ initgraphics newpath 10 10 moveto 20 20 lineto
 false upath length 0 gt (upath of a path yields a userpath) assert
 
 % --- setbbox takes four numbers (llx lly urx ury) ---
-{ initgraphics newpath 12 24 36 48 setbbox } stopped not (setbbox accepts four numbers) assert
+{ initgraphics newpath 12 24 36 48 setbbox } (setbbox accepts four numbers) works
 
 % --- rcurveto: the three points are relative to the current point (PLRM 8.2) ---
 % Each pair displaces from the current point, not from the point before it, so

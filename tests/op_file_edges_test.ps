@@ -395,8 +395,8 @@ nm status not (the old name is gone after renamefile) assert
 
 % flushing and resetting it are its own operations, not the target's
 fe.e (41) writestring
-{ fe.e flushfile } stopped not (flushfile on an encode filter is accepted) assert
-{ fe.e resetfile } stopped not (resetfile on an encode filter is accepted) assert
+{ fe.e flushfile } (flushfile on an encode filter is accepted) works
+{ fe.e resetfile } (resetfile on an encode filter is accepted) works
 fe.e status (resetfile leaves an encode filter open) assert
 { fe.e (42) writestring } (an encode filter still writes after resetfile) works
 fe.e closefile fe.f closefile
@@ -461,8 +461,8 @@ fe.wf closefile
 % what is pinned here is that it takes a boolean and nothing else, and
 % that it consumes it.
 count /fe.d0 exch def
-{ false echo } stopped not (echo accepts false) assert
-{ true echo } stopped not (echo accepts true) assert
+{ false echo } (echo accepts false) works
+{ true echo } (echo accepts true) works
 count fe.d0 eq (echo consumes its operand) assert
 { 1 echo } /typecheck (echo refuses a number) raises
 { (t) echo } /typecheck (echo refuses a string) raises

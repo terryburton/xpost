@@ -29,8 +29,7 @@
     restore
     1 vmreclaim
 } for
-{ nm (r) file dup closefile } stopped not
-    (a file still opens after two hundred rounds closed by restore) assert
+{ nm (r) file dup closefile } (a file still opens after two hundred rounds closed by restore) works
 
 % --- closed by the program, filter first then its source ---
 0 1 200 {
@@ -41,8 +40,7 @@
     f closefile
     1 vmreclaim
 } for
-{ nm (r) file dup closefile } stopped not
-    (a file still opens after two hundred closed by the program) assert
+{ nm (r) file dup closefile } (a file still opens after two hundred closed by the program) works
 
 % --- closed by the program, source first then the filter over it ---
 % The filter holds the stream beneath it, so closing them this way round
@@ -56,8 +54,7 @@
     h closefile
     1 vmreclaim
 } for
-{ nm (r) file dup closefile } stopped not
-    (a file still opens after two hundred closed source-first) assert
+{ nm (r) file dup closefile } (a file still opens after two hundred closed source-first) works
 
 % --- reusable streams, which hold their source's bytes ---
 0 1 200 {
@@ -69,8 +66,7 @@
     r closefile
     1 vmreclaim
 } for
-{ nm (r) file dup closefile } stopped not
-    (a file still opens after two hundred reusable streams) assert
+{ nm (r) file dup closefile } (a file still opens after two hundred reusable streams) works
 
 % and the interpreter is still working
 1 2 add 3 eq (the interpreter still works after the rounds) assert

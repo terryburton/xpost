@@ -29,7 +29,7 @@ z cvn 20 string cvs length 3 eq (a zero byte is a name character) assert
 
 % cvn reads the string's characters, so it needs read access
 /ro (readonlyname) readonly def
-{ ro cvn } stopped not (cvn reads a read-only string) assert
+{ ro cvn } (cvn reads a read-only string) works
 clear
 /na (noaccessname) noaccess def
 { na cvn } stopped (cvn refuses a string it may not read) assert

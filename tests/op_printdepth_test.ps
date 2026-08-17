@@ -18,23 +18,23 @@
 
 /a [ 1 2 3 ] def
 a 0 a put
-{ a == } stopped not (a self-referential array prints and returns) assert
+{ a == } (a self-referential array prints and returns) works
 
 /d 3 dict def
 d /self d put
-{ d == } stopped not (a self-referential dictionary prints and returns) assert
+{ d == } (a self-referential dictionary prints and returns) works
 
 % two arrays that contain each other
 /p [ 1 2 ] def
 /q [ 3 4 ] def
 p 0 q put
 q 0 p put
-{ p == } stopped not (two arrays containing each other print) assert
+{ p == } (two arrays containing each other print) works
 
 % --------------------------------------------------------- finite structures
 
 { [ 1 [ 2 [ 3 [ 4 [ 5 ] ] ] ] ] == } (a finitely nested array prints) works
-{ [ 1 2 3 ] == } stopped not (a flat array prints) assert
+{ [ 1 2 3 ] == } (a flat array prints) works
 { { 1 2 add } == } stopped not (a procedure prints) assert
 { [ (a) /b 1 2.5 true null ] == } (an array of every simple type prints) works
 
@@ -42,6 +42,6 @@ q 0 p put
 % rather than abbreviated: twelve deep
 /deep [ 1 ] def
 12 { [ deep ] /deep exch def } repeat
-{ deep == } stopped not (an array twelve deep prints) assert
+{ deep == } (an array twelve deep prints) works
 
 verdict

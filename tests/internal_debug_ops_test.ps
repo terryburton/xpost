@@ -26,15 +26,15 @@
 } forall
 
 % each runs and leaves the interpreter working
-{ id /dumpvm get exec } stopped not (dumpvm runs) assert
+{ id /dumpvm get exec } (dumpvm runs) works
 1 2 add 3 eq (the interpreter works after dumpvm) assert
 
-{ id /dumpnames get exec } stopped not (dumpnames runs) assert
+{ id /dumpnames get exec } (dumpnames runs) works
 1 2 add 3 eq (the interpreter works after dumpnames) assert
 
 % the load tracing switches on and off again, and the interpreter keeps
 % resolving names either side of it
-{ id /debugloadon get exec } stopped not (the load tracing switches on) assert
+{ id /debugloadon get exec } (the load tracing switches on) works
 /probe.after.on 7 def
 probe.after.on 7 eq (a name resolves while the tracing is on) assert
 % the tracing is the load operator's own, so exercise that operator and
@@ -43,7 +43,7 @@ probe.after.on 7 eq (a name resolves while the tracing is on) assert
     (load answers the operator while the tracing is on) assert
 /probe.after.on load 7 eq
     (load answers a value the program defined, traced) assert
-{ id /debugloadoff get exec } stopped not (the load tracing switches off) assert
+{ id /debugloadoff get exec } (the load tracing switches off) works
 /probe.after.off 8 def
 probe.after.off 8 eq (a name resolves once the tracing is off) assert
 

@@ -38,7 +38,7 @@ false { 1 }{ 2 } ifelse 2 eq (ifelse false) assert
 
 % --- stopped / stop ---
 { stop } stopped (stop is caught by stopped) assert
-{ 42 } stopped not (stopped is false when no stop occurs) assert
+{ 42 } (stopped is false when no stop occurs) works
 { 1 0 idiv } stopped (an error acts as stop under stopped) assert
 
 % for's control value is an integer when initial and increment are integers,

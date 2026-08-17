@@ -93,7 +93,7 @@ f closefile
 { f 4 string readline }      /invalidaccess (a file opened w refuses readline) raises
 { f token }                  /invalidaccess (a file opened w refuses token) raises
 { f bytesavailable }         /invalidaccess (a file opened w refuses bytesavailable) raises
-{ f closefile } stopped not (the refusals leave the stream fit to close) assert
+{ f closefile } (the refusals leave the stream fit to close) works
 
 % while a readable file answers each of them
 /f nm (w) file def f (42 ) writestring f closefile

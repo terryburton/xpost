@@ -60,8 +60,7 @@ back 2 get before 2 get eq (the original item limit is restored) assert
 
 % fewer operands than parameters: the defaults fill in from the mark up,
 % and the ones supplied are the topmost (PLRM 8.2)
-{ mark 20000 setcacheparams } stopped not
-    (setcacheparams accepts fewer operands than parameters) assert
+{ mark 20000 setcacheparams } (setcacheparams accepts fewer operands than parameters) works
 currentcacheparams counttomark array astore 2 get 20000 eq
     (a lone operand sets the topmost parameter) assert
 cleartomark

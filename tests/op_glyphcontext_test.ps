@@ -18,8 +18,7 @@
         2 copy known not { pop /.notdef } if get exec end } bind def
 end def
 /T3C T3C definefont pop
-{ /T3C findfont 10 scalefont setfont newpath 0 0 moveto (a) show } stopped not
-(Type 3 BuildChar renders through show) assert
+{ /T3C findfont 10 scalefont setfont newpath 0 0 moveto (a) show } (Type 3 BuildChar renders through show) works
 
 % a Type 3 BuildGlyph may call setcachedevice; glyphshow and show both render
 /T3G 9 dict dup begin
@@ -32,10 +31,8 @@ end def
         2 copy known not { pop /.notdef } if get exec end } bind def
 end def
 /T3G T3G definefont pop
-{ /T3G findfont 10 scalefont setfont newpath 0 0 moveto /b glyphshow } stopped not
-(Type 3 BuildGlyph renders through glyphshow) assert
-{ /T3G findfont 10 scalefont setfont newpath 0 0 moveto (b) show } stopped not
-(Type 3 BuildGlyph renders through show) assert
+{ /T3G findfont 10 scalefont setfont newpath 0 0 moveto /b glyphshow } (Type 3 BuildGlyph renders through glyphshow) works
+{ /T3G findfont 10 scalefont setfont newpath 0 0 moveto (b) show } (Type 3 BuildGlyph renders through show) works
 
 % A build procedure may bracket itself in save and restore -- generated
 % PostScript commonly does -- and the metrics it declared still reach the
@@ -55,8 +52,7 @@ end def
 /T3R T3R definefont pop
 /cx 0 def
 { /T3R findfont 10 scalefont setfont newpath 0 0 moveto (cc) show
-  currentpoint pop /cx exch def } stopped not
-(a Type 3 build bracketed in save and restore renders through show) assert
+  currentpoint pop /cx exch def } (a Type 3 build bracketed in save and restore renders through show) works
 cx 20 sub abs 0.001 lt (that build's advance carries the current point) assert
 
 verdict

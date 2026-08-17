@@ -168,6 +168,6 @@ currentlinewidth 1.0 eq (a device change resets the eleven as well) assert
 /T3Probe findfont 12 scalefont setfont
 << /PageSize [612 792] >> setpagedevice
 newpath 100 100 moveto
-{ (A) show } stopped not (a font selected before a device change shows) assert
+{ (A) show } (a font selected before a device change shows) works
 
 verdict

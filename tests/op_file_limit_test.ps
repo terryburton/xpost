@@ -41,8 +41,7 @@ clear
 held 0 get 1 string readstring pop (x) eq
     (a file opened before the limit still reads) assert
 0 1 n 1 sub { held exch get closefile } for
-{ (filelimit.scratch) (r) file closefile } stopped not
-    (an open succeeds again once the files are closed) assert
+{ (filelimit.scratch) (r) file closefile } (an open succeeds again once the files are closed) works
 clear
 
 verdict

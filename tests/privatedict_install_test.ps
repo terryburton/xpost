@@ -40,8 +40,7 @@ currentglobal true setglobal /gd 64 dict def setglobal
 
 % --- and the machinery it roots still renders ---
 { newpath 100 100 moveto 200 100 lineto 200 200 lineto closepath
-  0.5 setgray fill } stopped not
-  (a page still paints through the recorded dictionary) assert
+  0.5 setgray fill } (a page still paints through the recorded dictionary) works
 
 % --- a restore does not hand the record back to be set again ---
 % the verdict is carried out of the save on the operand stack: the

@@ -19,8 +19,7 @@
 
 % --- setting one, and reading it back ---
 (XPOST_TEST_VAR) (hello) putenv
-{ (XPOST_TEST_VAR) getenv } stopped not
-    (a variable set by putenv is found by getenv) assert
+{ (XPOST_TEST_VAR) getenv } (a variable set by putenv is found by getenv) works
 (XPOST_TEST_VAR) getenv (hello) eq
     (getenv answers the value putenv set) assert
 (XPOST_TEST_VAR) getenv length 5 eq
@@ -40,8 +39,7 @@
 
 % --- an empty value is a value ---
 (XPOST_TEST_EMPTY) () putenv
-{ (XPOST_TEST_EMPTY) getenv } stopped not
-    (a variable set to an empty value is still set) assert
+{ (XPOST_TEST_EMPTY) getenv } (a variable set to an empty value is still set) works
 (XPOST_TEST_EMPTY) getenv length 0 eq
     (the empty value reads back empty) assert
 
