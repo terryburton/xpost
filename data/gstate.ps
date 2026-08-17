@@ -1189,6 +1189,70 @@ setglobal
     type dup /integertype eq exch /realtype eq or
 } bind put
 
+% the tails of the entry names that state an extent. A screen frequency
+% and the sides of a cell are matched by their ending rather than listed
+% one by one, so that the per-primary copies a type 2 or a type 4 makes
+% of them -- RedFrequency, GrayWidth and the rest -- and the second
+% rectangle's Width2 and Height2 are all covered, and so is a name a
+% later type coins on the same pattern.
+.xpostsys /.htextentnames
+    [ (Frequency) (Width) (Height) (Xsquare) (Ysquare) (Width2) (Height2) ]
+put
+
+% and the entries whose names end in one of those without stating one.
+% Matching by tail reaches a name nobody listed, which is what it is for,
+% and it reaches this: ActualFrequency is not an extent the program
+% states but a value the operator WRITES, set to the frequency actually
+% achieved (PLRM Table 7.4). A program supplies it with anything at all,
+% nought being the obvious choice, so reading it as an extent refuses the
+% dictionary the specification asks for.
+%
+% Whole names, not tails: the point is to name the exceptions exactly.
+% A type 5's colorants cannot need one -- their values are dictionaries
+% and nothing here looks at a value that is not a number.
+.xpostsys /.htextentexempt [ (ActualFrequency) ] put
+
+% ht  .htextent  -
+% Every entry stating an extent must state a positive one. A side of
+% zero or less encloses no area and a frequency of zero or less names no
+% screen, and a cell with no places in it cannot be screened with; PLRM
+% gives these entries a type but no bound, so the bound is the one both
+% of the interpreters this is measured against apply, refusing the
+% dictionary rather than building an empty cell from it.
+%
+% The rule is put to the dictionary rather than to a list of keys per
+% type, and .htvalidate asks it once after the type has had its say, so
+% every type is held to it -- including a type 5's components, which
+% .htvalidate reaches by calling itself. An entry whose value is not a
+% number is left to the type's own check, which names it a typecheck.
+.xpostsys /.htextent {
+    4 dict begin
+    /bad false def
+    {
+        dup //.xpostsys /.htnum get exec
+        { 0 le }{ pop false } ifelse
+        {
+            60 string cvs /nm exch def
+            /skip false def
+            //.xpostsys /.htextentexempt get {
+                nm eq { /skip true def } if
+            } forall
+            skip not {
+            //.xpostsys /.htextentnames get {
+                /sfx exch def
+                nm length sfx length ge {
+                    nm nm length sfx length sub sfx length getinterval
+                    sfx eq { /bad true def } if
+                } if
+            } forall
+            } if
+        }{ pop } ifelse
+    } forall
+    bad
+    end
+    { /sethalftone cvx /rangecheck signalerror } if
+} bind put
+
 % ht [ keys ]  .htrequire  -
 % every key the declared type demands, or the missing one is undefined
 .xpostsys /.htrequire {
@@ -1366,6 +1430,7 @@ setglobal
         % the type without anything in the language layer changing.
         /sethalftone cvx /rangecheck signalerror
     } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse
+    ht //.xpostsys /.htextent get exec
     end
 } put
 

@@ -387,6 +387,78 @@
                  /SpotFunction { pop pop 0 } >> >>
   sethalftone } (a type 5 carrying a name) works
 
+% ------------------------------------------------- a cell with no extent
+% A screen frequency, the side of a rectangle, the side of a square and
+% the second rectangle of an angled cell all state an extent, and an
+% extent of zero or less describes no area. PLRM gives these entries a
+% type but no bound; a dictionary carrying one is refused rather than
+% screened with, and the error is the rangecheck that a value outside
+% the range of legal values takes.
+
+{ << /HalftoneType 1 /Frequency 0 /Angle 45 /SpotFunction { pop pop 0 } >>
+  sethalftone } /rangecheck (a type 1 at no frequency) raises
+{ << /HalftoneType 1 /Frequency -60 /Angle 45 /SpotFunction { pop pop 0 } >>
+  sethalftone } /rangecheck (a type 1 at a negative frequency) raises
+
+{ << /HalftoneType 3 /Width 0 /Height 2 /Thresholds <> >>
+  sethalftone } /rangecheck (a type 3 no cell wide) raises
+{ << /HalftoneType 3 /Width 2 /Height 0 /Thresholds <> >>
+  sethalftone } /rangecheck (a type 3 no cell high) raises
+{ << /HalftoneType 3 /Width -2 /Height 2 /Thresholds <> >>
+  sethalftone } /rangecheck (a type 3 of negative width) raises
+
+{ << /HalftoneType 6 /Width 0 /Height 2
+     /Thresholds () /ASCIIHexDecode filter >>
+  sethalftone } /rangecheck (a type 6 no cell wide) raises
+{ << /HalftoneType 16 /Width 0 /Height 2
+     /Thresholds () /ASCIIHexDecode filter >>
+  sethalftone } /rangecheck (a type 16 no cell wide) raises
+
+{ << /HalftoneType 10 /Xsquare 0 /Ysquare 3 /Thresholds 9 string >>
+  sethalftone } /rangecheck (a type 10 whose square X has no side) raises
+{ << /HalftoneType 10 /Xsquare 3 /Ysquare 0 /Thresholds 9 string >>
+  sethalftone } /rangecheck (a type 10 whose square Y has no side) raises
+{ << /HalftoneType 10 /Xsquare -3 /Ysquare 2 /Thresholds 13 string >>
+  sethalftone } /rangecheck (a type 10 with a negative square) raises
+
+% a second rectangle that is present describes a rectangle; one with no
+% extent is not the way to say there is no second rectangle, which is to
+% leave both entries out
+{ << /HalftoneType 16 /Width 2 /Height 2 /Width2 0 /Height2 0
+     /Thresholds 8 zerofile >>
+  sethalftone } /rangecheck (a type 16 whose second rectangle has no extent) raises
+
+% and the four-screen types are held to it in each of their primaries
+{ << /HalftoneType 2
+     /RedFrequency 60 /RedAngle 0 /RedSpotFunction { pop pop 0 }
+     /GreenFrequency 60 /GreenAngle 0 /GreenSpotFunction { pop pop 0 }
+     /BlueFrequency 60 /BlueAngle 0 /BlueSpotFunction { pop pop 0 }
+     /GrayFrequency 0 /GrayAngle 0 /GraySpotFunction { pop pop 0 } >>
+  sethalftone } /rangecheck (a type 2 whose grey screen has no frequency) raises
+{ << /HalftoneType 4
+     /RedWidth 2 /RedHeight 2 /RedThresholds <0180C8FF>
+     /GreenWidth 2 /GreenHeight 2 /GreenThresholds <0180C8FF>
+     /BlueWidth 2 /BlueHeight 2 /BlueThresholds <0180C8FF>
+     /GrayWidth 0 /GrayHeight 2 /GrayThresholds <> >>
+  sethalftone } /rangecheck (a type 4 whose grey cell has no width) raises
+
+% ActualFrequency is not an extent either, though its name ends in one.
+% It is an entry the operator WRITES: PLRM Table 7.4 has sethalftone set
+% it to the frequency actually achieved, so a program supplies it with
+% whatever value it likes -- nought being the obvious one -- and reads it
+% back afterwards. Refusing it for its incoming value refuses the
+% dictionary the specification asks for.
+{ << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 }
+     /ActualFrequency 0 /ActualAngle 0 >>
+  sethalftone } (a type 1 asking what it actually got) works
+
+% An angle is not an extent. Zero is straight, and a negative angle
+% turns the other way, so neither is refused.
+{ << /HalftoneType 1 /Frequency 60 /Angle 0 /SpotFunction { pop pop 0 } >>
+  sethalftone } (a type 1 at no angle) works
+{ << /HalftoneType 1 /Frequency 60 /Angle -45 /SpotFunction { pop pop 0 } >>
+  sethalftone } (a type 1 at a negative angle) works
+
 % --------------------------------------------------- nothing is left behind
 % A rejected halftone must not have displaced the one already in force.
 
