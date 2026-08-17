@@ -36,12 +36,6 @@
 % is a sparse file and costs nothing on the file systems where the check
 % can fire, and is three gigabytes written on the one where it cannot.
 
-/erris { % { proc } /name (tag)  -> asserts proc raises error /name
-    3 dict begin
-    /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse
-    tag assert clear
-    end } def
 /errors { % { proc } (tag)  -> asserts proc raises some error
     2 dict begin
     /tag exch def
@@ -114,9 +108,9 @@ f 100 setfileposition                    % past the end is the file system's aff
 f 4 string readstring exch pop not (reading past the end yields no data) assert
 f closefile
 { (4142) /ASCIIHexDecode filter fileposition } /ioerror
-    (a decode filter has no file position) erris
+    (a decode filter has no file position) raises
 { (4142) /ASCIIHexDecode filter 0 setfileposition } /ioerror
-    (a decode filter cannot be positioned) erris
+    (a decode filter cannot be positioned) raises
 
 % --- a reusable stream, by contrast, is positionable and rereadable ---
 % ReusableStreamDecode buffers its source rather than decoding it, so the
@@ -186,11 +180,11 @@ currentfile xcheck not (currentfile returns a literal file object) assert
 
 % --- files that do not exist ---
 { (fedge_absent.scratch) (r) file } /undefinedfilename
-    (opening a file that does not exist is undefinedfilename) erris
+    (opening a file that does not exist is undefinedfilename) raises
 { (fedge_absent.scratch) deletefile } /undefinedfilename
-    (deleting a file that does not exist is undefinedfilename) erris
+    (deleting a file that does not exist is undefinedfilename) raises
 { (fedge_absent.scratch) (fedge_other.scratch) renamefile } /undefinedfilename
-    (renaming a file that does not exist is undefinedfilename) erris
+    (renaming a file that does not exist is undefinedfilename) raises
 
 % --- a name holding a NUL is not a name (PLRM 3.8.2) ---
 % A PostScript string is a counted byte sequence and may hold a NUL,
@@ -224,14 +218,14 @@ fe.pre deletefile
 % with nothing under the shortened name, the refusal is what stops one
 % being made there
 { fe.nul (w) file } /undefinedfilename
-    (opening a name holding a NUL for writing is refused) erris
+    (opening a name holding a NUL for writing is refused) raises
 fe.pre fe.exists not
     (the refused open made no file under the shortened name) assert
 
 /fe.src (fedge_ren.scratch) def
 fe.src (w) file closefile
 { fe.src fe.nul renamefile } /undefinedfilename
-    (renamefile refuses a destination holding a NUL) erris
+    (renamefile refuses a destination holding a NUL) raises
 fe.src fe.exists (the refused rename left the file where it was) assert
 fe.pre fe.exists not
     (the refused rename made no file under the shortened name) assert
@@ -245,15 +239,15 @@ fe.pre fe.exists { fe.pre deletefile } if
 % that file being the one answered for, opened, moved or removed
 fe.pre (w) file closefile
 { fe.nul (r) file } /undefinedfilename
-    (opening a name holding a NUL for reading is refused) erris
+    (opening a name holding a NUL for reading is refused) raises
 fe.nul fe.exists not
     (status of a name holding a NUL is false though the shortened name is a file) assert
 { fe.nul (fedge_nulmoved.scratch) renamefile } /undefinedfilename
-    (renamefile refuses a source holding a NUL) erris
+    (renamefile refuses a source holding a NUL) raises
 (fedge_nulmoved.scratch) fe.exists not
     (the refused rename moved nothing to the destination it named) assert
 { fe.nul deletefile } /undefinedfilename
-    (deletefile refuses a name holding a NUL) erris
+    (deletefile refuses a name holding a NUL) raises
 fe.pre fe.exists
     (the refused operations all left the shortened name's file alone) assert
 fe.pre fe.exists { fe.pre deletefile } if
@@ -318,7 +312,7 @@ fe.cut fe.exists { fe.cut deletefile } if
 % a name the file system will hold, with no file by it: the ordinary
 % refusal, which is what shows the one below is about the length
 { 200 fe.name (r) file } /undefinedfilename
-    (a long name the file system holds still names no file) erris
+    (a long name the file system holds still names no file) raises
 % Which refusal a name past that length draws is the file system's to
 % decide. One that reports the length reaches limitcheck, since PLRM 8.2
 % has that be "an implementation limit has been exceeded"; one that
@@ -358,17 +352,17 @@ pop
 (%stdout) (w) file status (the standard output opens for writing) assert
 (%stderr) (w) file status (the standard error opens for writing) assert
 { (%stdin) (w) file } /invalidfileaccess
-    (the standard input cannot be opened for writing) erris
+    (the standard input cannot be opened for writing) raises
 { (%stdout) (r) file } /invalidfileaccess
-    (the standard output cannot be opened for reading) erris
+    (the standard output cannot be opened for reading) raises
 { (%stderr) (r) file } /invalidfileaccess
-    (the standard error cannot be opened for reading) erris
+    (the standard error cannot be opened for reading) raises
 { (%lineedit) (r) file } /undefinedfilename
-    (the line editor reports nothing to edit at end of input) erris
+    (the line editor reports nothing to edit at end of input) raises
 { (%statementedit) (r) file } /undefinedfilename
-    (the statement editor reports nothing to edit at end of input) erris
+    (the statement editor reports nothing to edit at end of input) raises
 { (%nosuchdevice) (r) file } /undefinedfilename
-    (an unknown special file is undefinedfilename) erris
+    (an unknown special file is undefinedfilename) raises
 % closing a standard file leaves the process's own stream alone: the file
 % object is closed, and the stream can be opened again
 (%stdout) (w) file dup closefile status not
@@ -393,11 +387,11 @@ nm status not (the old name is gone after renamefile) assert
 % filter at all.
 /fe.f (fedge_enc.scratch) (w) file def
 /fe.e fe.f /ASCIIHexEncode filter def
-{ fe.e read } /invalidaccess (reading an encode filter is refused) erris
+{ fe.e read } /invalidaccess (reading an encode filter is refused) raises
 { fe.e 4 string readstring } /invalidaccess
-    (readstring on an encode filter is refused) erris
+    (readstring on an encode filter is refused) raises
 { fe.e 4 string readline } /invalidaccess
-    (readline on an encode filter is refused) erris
+    (readline on an encode filter is refused) raises
 
 % flushing and resetting it are its own operations, not the target's
 fe.e (41) writestring
@@ -410,9 +404,9 @@ fe.e closefile fe.f closefile
 
 /fe.d (4142) /ASCIIHexDecode filter def
 { fe.d (x) writestring } /invalidaccess
-    (writing a decode filter is refused) erris
+    (writing a decode filter is refused) raises
 { fe.d (x) writehexstring } /invalidaccess
-    (writehexstring on a decode filter is refused) erris
+    (writehexstring on a decode filter is refused) raises
 fe.d closefile
 
 % --- resetfile and closefile reach each decoding filter's own methods ---
@@ -471,8 +465,8 @@ count /fe.d0 exch def
 { false echo } stopped not (echo accepts false) assert
 { true echo } stopped not (echo accepts true) assert
 count fe.d0 eq (echo consumes its operand) assert
-{ 1 echo } /typecheck (echo refuses a number) erris
-{ (t) echo } /typecheck (echo refuses a string) erris
+{ 1 echo } /typecheck (echo refuses a number) raises
+{ (t) echo } /typecheck (echo refuses a string) raises
 false echo
 
 % --- filter takes a parameter dictionary alongside the string source ---

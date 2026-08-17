@@ -9,12 +9,6 @@
 % report "no bytes wanted" otherwise. The access attribute is checked
 % first: an unreadable file is invalidaccess whatever the string.
 
-/erris { % { proc } /name (tag)  -> asserts proc raises error /name
-    3 dict begin
-    /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse
-    tag assert clear
-    end } def
 
 /nm (rdstr.scratch) def
 /f nm (w) file def
@@ -40,17 +34,17 @@ f closefile
 % --- a zero-length string is a rangecheck, open or closed ---
 /f nm (r) file def
 { f 0 string readstring } /rangecheck
-    (readstring into a zero-length string is a rangecheck) erris
+    (readstring into a zero-length string is a rangecheck) raises
 f closefile
 { f 0 string readstring } /rangecheck
-    (a closed file does not excuse a zero-length string) erris
+    (a closed file does not excuse a zero-length string) raises
 { (4142) /ASCIIHexDecode filter 0 string readstring } /rangecheck
-    (a filter does not excuse a zero-length string either) erris
+    (a filter does not excuse a zero-length string either) raises
 
 % --- but an unreadable file is refused before the string is considered ---
 /f nm (w) file def
 { f 0 string readstring } /invalidaccess
-    (readstring on a write-only file is invalidaccess) erris
+    (readstring on a write-only file is invalidaccess) raises
 f closefile
 
 nm deletefile

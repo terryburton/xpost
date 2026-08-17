@@ -7,12 +7,6 @@
 % procedure runs zero times and no error is raised. ioerror is reserved for
 % a genuine failure of the underlying file system.
 
-/erris { % { proc } /name (tag)  -> asserts proc raises error /name
-    3 dict begin
-    /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse
-    tag assert clear
-    end } def
 
 % --- two files to find, and a name nothing will match ---
 /mk { (w) file dup (xy) writestring closefile } def
@@ -73,7 +67,7 @@ inner 4 eq (and the inner one runs whole on each pass of the outer) assert
 
 % --- a scratch string too short for a matching name is a rangecheck ---
 { (fnfa?.scratch) { pop } 2 string filenameforall } /rangecheck
-    (a scratch string shorter than a matching name is a rangecheck) erris
+    (a scratch string shorter than a matching name is a rangecheck) raises
 
 (fnfa1.scratch) deletefile
 (fnfa2.scratch) deletefile

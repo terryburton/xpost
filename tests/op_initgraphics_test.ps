@@ -16,29 +16,24 @@
 % mid-page has not just started a path, and starting one hides the
 % fault.
 
-/erris { % {proc} /want (tag)
-    /e.tag exch def /e.want exch def
-    stopped { $error /errorname get e.want eq }{ false } ifelse
-    e.tag assert clear
-} def
 
 % --------------------------------------------------------- the path goes
 
 100 100 moveto 130 130 lineto
 initgraphics
-{ currentpoint } /nocurrentpoint (no current point remains) erris
+{ currentpoint } /nocurrentpoint (no current point remains) raises
 
 100 100 moveto 130 130 lineto
 initgraphics
-{ pathbbox } /nocurrentpoint (no path remains to measure) erris
+{ pathbbox } /nocurrentpoint (no path remains to measure) raises
 
 100 100 moveto 130 130 lineto
 initgraphics
-{ 10 10 lineto } /nocurrentpoint (nothing remains to line to) erris
+{ 10 10 lineto } /nocurrentpoint (nothing remains to line to) raises
 
 100 100 moveto 130 130 lineto
 initgraphics
-{ 10 10 rmoveto } /nocurrentpoint (nothing remains to move from) erris
+{ 10 10 rmoveto } /nocurrentpoint (nothing remains to move from) raises
 
 % and a fresh path can be started afterwards, so the path was emptied
 % rather than made unusable

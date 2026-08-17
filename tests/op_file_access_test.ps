@@ -14,12 +14,6 @@
 % the attribute forbids is an invalidaccess (PLRM 3.8.1). An access string
 % that is not one of these is an invalidfileaccess.
 
-/erris { % { proc } /name (tag)  -> asserts proc raises error /name
-    3 dict begin
-    /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse
-    tag assert clear
-    end } def
 /slurp { % (name) . (contents)
     2 dict begin
     /nm exch def
@@ -80,10 +74,10 @@ f closefile
 
 % --- the access attribute follows the access string ---
 /f nm (r) file def
-{ f 65 write } /invalidaccess (a file opened r refuses a write) erris
+{ f 65 write } /invalidaccess (a file opened r refuses a write) raises
 f closefile
 /f nm (w) file def
-{ f read } /invalidaccess (a file opened w refuses a read) erris
+{ f read } /invalidaccess (a file opened w refuses a read) raises
 f closefile
 
 % --- and it governs every operator that takes the file's characters ---
@@ -94,11 +88,11 @@ f closefile
 % first would leave the file in error, and the closefile that followed
 % would raise ioerror on a file nothing had read.
 /f nm (w) file def
-{ f 4 string readstring }    /invalidaccess (a file opened w refuses readstring) erris
-{ f 4 string readhexstring } /invalidaccess (a file opened w refuses readhexstring) erris
-{ f 4 string readline }      /invalidaccess (a file opened w refuses readline) erris
-{ f token }                  /invalidaccess (a file opened w refuses token) erris
-{ f bytesavailable }         /invalidaccess (a file opened w refuses bytesavailable) erris
+{ f 4 string readstring }    /invalidaccess (a file opened w refuses readstring) raises
+{ f 4 string readhexstring } /invalidaccess (a file opened w refuses readhexstring) raises
+{ f 4 string readline }      /invalidaccess (a file opened w refuses readline) raises
+{ f token }                  /invalidaccess (a file opened w refuses token) raises
+{ f bytesavailable }         /invalidaccess (a file opened w refuses bytesavailable) raises
 { f closefile } stopped not (the refusals leave the stream fit to close) assert
 
 % while a readable file answers each of them
@@ -113,10 +107,10 @@ f closefile
 % is an invalidaccess. Execution reads the file, one token at a time, so a
 % file the attribute will not let be read will not be executed either.
 /f nm (w) file def
-{ f cvx exec } /invalidaccess (a file opened w refuses to be executed) erris
+{ f cvx exec } /invalidaccess (a file opened w refuses to be executed) raises
 f closefile
 /f nm (a) file def
-{ f cvx exec } /invalidaccess (a file opened a refuses to be executed) erris
+{ f cvx exec } /invalidaccess (a file opened a refuses to be executed) raises
 f closefile
 % a filter carries the attribute of the direction it codes in. The file
 % under it is the program's, not the filter's, so closing the filter
@@ -124,7 +118,7 @@ f closefile
 % while a file on it is open refuses to delete it otherwise.
 /uf nm (w) file def
 /f uf /ASCIIHexEncode filter def
-{ f cvx exec } /invalidaccess (an encoding filter refuses to be executed) erris
+{ f cvx exec } /invalidaccess (an encoding filter refuses to be executed) raises
 f closefile
 uf closefile
 % while every readable one runs as before, to the end of the file
@@ -146,13 +140,13 @@ f.ran 3 eq (a file opened w+ executes) assert
 x status { x closefile } if
 
 % --- an access string outside the table is invalidfileaccess ---
-{ nm (q) file } /invalidfileaccess (an unknown access string is refused) erris
-{ nm (rw) file } /invalidfileaccess (an access string must start r, w or a) erris
-{ nm () file } /invalidfileaccess (an empty access string is refused) erris
+{ nm (q) file } /invalidfileaccess (an unknown access string is refused) raises
+{ nm (rw) file } /invalidfileaccess (an access string must start r, w or a) raises
+{ nm () file } /invalidfileaccess (an empty access string is refused) raises
 
 % --- and r on a file that does not exist is undefinedfilename ---
 { (faccess_absent.scratch) (r) file } /undefinedfilename
-    (r on a file that does not exist is undefinedfilename) erris
+    (r on a file that does not exist is undefinedfilename) raises
 
 (at the end) del
 

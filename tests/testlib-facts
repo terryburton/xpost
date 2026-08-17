@@ -134,22 +134,22 @@ own    nographics_test.ps                     3
 own    numstring_decode_test.ps               1
 own    op_closed_read_test.ps                 1
 own    op_compare_test.ps                     1
-own    op_context_test.ps                     4
+own    op_context_test.ps                     3
 own    op_control_test.ps                     7
 own    op_cvi_test.ps                         4
 own    op_cvn_test.ps                         2
-own    op_dictstack_test.ps                   2
+own    op_dictstack_test.ps                   1
 own    op_dispatch_typecheck_test.ps          1
-own    op_env_test.ps                         3
+own    op_env_test.ps                         2
 own    op_error_restore_test.ps               14
-own    op_file_access_test.ps                 3
-own    op_file_edges_test.ps                  9
+own    op_file_access_test.ps                 2
+own    op_file_edges_test.ps                  8
 own    op_file_limit_test.ps                  2
-own    op_filenameforall_test.ps              4
-own    op_fontcache_test.ps                   2
+own    op_filenameforall_test.ps              3
+own    op_fontcache_test.ps                   1
 own    op_glyphcontext_test.ps                5
 own    op_index_type_test.ps                  1
-own    op_initgraphics_test.ps                2
+own    op_initgraphics_test.ps                1
 own    op_math_test.ps                        4
 own    op_matrix_gstate_test.ps               3
 own    op_operand_shapes_test.ps              2
@@ -157,8 +157,6 @@ own    op_packing_test.ps                     1
 own    op_path_test.ps                        2
 own    op_printdepth_test.ps                  8
 own    op_radix_test.ps                       6
-own    op_readline_test.ps                    1
-own    op_readstring_test.ps                  1
 own    op_rect_test.ps                        6
 own    op_resource_test.ps                    9
 own    op_showstate_test.ps                   5
@@ -197,5 +195,5 @@ own    wrapped_save_test.ps                   1
 
 cannot startup_surface_test.ps                6  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
 
-owns 130
+owns 128
 cannots 1

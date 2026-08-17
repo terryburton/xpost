@@ -10,11 +10,6 @@
 
 % This helper must not begin a dictionary of its own: some of the
 % procedures below move the dictionary stack, which is the point of them.
-/erris { % {proc} /name (tag)  -  asserts proc raises error /name
-    /er.tag exch def /er.want exch def
-    stopped { $error /errorname get er.want eq }{ false } ifelse
-    er.tag assert clear
-} def
 
 /base countdictstack def
 base 3 eq (the stack starts with its three permanent entries) assert
@@ -70,15 +65,15 @@ end
 
 % an array too short for the stack is a rangecheck
 { 1 array dictstack } /rangecheck
-    (dictstack into too short an array is a rangecheck) erris
-{ (str) dictstack } /typecheck (dictstack refuses a non-array) erris
+    (dictstack into too short an array is a rangecheck) raises
+{ (str) dictstack } /typecheck (dictstack refuses a non-array) raises
 
 % --- end with only the permanent entries left ---
 % PLRM 8.2 gives end a dictstackunderflow when the stack holds nothing
 % but its permanent entries.
 cleardictstack
 { end } /dictstackunderflow
-    (end with only the permanent entries is dictstackunderflow) erris
+    (end with only the permanent entries is dictstackunderflow) raises
 
 % --- the stack has a ceiling, and begin reports reaching it ---
 % Recovering from it is the error handler's business; what is asserted
@@ -97,8 +92,8 @@ countdictstack base eq (the stack returns to its permanent entries) assert
 afterceiling 5 eq (a definition still works after the ceiling) assert
 
 % --- begin takes a dictionary and nothing else ---
-{ 42 begin } /typecheck (begin refuses a number) erris
-{ (str) begin } /typecheck (begin refuses a string) erris
+{ 42 begin } /typecheck (begin refuses a number) raises
+{ (str) begin } /typecheck (begin refuses a string) raises
 cleardictstack
 
 verdict
