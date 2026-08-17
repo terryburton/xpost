@@ -17,8 +17,29 @@
 #                 how wide an object is, which is what makes it hold on
 #                 every build.
 #
-#   costs <why>   Runs cleanly twice and the second run costs something.
-#                 Reported if it becomes free, so it can be promoted.
+#   fits          Costs something on a second run and nothing by the sixth.
+#                 Not a leak, and not the collector's doing: what the
+#                 previous run released has been given back -- five
+#                 collections between runs instead of one, over both banks
+#                 instead of one, give the same figure to the byte -- but the
+#                 allocator serves a request out of a released block only
+#                 where the request fits it, and refuses a block more than
+#                 half again as large rather than waste the remainder. A run
+#                 asking for a spread of sizes therefore needs fresh space
+#                 for each size it holds no suitable released block for.
+#                 Measured directly: a body whose requests are all one size,
+#                 or descend in size, costs NOTHING from its second run,
+#                 while the same body with ascending sizes costs 69,480 then
+#                 33,096 then 19,056. Thirty-three of the forty-eight that
+#                 cost anything on a second run are this and nothing more.
+#                 The assertion is that they still reach nothing.
+#
+#   costs <why>   Still costs something after five runs. That may be a
+#                 retention, or the same fit effect needing more than five
+#                 passes to cover the sizes asked for; which it is has not
+#                 been established per workload. Fifteen of these, and they
+#                 are the worklist. Reported if it becomes free, so it can
+#                 be promoted.
 #
 #   once <why>    Does not survive being run twice in one interpreter: it
 #                 makes something inaccessible, leaves a device installed,
@@ -66,10 +87,10 @@ counttomark_test.ps                        once   unexplained
 dct_truncated_test.ps                      once   unexplained
 dev_gray_row_test.ps                       once   unexplained
 device_completion_test.ps                  once   unexplained
-device_contract_test.ps                    costs  unexplained
+device_contract_test.ps                    fits
 device_destroy_test.ps                     once   unexplained
 device_dictstack_test.ps                   once   unexplained
-device_features_test.ps                    costs  unexplained
+device_features_test.ps                    fits
 device_getpix_destroyed_test.ps            once   unexplained
 device_ground_test.ps                      zero
 device_private_test.ps                     once   unexplained
@@ -85,25 +106,25 @@ file_refusal_test.ps                       once   unexplained
 filenameforall_large_test.ps               once   unexplained
 fill_span_test.ps                          once   unexplained
 fillpoly_arity_test.ps                     once   unexplained
-filter_abandon_test.ps                     costs  unexplained
-filter_close_eod_test.ps                   once   unexplained
+filter_abandon_test.ps                     fits
+filter_close_eod_test.ps                   fits
 filter_conformance_test.ps                 zero
 filter_encode_pad_test.ps                  zero
-filter_eod_test.ps                         costs  unexplained
+filter_eod_test.ps                         fits
 filter_family_test.ps                      zero
-filter_leak_test.ps                        costs  unexplained
+filter_leak_test.ps                        fits
 filter_matrix_test.ps                      zero
 filter_predictor_test.ps                   zero
 filter_proc_test.ps                        once   unexplained
 filter_source_life_test.ps                 zero
-font_bigbuf_test.ps                        costs  unexplained
-font_cache_bound_test.ps                   costs  unexplained
+font_bigbuf_test.ps                        fits
+font_cache_bound_test.ps                   fits
 font_directory_test.ps                     zero
-font_face_release_test.ps                  costs  unexplained
-font_glyph_colour_test.ps                  costs  unexplained
-font_glyph_identity_test.ps                costs  unexplained
-font_glyphkey_test.ps                      costs  unexplained
-font_leak_test.ps                          costs  unexplained
+font_face_release_test.ps                  fits
+font_glyph_colour_test.ps                  fits
+font_glyph_identity_test.ps                fits
+font_glyphkey_test.ps                      fits
+font_leak_test.ps                          fits
 font_name_steer_probe.ps                   zero
 font_name_steer_test.ps                    once   unexplained
 font_private_test.ps                       once   unexplained
@@ -114,20 +135,20 @@ forall_large_test.ps                       once   unexplained
 form_band_test.ps                          once   unexplained
 form_nest_test.ps                          once   unexplained
 form_serial_restore_test.ps                once   unexplained
-free_scan_test.ps                          costs  unexplained
+free_scan_test.ps                          fits
 function_matrix_test.ps                    costs  unexplained
-fused_equivalence_test.ps                  costs  unexplained
+fused_equivalence_test.ps                  fits
 gc_clip_region_test.ps                     once   unexplained
 gc_deep_chain_test.ps                      once   unexplained
 gc_diagnostics_test.ps                     zero
 gc_large_dict_pressure_test.ps             once   unexplained
 gc_large_dict_test.ps                      once   unexplained
-global_vm_invariant_test.ps                costs  unexplained
-golden_page.ps                             costs  unexplained
+global_vm_invariant_test.ps                fits
+golden_page.ps                             fits
 golden_pages.ps                            costs  unexplained
 graphics_regression_test.ps                once   unexplained
-gstate_matrix_test.ps                      costs  unexplained
-gstate_object_test.ps                      costs  unexplained
+gstate_matrix_test.ps                      fits
+gstate_object_test.ps                      fits
 halftone_cell_test.ps                      once   unexplained
 halftone_matrix_test.ps                    once   unexplained
 image_matrix_test.ps                       zero
@@ -137,7 +158,7 @@ interrupt_test.ps                          once   unexplained
 isolation_test.ps                          once   unexplained
 large_object_test.ps                       zero
 local_vm_invariant_test.ps                 costs  unexplained
-loop_exit_test.ps                          costs  unexplained
+loop_exit_test.ps                          fits
 mask_cache_range_test.ps                   once   unexplained
 namespace_test.ps                          zero
 nographics_test.ps                         once   unexplained
@@ -151,10 +172,10 @@ op_control_test.ps                         once   unexplained
 op_cvi_test.ps                             zero
 op_cvn_test.ps                             once   unexplained
 op_cvs_test.ps                             costs  unexplained
-op_dict_capacity_test.ps                   costs  unexplained
+op_dict_capacity_test.ps                   fits
 op_dictstack_test.ps                       once   unexplained
 op_dispatch_typecheck_test.ps              zero
-op_env_test.ps                             costs  unexplained
+op_env_test.ps                             fits
 op_error_restore_test.ps                   once   unexplained
 op_file_access_test.ps                     zero
 op_file_edges_test.ps                      once   unexplained
@@ -163,9 +184,9 @@ op_filenameforall_test.ps                  zero
 op_fontcache_test.ps                       once   unexplained
 op_glyphcontext_test.ps                    costs  unexplained
 op_gstate_types_test.ps                    zero
-op_hexstring_test.ps                       costs  unexplained
+op_hexstring_test.ps                       fits
 op_index_type_test.ps                      zero
-op_initgraphics_test.ps                    costs  unexplained
+op_initgraphics_test.ps                    fits
 op_intoverflow_test.ps                     zero
 op_literal_test.ps                         zero
 op_loop_depth_test.ps                      zero
@@ -175,13 +196,13 @@ op_operand_shapes_test.ps                  once   unexplained
 op_operand_types_test.ps                   costs  unexplained
 op_packing_test.ps                         once   unexplained
 op_path_test.ps                            zero
-op_printdepth_test.ps                      costs  unexplained
+op_printdepth_test.ps                      fits
 op_proc_filter_test.ps                     zero
 op_radix_test.ps                           zero
 op_readline_test.ps                        zero
 op_readstring_test.ps                      zero
 op_rect_test.ps                            zero
-op_reference_test.ps                       costs  unexplained
+op_reference_test.ps                       fits
 op_resource_test.ps                        zero
 op_showstate_test.ps                       once   unexplained
 op_status_test.ps                          zero
@@ -200,9 +221,9 @@ page_extent_test.ps                        once   unexplained
 page_handlers_test.ps                      once   unexplained
 page_lifetime_test.ps                      costs  unexplained
 path_bounds_test.ps                        once   unexplained
-path_recycle_test.ps                       costs  unexplained
+path_recycle_test.ps                       fits
 path_walk_cost_test.ps                     zero
-pattern_phase_test.ps                      costs  unexplained
+pattern_phase_test.ps                      fits
 pattern_space_test.ps                      costs  unexplained
 pdf_append_fail_test.ps                    once   unexplained
 pdf_bigfill_test.ps                        zero
@@ -211,19 +232,19 @@ pdf_pipe_test.ps                           zero
 privatedict_install_test.ps                once   unexplained
 quit_run_test.ps                           once   unexplained
 raster_class_test.ps                       once   unexplained
-raster_row_test.ps                         costs  unexplained
+raster_row_test.ps                         fits
 record_excess_test.ps                      once   unexplained
 record_glyph_test.ps                       zero
 record_image_test.ps                       costs  unexplained
 record_replay_test.ps                      zero
-record_screen_test.ps                      costs  unexplained
+record_screen_test.ps                      fits
 record_short_test.ps                       once   unexplained
 record_span_test.ps                        once   unexplained
 record_spill_test.ps                       zero
 refusal_report_test.ps                     once   unexplained
-region_replay_test.ps                      costs  unexplained
+region_replay_test.ps                      fits
 reloc_fused_test.ps                        costs  unexplained
-reloc_stress_test.ps                       costs  unexplained
+reloc_stress_test.ps                       fits
 render_classes_test.ps                     once   unexplained
 resource_matrix_test.ps                    once   unexplained
 roll_test.ps                               once   unexplained
@@ -250,7 +271,7 @@ thin_stroke_test.ps                        zero
 token_sign_test.ps                         zero
 trapping_test.ps                           once   unexplained
 type42_charstrings_test.ps                 once   unexplained
-vecout_gc_test.ps                          costs  unexplained
+vecout_gc_test.ps                          fits
 vm_test.ps                                 once   unexplained
 vm_threshold_test.ps                       once   unexplained
 window_device_test.ps                      once   unexplained

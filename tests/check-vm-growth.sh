@@ -16,25 +16,40 @@
 # paid by the first run and not the second. Anything the second run pays for
 # again is paid for every job after it too.
 #
-# WHY THIS IS NOT ONE THRESHOLD OVER EVERY TEST. Measured over the whole
-# directory: of 223 workloads, 61 cost exactly nothing on a second run, 46
-# cost thousands of bytes for reasons that are mostly legitimate, and 114
-# cannot be run twice in one interpreter at all -- a test that makes a
-# structure inaccessible, or leaves a device installed, or depends on being
-# the first thing to run, does not survive being run again, and a test that
-# fails to run allocates nothing and would read as the cleanest of all. A
-# single bound over that population would have to be wide enough to hide
-# everything it was meant to catch.
+# WHY THIS IS NOT ONE THRESHOLD OVER EVERY TEST, AND WHY IT IS NOT ONE RUN.
+# Two things were measured over the whole directory before any of it was
+# written.
 #
-# So the assertion is made where it costs nothing to make it exactly: a test
-# measured at zero must stay at zero. That needs no tolerance and no
-# assumption about the width of an object, which is what makes it hold on
-# every build. The rest are registered by name in tests/vm_growth.golden
-# with what is known about them, and the register is held in both
-# directions: a test that has become free is reported too, because the
-# population of tests making this assertion should only grow, and a line
-# excusing something that no longer needs excusing is cover for the next
-# thing to land in that state.
+# First, roughly half the workloads cannot be run twice in one interpreter at
+# all: one that makes a structure inaccessible, or leaves a device installed,
+# or depends on being the first thing to run, does not come through a second
+# time -- and one that fails to run allocates nothing, so it would read as
+# the cleanest of all. A single bound over a population half of which is not
+# measurable would have to be wide enough to hide everything it was for.
+#
+# Second, and less obvious: a cost on a SECOND run is mostly not a leak, and
+# the reason is the allocator rather than the collector. Reclamation is not
+# the limit -- asking for five collections between runs instead of one, and
+# asking for both banks instead of one, gives the same figure to the byte.
+# What limits reuse is fit: a released block can serve a later request only
+# if the request fits it, and a block more than half again as large as the
+# request is refused rather than have its remainder wasted. A run asking for
+# a spread of sizes therefore needs fresh space for each size it holds no
+# suitable released block for, and acquires one only as earlier runs release
+# it. One workload here costs 1,536,488 bytes on its second run, 428,756 on
+# its third, 49,236 on its fourth and exactly nothing from its fifth
+# onwards. A gate reading the second run alone would have called that a leak
+# of a megabyte and a half.
+#
+# So each workload is asked twice, and any that costs something is asked
+# again after four more runs. What comes to nothing is held to coming to
+# nothing; what still costs something after those runs is the worklist. Neither
+# assertion needs a tolerance or an assumption about how wide an object is,
+# which is what makes them hold on every build. Every class is recorded by
+# name in tests/vm_growth.golden and held in both directions: a workload that
+# has become free is reported too, because the population making the
+# assertion should only grow, and a line excusing something that no longer
+# needs excusing is cover for the next thing to land in that state.
 #
 # The classes:
 #
@@ -43,22 +58,42 @@
 #                 fails if the workload ever costs anything, or stops
 #                 running twice at all.
 #
-#   costs <why>   Runs cleanly twice and the second run costs something.
+#   fits          Costs something on a second run and nothing by the sixth.
+#                 The collector is not at fault and this is not a leak: what
+#                 the previous run released has been given back, but the
+#                 allocator can only serve a request out of a released block
+#                 the request fits, and it refuses one more than half again
+#                 as large as the request rather than waste the remainder. So
+#                 a run asking for a spread of sizes needs fresh space for
+#                 every size it has no suitable corpse for, and acquires one
+#                 only as earlier runs release it. Measured directly: a body
+#                 whose requests are all one size, or descend in size, costs
+#                 NOTHING from its second run; the same body with ascending
+#                 sizes costs 69,480 bytes on its second run, 33,096 on its
+#                 third and 19,056 on its fourth. The assertion for this
+#                 class is that it still reaches nothing.
+#
+#   costs <why>   Still costs something after five runs. That may be a
+#                 retention, or it may be the same fit effect needing more
+#                 passes than five to cover the sizes asked for; which it is
+#                 has not been established per workload, and that is what
+#                 makes this the worklist.
 #
 #   once <why>    Does not survive being run twice in one interpreter.
 #
-# What is enforced for the two non-zero classes is that they are still not
-# free, so that either can be promoted the moment it becomes so and the
-# population making the assertion only grows. The distinction BETWEEN them is
-# recorded as it was observed and not held to: a workload that errors on its
-# second run one day and merely costs something the next would make a gate
-# out of its own flakiness, and nothing here needs that difference.
+# Two classes carry an assertion: zero must stay free, and fits must still
+# reach nothing. For costs and once what is enforced is only that they are still
+# not free, so either can be promoted the moment it becomes so. The
+# distinction between those two is recorded as observed and not held to: a
+# workload that errors on its second run one day and merely costs something
+# the next would make a gate out of its own flakiness, and nothing here needs
+# that difference.
 #
-# Those two classes also are the blindness control, and it is not a separate
-# contrivance: if the measurement ever stops seeing anything, every one of
-# the forty-odd workloads that cost something reads as free at once, and each
-# of them says so. There is no state of this guard in which it passes while
-# weighing nothing.
+# The costs and once classes are also the blindness control, and not as a
+# separate contrivance: if the measurement ever stops seeing anything, every
+# workload that costs something reads as free at once and each of them says
+# so. There is no state of this guard in which it passes while weighing
+# nothing.
 #
 #   $1  path to the source tree root
 #   $2  path to the built xpost binary
@@ -143,10 +178,41 @@ PS
 
     if [ "$st" -ne 0 ] || [ -z "$cost" ] || [ "$erred" != 0 ]; then
         printf '%s once\n' "$b" >> "$work/measured"
-    elif [ "$cost" -eq 0 ]; then
+        continue
+    fi
+    if [ "$cost" -eq 0 ]; then
         printf '%s zero\n' "$b" >> "$work/measured"
-    else
+        continue
+    fi
+
+    # It cost something on the second run, which by itself does not mean it
+    # holds anything: the allocator serves a request out of a released block
+    # only where the request fits it, so a run asking for a spread of sizes
+    # needs fresh space for each size it holds no suitable released block
+    # for, and acquires one only as earlier runs release it.
+    #
+    # So the ones that cost anything are asked again, after four more runs,
+    # by which point the released blocks cover the sizes asked for. Only
+    # these workloads pay for the extra runs.
+    cat > "$work/case/again.ps" <<PS
+/xg.used { vmstatus pop exch pop } bind def
+/xg.tgt ($work/case/prep.ps) def
+/xg.one { mark { xg.tgt run } stopped pop cleartomark 1 vmreclaim } bind def
+xg.one xg.one xg.one xg.one xg.one
+/xg.mark xg.used def
+xg.one
+(XGAGAIN ) print xg.used xg.mark sub 20 string cvs print (\n) print
+flush
+PS
+    wout=$(cd "$work/case" && XPOST_DATA_DIR="$src/data" timeout 90 \
+               "$xpost" -q --no-sandbox -d null "$work/case/again.ps" </dev/null 2>/dev/null)
+    again=$(printf '%s\n' "$wout" | sed -n 's/^XGAGAIN \(-*[0-9][0-9]*\)$/\1/p' | tail -1)
+    if [ -z "$again" ]; then
         printf '%s costs %s\n' "$b" "$cost" >> "$work/measured"
+    elif [ "$again" -eq 0 ]; then
+        printf '%s fits %s\n' "$b" "$cost" >> "$work/measured"
+    else
+        printf '%s costs %s\n' "$b" "$again" >> "$work/measured"
     fi
 done
 
@@ -174,28 +240,51 @@ while read -r name class extra; do
 
     case $want in
     zero)
-        if [ "$class" != zero ]; then
-            if [ "$class" = costs ]; then
-                printf '%s  cost nothing to run a second time and now costs %s bytes,\n' \
-                    "$name" "$extra" >> "$work/problems"
-                printf '        so something it does is held rather than given back\n' \
-                    >> "$work/problems"
-            else
-                printf '%s  ran cleanly twice and no longer does, so it is not\n' \
-                    "$name" >> "$work/problems"
-                printf '        measuring anything here any more\n' >> "$work/problems"
-            fi
-        fi
+        case $class in
+        zero) ;;
+        costs|fits)
+            printf '%s  cost nothing to run a second time and now costs %s bytes,\n' \
+                "$name" "$extra" >> "$work/problems"
+            printf '        so something it does is held rather than given back\n' \
+                >> "$work/problems" ;;
+        *)  printf '%s  ran cleanly twice and no longer does, so it is not\n' \
+                "$name" >> "$work/problems"
+            printf '        measuring anything here any more\n' >> "$work/problems" ;;
+        esac
+        ;;
+    fits)
+        # The assertion for this class is convergence: it may cost something
+        # while the free list is still settling, and must come to nothing
+        # once it has. A workload that stops converging is holding something.
+        case $class in
+        zero|fits) ;;
+        costs)
+            printf '%s  used to reach nothing by its sixth run and now still costs %s\n' \
+                "$name" "$extra" >> "$work/problems"
+            printf '        bytes after five runs, so what it takes is no longer\n' \
+                >> "$work/problems"
+            printf '        explained by which sizes the allocator can reuse\n' \
+                >> "$work/problems" ;;
+        *)  printf '%s  ran cleanly twice and no longer does, so it is not\n' \
+                "$name" >> "$work/problems"
+            printf '        measuring anything here any more\n' >> "$work/problems" ;;
+        esac
         ;;
     costs|once)
         [ -n "$why" ] || printf '%s  is registered as %s with nothing said about why\n' \
             "$name" "$want" >> "$work/problems"
-        if [ "$class" = zero ]; then
+        case $class in
+        zero)
             printf '%s  is registered as %s and now costs nothing to run a\n' \
                 "$name" "$want" >> "$work/problems"
             printf '        second time. Move it to zero, so it is held to that.\n' \
-                >> "$work/problems"
-        fi
+                >> "$work/problems" ;;
+        fits)
+            printf '%s  is registered as %s and now reaches nothing by its sixth run.\n' \
+                "$name" "$want" >> "$work/problems"
+            printf '        Move it to fits, so it is held to reaching nothing.\n' \
+                >> "$work/problems" ;;
+        esac
         ;;
     *)
         printf '%s  has the unknown class %s in the register\n' \
@@ -225,12 +314,13 @@ fi
 [ "$fail" -eq 0 ] || exit 1
 
 nzero=$(awk '$2 == "zero"' "$work/measured" | grep -c . || true)
+nfits=$(awk '$2 == "fits"' "$work/measured" | grep -c . || true)
 ncosts=$(awk '$2 == "costs"' "$work/measured" | grep -c . || true)
 nonce=$(awk '$2 == "once"' "$work/measured" | grep -c . || true)
 nwhy=$(awk '$2 == "costs" || $2 == "once" { if ($3 == "unexplained") u++ } END { print u + 0 }' \
            "$work/recorded")
-printf 'SUCCESS (%s workloads: %s cost nothing on a second run and are held to it,' \
-    "$nrun" "$nzero"
-printf ' %s cost something, %s do not survive a second run; %s of those carry no\n' \
-    "$ncosts" "$nonce" "$nwhy"
-printf '         explanation yet)\n'
+printf 'SUCCESS (%s workloads: %s free on a second run, %s reaching nothing by the sixth --\n' \
+    "$nrun" "$nzero" "$nfits"
+printf '         both held to it -- %s still costing after five runs, %s not\n' \
+    "$ncosts" "$nonce"
+printf '         survivable twice; %s carry no explanation yet)\n' "$nwhy"

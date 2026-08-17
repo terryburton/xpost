@@ -4752,11 +4752,18 @@ test('check-counter-register',
 # long-running context once per job. Repetition finds it: run a workload
 # twice in one interpreter and a one-off price is paid by the first run
 # only, while anything the second run pays for again is paid by every job
-# after it. Sixty-odd of these workloads cost exactly nothing on a second
-# run and are held to that, which needs no tolerance and no assumption about
-# how wide an object is; the rest are registered with what is known about
-# them, and the register is held in both directions so the population making
-# the assertion can only grow.
+# after it. A cost on the second run alone is mostly not a leak, and the
+# reason is the allocator rather than the collector: a released block serves
+# a later request only where the request fits it, so a run asking for a
+# spread of sizes needs fresh space for each size it holds no suitable
+# released block for. One workload here costs a megabyte and a half on its
+# second run and exactly nothing from its fifth. So anything that costs
+# something is asked again after four more runs. Ninety-odd workloads are
+# held either to being free on a second run or to reaching nothing by the
+# sixth, neither of which needs a tolerance or an
+# assumption about how wide an object is; the rest are registered with what
+# is known about them, and the register is held in both directions so the
+# population making the assertion can only grow.
 test('check-vm-growth',
   find_program('tests/check-vm-growth.sh'),
   suite: cost_slow,
