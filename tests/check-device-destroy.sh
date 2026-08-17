@@ -460,6 +460,7 @@ analyse() {         # <file> <function> [ptr]
         # body then reaches members of, or hands over whole
         for (c = 1; c <= nc && !PTR; c++) {
             if (CN[c] !~ /_get$/) continue
+            gotget = 1
             args = substr(S, CS[c], CE[c] - CS[c] + 1) " "
             cand = ""
             for (p = 1; p <= length(args) - 1; p++) {
@@ -471,6 +472,18 @@ analyse() {         # <file> <function> [ptr]
                 if (r > q) cand = substr(args, q, r - q)
             }
             if (cand != "" && ((cand in base) || (cand in addrof))) { V = cand; break }
+        }
+
+        # a Destroy that hands the whole of itself over does not load the
+        # struct either: the accessor pair is in the body it hands to. Its
+        # struct is then the local whose SIZE goes with its address, which
+        # is what taking a private struct somewhere looks like -- and it
+        # tells that local apart from a descriptor handed over beside it
+        if (V == "" && !PTR) {
+            k = 0
+            for (v in addrof)
+                if (S ~ ("sizeof[ \t]*\\([ \t]*" v "[ \t]*\\)")) { V = v; k++ }
+            if (k != 1) V = ""
         }
 
         # under ptr the struct is not loaded at all: it is the local the
@@ -567,7 +580,11 @@ analyse() {         # <file> <function> [ptr]
         if (nh == 0 && ncl == 0 && delegate == "") { print "INERT"; exit }
         if (delegate != "") print "DELEGATE\t" V "\t" delegate
         if (!PTR) {
-            if (putpos == 0) { print "NOSTORE\t" V }
+            # where the body loads nothing, it stores nothing either, and
+            # the loading, the release and the storing are all in the body
+            # it handed itself to; they are read there instead
+            if (!gotget && delegate != "") print "DELEGATED\t" V "\t" delegate
+            else if (putpos == 0) { print "NOSTORE\t" V }
             else if (lastclear > putpos) print "LATESTORE\t" V "\t" putline
         }
         print (PTR ? "RSEEN\t" : "SEEN\t") V "\t" nh "\t" ncl
@@ -684,6 +701,7 @@ reach() {           # <file> <function>
                 if (c == "(") d++
                 else if (c == ")") { d--; if (d == 0) break }
             }
+            print "SEQ " ++ord " " nm
             args = " " substr(body, p + 1, r - p - 1) " "
             for (v in type)
                 if (args ~ ("[^A-Za-z0-9_]" v "[^A-Za-z0-9_]")) {
@@ -787,15 +805,17 @@ while read -r route cfile cfn; do
         # the descriptor type, and what this device put there -- so the
         # only name here is the slot's, which is the contract in
         # src/lib/xpost_dev_driver.h rather than anybody's layout.
-        slot=$(reach "$home" "$deleg" | awk -v M="$RELEASE_MEMBER" \
+        shared=$(reach "$home" "$deleg")
+        slot=$(printf '%s\n' "$shared" | awk -v M="$RELEASE_MEMBER" \
                     '$1 == "SLOT" && $3 == M { print $2; exit }')
+        relcall=$RELEASE_MEMBER
         if [ -z "$slot" ]; then
             # it may hand the descriptor on to something beside it
-            for onward in $(reach "$home" "$deleg" | awk '$1 == "PASSES" { print $2 }'); do
+            for onward in $(printf '%s\n' "$shared" | awk '$1 == "PASSES" { print $2 }'); do
                 [ "$(definer "$onward")" = "$home" ] || continue
                 slot=$(reach "$home" "$onward" | awk -v M="$RELEASE_MEMBER" \
                             '$1 == "SLOT" && $3 == M { print $2; exit }')
-                [ -n "$slot" ] && break
+                if [ -n "$slot" ]; then relcall=$onward; break; fi
             done
         fi
         if [ -z "$slot" ]; then
@@ -819,6 +839,30 @@ while read -r route cfile cfn; do
             echo "      releases through cannot be named. A device reaching a"
             echo "      shared release supplies one."
             exit 1
+        fi
+
+        # Where the Destroy handed over the whole of itself, the loading,
+        # the release and the storing back are all in the shared body, and
+        # the order they happen in is the rule this check exists for. It is
+        # read there rather than assumed: a store above the release writes
+        # back the handles the release is about to give up.
+        if printf '%s\n' "$out" | grep -q "^DELEGATED"; then
+            gp=$(printf '%s\n' "$shared" | awk '$1 == "SEQ" && $3 ~ /_get$/ { print $2; exit }')
+            rp=$(printf '%s\n' "$shared" | awk -v R="$relcall" '$1 == "SEQ" && $3 == R { print $2; exit }')
+            pp=$(printf '%s\n' "$shared" | awk '$1 == "SEQ" && $3 ~ /_put$/ { print $2; exit }')
+            if [ -z "$gp" ] || [ -z "$rp" ] || [ -z "$pp" ]; then
+                echo "FAILURES: $cfn() in $cfile hands the whole of itself to"
+                echo "      $deleg(), which does not load its private struct,"
+                echo "      release through it and store it back -- one of the"
+                echo "      three is not there, so no body performs it"
+                fail=1
+            elif [ "$gp" -ge "$rp" ] || [ "$rp" -ge "$pp" ]; then
+                echo "FAILURES: $deleg() releases and stores a private struct out"
+                echo "      of order (load $gp, release $rp, store $pp). What is"
+                echo "      stored back must be the struct the release cleared,"
+                echo "      or the instance keeps the handles it gave up"
+                fail=1
+            fi
         fi
     fi
 

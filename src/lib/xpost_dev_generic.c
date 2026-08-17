@@ -2432,6 +2432,32 @@ void xpost_dev_page_retire(void *priv, Xpost_Dev_Band *band, int has_raster,
     codec->reclaim(priv);
 }
 
+/* A Destroy method entire, for a device that writes a page through a
+   codec. What the retirement is handed is read out of the instance
+   before it runs, because retiring may be what lets the raster go, and
+   the cleared struct is stored back so a repeated Destroy is a no-op. */
+int
+xpost_dev_page_destroy_call(Xpost_Context *ctx, Xpost_Object devdic,
+                            Xpost_Object nameprivate,
+                            void *priv, size_t privsz,
+                            const Xpost_Dev_Page_Codec *codec)
+{
+    Xpost_Object privatestr;
+    int has_rows, height;
+
+    if (!xpost_dev_private_get(ctx, devdic, nameprivate,
+                               &privatestr, priv, privsz))
+        return undefined;
+
+    has_rows = codec->raster(priv) != NULL;
+    height = codec->height(priv);
+    xpost_dev_page_retire(priv, codec->band(priv), has_rows, height, codec);
+
+    if (!xpost_dev_private_put(ctx, privatestr, priv, privsz))
+        return VMerror;
+    return 0;
+}
+
 /* An Emit method entire, for a device that lends its raster rather than
    writing it. The instance is recorded again ONLY where the offer was
    taken: an offer refused leaves everything as it was, and there is

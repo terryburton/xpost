@@ -886,25 +886,10 @@ static
 int _destroy(Xpost_Context *ctx,
              Xpost_Object devdic)
 {
-    Xpost_Object privatestr;
     PrivateData private;
-    int has_rows, height;
 
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    /* whether there are rows to finish the page from, settled before the
-       retirement is asked for: what it is handed is the answer, not the
-       raster */
-    has_rows = private.buf != NULL;
-    height = private.height;
-    xpost_dev_page_retire(&private, &private.band, has_rows, height, &_codec);
-
-    /* store the cleared pointer back so a repeated destroy is a no-op */
-    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
-    return 0;
+    return xpost_dev_page_destroy_call(ctx, devdic, namePrivate,
+                                       &private, sizeof(private), &_codec);
 }
 
 /* operator function to instantiate a new window device.

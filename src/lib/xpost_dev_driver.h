@@ -626,6 +626,18 @@ int xpost_dev_page_moveband_call(Xpost_Context *ctx, Xpost_Object devdic,
 
 
 /**
+ * @brief A Destroy method entire, for such a device.
+ *
+ * Whether there are rows and how tall the page is are read BEFORE the
+ * retirement is asked for: what retiring is handed is the answer, not
+ * the raster, and it may be the thing that lets the raster go.
+ */
+int xpost_dev_page_destroy_call(Xpost_Context *ctx, Xpost_Object devdic,
+                                Xpost_Object nameprivate,
+                                void *priv, size_t privsz,
+                                const Xpost_Dev_Page_Codec *codec);
+
+/**
  * @brief Put the band state back to where a page begins.
  *
  * Four flags, and which four is the whole of it: a page that began
