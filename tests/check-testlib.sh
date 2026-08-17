@@ -67,7 +67,7 @@ for f in "$src"/tests/*.ps; do
         # a suite that asks and then defines one of the shared names has
         # shadowed it: the local copy wins and the framework is decoration
         while read -r nm; do
-            if grep -q "^/$nm " "$f"; then
+            if grep -q "^/$nm  *{" "$f"; then
                 echo "$b $nm" >> "$work/shadow"
             fi
         done < "$work/shared"
@@ -82,7 +82,11 @@ for f in "$src"/tests/*.ps; do
                 works|works2|refuses|refuses2|raises|raises2|outcome) ;;
                 *) continue ;;
             esac
-            grep -q "^/$nm " "$f" && d="$d $nm"
+            # the name must be bound to a PROCEDURE: three suites here
+            # write `/refuses false def`, a boolean recording whether the
+            # platform has a target that refuses data, and counting those
+            # as runners put files in this register that have none
+            grep -q "^/$nm  *{" "$f" && d="$d $nm"
         done < "$work/shared"
         [ -n "$d" ] && printf '%s%s\n' "$b" "$d" >> "$work/own"
     fi
