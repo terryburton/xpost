@@ -102,9 +102,18 @@ fi
 awk '{ print $1 }' "$work/source" | LC_ALL=C sort > "$work/source-names"
 
 # ---- what the register says
-grep -v '^[[:space:]]*#' "$src/tests/filter-facts" | awk 'NF >= 4 && $1 != "entries"' \
+# A member line is one whose second field is a kind. A difference line
+# carries a disposition there instead, so the two are told apart by what
+# they say rather than by where they sit -- and a member line with a
+# mistyped kind still reaches the check below that refuses it, which it
+# would not if members were selected by naming the kinds.
+grep -v '^[[:space:]]*#' "$src/tests/filter-facts" \
+    | awk 'NF >= 4 && $1 != "entries" && $2 != "settled" && $2 != "thorn" && $2 != "heading"' \
     > "$work/reg"
 awk '{ print $1 }' "$work/reg" | LC_ALL=C sort > "$work/reg-names"
+grep -v '^[[:space:]]*#' "$src/tests/filter-facts" \
+    | awk 'NF >= 3 && ($2 == "settled" || $2 == "thorn" || $2 == "heading") { print $1 }' \
+    | LC_ALL=C sort -u > "$work/reg-diverge"
 
 fail=0
 
@@ -255,6 +264,143 @@ while read -r name kind where rest; do
             fail=1 ;;
     esac
 done < "$work/reg"
+
+# ---- the differences, each found by its own probe
+#
+# Until this, the family had a membership half here and a behavioural
+# half in tests/filter_family_test.ps, and the one deviation either had
+# found was asserted there and written down nowhere a reader of the
+# register would meet it.
+run() {             # <body> -> the error name, or "none"
+    {
+        printf '/S 80 string def\n'
+        printf 'mark { %s } stopped\n' "$1"
+        printf '{ cleartomark (E ) print $error /errorname get S cvs print (\\n) print }\n'
+        printf '{ cleartomark (E none\\n) print } ifelse\n'
+    } > "$work/d.ps"
+    ( cd "$work" && XPOST_DATA_DIR="$abssrc/data" \
+      "$absxpost" -q --no-sandbox -d null -o /dev/null d.ps </dev/null 2>/dev/null ) \
+      | awk '$1 == "E" { print $2; exit }'
+}
+
+: > "$work/got-diverge"
+
+# A decoder that leaves what follows its end-of-data for the next reader
+# gives the sentinel back; one that eats it does not. Encoded through the
+# member itself, so the bytes before the marker are what that member
+# would really have written.
+{
+    printf '/TA (%s/fx-a) def /TB (%s/fx-b) def\n' "$work" "$work"
+    printf '/ROW 216 string def\n'
+    printf '0 1 215 { /i exch def ROW i i 7 mul 31 add 255 and put } for\n'
+    printf '/SENT (SENTINEL) def\n'
+    printf 'TA (w) file dup /CCITTFaxEncode filter dup ROW writestring closefile closefile\n'
+    printf '/enc TA (r) file 4096 string readstring pop def\n'
+    printf 'TB (w) file dup enc writestring dup SENT writestring closefile\n'
+    printf '/f TB (r) file def\n'
+    printf 'mark { f /CCITTFaxDecode filter 8192 string readstring pop pop } stopped\n'
+    printf '{ cleartomark } { cleartomark } ifelse\n'
+    printf '/left null def\n'
+    printf 'mark { f 64 string readstring pop /left exch def } stopped\n'
+    printf 'cleartomark\n'
+    printf 'left null eq { (E eaten\\n) }\n'
+    printf '{ left SENT eq { (E survives\\n) }{ (E eaten\\n) } ifelse } ifelse print\n'
+    printf 'f closefile\n'
+} > "$work/eod.ps"
+eod=$( cd "$work" && XPOST_DATA_DIR="$abssrc/data" \
+       "$absxpost" -q --no-sandbox -d null -o /dev/null eod.ps </dev/null 2>/dev/null \
+       | awk '$1 == "E" { print $2; exit }' )
+[ "${eod:-}" = eaten ] && echo ccittfax-eats-the-sentinel >> "$work/got-diverge"
+
+# A filter that exists but wants parameters, asked for by name alone: the
+# answer should not be the one an unknown name gets. Both members the
+# register classifies needsdict are asked, so the line retires only when
+# neither answers as though it did not exist.
+# A decoder is asked for over a string and an encoder over a file open for
+# writing: a string is no target for an encoder, and asking one for one
+# answers about the target rather than about the missing parameters.
+nd=$(awk '$2 == "needsdict" { print $1 }' "$work/reg")
+allundef=yes
+any=no
+for f in $nd; do
+    case $f in
+        *Encode) probe="($work/fx-$f) (w) file /$f filter closefile" ;;
+        *)       probe="(abc) /$f filter pop" ;;
+    esac
+    # a filter absent from this build answers undefined for a reason that
+    # is not this one, so it is not evidence either way
+    case $(awk -v n="$f" '$1 == n { print $3; exit }' "$work/reg") in
+        always) ;;
+        *)      continue ;;
+    esac
+    any=yes
+    case $(run "$probe") in
+        undefined) ;;
+        *)         allundef=no ;;
+    esac
+done
+[ "$any" = yes ] && [ "$allundef" = yes ] \
+    && echo parameterised-filter-reported-undefined >> "$work/got-diverge"
+
+# One unknown name, two data sources, two answers
+onstr=$(run "(abc) /XpostNoSuchFilter filter pop")
+onfile=$(run "($work/fx-c) (w) file /XpostNoSuchFilter filter closefile")
+[ -n "$onstr" ] && [ -n "$onfile" ] && [ "$onstr" != "$onfile" ] \
+    && echo unknown-name-error-depends-on-the-source >> "$work/got-diverge"
+
+LC_ALL=C sort -u "$work/got-diverge" -o "$work/got-diverge"
+
+guard_held=0
+guard_hold "$work/reg-diverge" "$work/got-diverge" \
+    "named in the register and no longer found by the probe that finds
+      it. Retire the line and the count with it:" \
+    "found by a probe here and named by no line in the register. Say what
+      the difference is in tests/filter-facts:"
+[ "$guard_held" -eq 0 ] || fail=1
+
+ndiv=$(awk '/^divergences /{ print $2; found = 1 } END { if (!found) print "" }' \
+    "$src/tests/filter-facts")
+case $ndiv in
+    ''|*[!0-9]*)
+        echo "FAILURES: tests/filter-facts has no 'divergences <n>' line. Without"
+        echo "      it the list can be emptied and both directions agree over"
+        echo "      two empty sets."
+        fail=1 ;;
+    *)  held=$(grep -c . "$work/reg-diverge" || true)
+        if [ "$ndiv" -ne "$held" ]; then
+            echo "FAILURES: tests/filter-facts records $ndiv differences and holds $held"
+            fail=1
+        fi ;;
+esac
+
+# ---- and every difference carries exactly one disposition
+grep -v '^[[:space:]]*#' "$src/tests/filter-facts" \
+  | awk 'NF >= 3 && ($2 == "settled" || $2 == "thorn" || $2 == "heading")' \
+  | while read -r what disp rest; do
+        if [ -z "$rest" ]; then
+            echo "FAIL: the difference $what carries no reason. A difference"
+            echo "      recorded without one cannot be re-examined."
+            exit 1
+        fi
+        case $disp in
+            settled) ;;
+            thorn|heading)
+                case $rest in
+                    *removes*|*target*|*closes*) ;;
+                    *)  echo "FAIL: $what is a $disp and does not say what would"
+                        echo "      remove it. A thorn that owes nothing is a"
+                        echo "      difference nobody has costed."
+                        exit 1 ;;
+                esac ;;
+        esac
+    done || fail=1
+
+thorns=$(grep -v '^[[:space:]]*#' "$src/tests/filter-facts" \
+         | awk 'NF >= 3 && $2 == "thorn" { print "      " $1 }')
+if [ -n "$thorns" ]; then
+    echo "THORNS still carried by the filter family:"
+    printf '%s\n' "$thorns"
+fi
 
 [ "$fail" = 0 ] || exit 1
 absent=${absent:-}
