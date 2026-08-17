@@ -41,6 +41,8 @@ tests/check-screen-paths.sh \
 tests/halftone-facts \
 tests/check-shading-facts.sh \
 tests/shading-facts \
+tests/check-form-facts.sh \
+tests/form-facts \
 tests/check-c-held-objects.sh \
 tests/c_held_objects.register \
 tests/check-awk-portability.sh \

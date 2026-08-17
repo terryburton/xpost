@@ -1,0 +1,81 @@
+# What a form dictionary is, which of its entries this interpreter
+# reads, and where it and the specification differ.
+#
+# PLRM 4.7 gives execform a dictionary describing a drawing that may be
+# painted more than once, and says that at the time of publication only
+# one form type has been defined. So this is the smallest family here:
+# one member. That is a reason to write the register rather than not,
+# because a family of one is where a second member arrives without
+# anybody noticing that the first was never asked the questions.
+#
+# Membership is DERIVED: the guard offers every type code from 0 to 20
+# to execform and calls a type accepted when the answer is anything but
+# rangecheck. A second type implemented shows up here whether or not
+# anyone remembered to say so, and the one type going away shows up too.
+
+type 1  accepted  the only form type PLRM defines, Table 4.4
+
+types 1
+
+# The entries a form dictionary carries, and what this does with each.
+#
+# PLRM Table 4.4 names six. Which are required is PROBED, one shading
+# per entry, by leaving that entry out and seeing whether the form still
+# paints -- so an entry that quietly becomes optional, or quietly starts
+# being demanded, fails here rather than being discovered by a program.
+#
+#   entry <name>  <required|optional>  <read|ignored>  <what it is>
+#
+# required  leaving it out stops the form painting
+# optional  leaving it out changes nothing
+# read      this interpreter takes its value and acts on it
+# ignored   the value is accepted and nothing here consults it
+
+entry FormType        required  read     the form type, and the only value that paints is 1
+entry BBox            required  read     the box the drawing is confined to, in form space
+entry Matrix          required  read     the map from form space to the space execform is called in
+entry PaintProc       required  read     the procedure that paints the drawing
+entry UniqueID        optional  ignored  PLRM 4.7 offers it as the identity a cache may file the form under. The cache here files by a serial of its own instead, so this is accepted and never consulted
+entry Implementation  optional  ignored  PLRM 4.7 leaves it for an implementation to keep its own record of the form in. Nothing is written here, and a form dictionary comes back from execform without one
+
+entries 6
+
+# When the drawing is held, and when the procedure runs again.
+#
+# A form may be placed many times. Holding the marks once and replaying
+# them is what makes a page built of forms cost each form once rather
+# than once per placement -- but it is only sound where the marks that
+# were captured are the marks every placement wants. So the routing is a
+# set of conditions, and each is a thing that can drift without any page
+# looking wrong: a form that stops being held still paints, only slower,
+# and a form that starts being held when it should not paints WRONGLY.
+#
+# Which happens is PROBED, by counting how many times the paint
+# procedure runs for two placements. Once means the drawing was held;
+# twice means the procedure ran again.
+#
+#   cache <condition>  <held|afresh>  <reason>
+
+cache raster-device      held    a device that takes marks as pixels can be stood in for by a recorder, and the drawing is the pixels it recorded
+cache clip-holds-box     held    the marks reaching a recorder are already cut to the clip, so a clip containing the whole of the form's box cuts nothing off what is captured
+cache clip-cuts-box      afresh  a form the clip cuts would be captured cut, and then placed cut somewhere the clip is not. The capture is refused rather than the placement being wrong
+cache screening-device   afresh  a device that turns a grey into a pattern of pixels does it at the position the marks land on, so marks captured at one position and replayed at another would carry the screen of the first
+cache read-only-form     afresh  the drawing is filed under a serial stamped into the form dictionary, and a dictionary the program made read-only cannot take one
+cache vector-device      afresh  a device given whole paths has no pixels to record. Both implementations run the paint procedure ONCE for two placements here, so both share the form in vector output where this does not -- see form-not-shared below
+
+caches 6
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference. A difference the guard can see and this
+# list does not name is a failure; so is a line here naming a difference
+# the guard can no longer find.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+
+missing-required  settled  A form dictionary without BBox, Matrix or PaintProc raises undefined, because the entry is fetched and the fetch is what fails. The same is true of a halftone and of a shading, so it is one behaviour across three families rather than this one being odd; it is recorded in each of their registers and would be changed in all three or none
+identity-not-the-programs  settled  PLRM offers UniqueID as what a cache files a form under, and the cache here files by a serial it issues itself. A UniqueID is the program's: two forms may carry the same one, a copy of a form carries the original's, and a program may write a number this interpreter also uses. A serial that only ever moves forward cannot be handed out twice, so no form can be served a drawing another form was filed under. The entry is accepted so that a program written for the specification is not turned away, and it is not consulted
+implementation-unwritten  settled  PLRM leaves Implementation for an implementation to keep its record of the form in, and nothing is written there. What would go in it -- the serial, and whether a drawing was captured -- is kept where a restore can reach it, and a form dictionary is the program's to do as it likes with. Writing into the program's dictionary would also make the entry a thing a program could forge
+
+form-not-shared  thorn  A form placed twice on a device that writes paths runs its paint procedure twice, and the marks are written out twice. MEASURED with two placements: both implementations run it once, for PDF and for PostScript output alike, so both emit the drawing once and refer to it twice. Nothing here does: the page is right and it is larger than it needs to be, and a page built of many placements of one form costs the procedure every time. What is missing is a form the writer emits once and refers to, which the output languages both have; the capture machinery that exists holds pixels, and a path writer has none
+
+divergences 4

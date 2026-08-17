@@ -4787,6 +4787,17 @@ test('check-shading-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# PLRM 4.7 defines one form type, so this family has one member -- which
+# is where nobody thinks to ask whether the member was ever held to
+# anything. The register carries the six entries a form dictionary
+# takes, two of which are accepted and never read, and the identity the
+# cache files a form under, which is not the one the specification
+# offers.
+test('check-form-facts',
+  find_program('tests/check-form-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,
