@@ -68,7 +68,6 @@ entries 17
 #
 #   <what>  <settled|thorn|heading>  <reason>
 
-ccittfax-eats-the-sentinel  thorn  Five of the six round-trippable decoders stop at their own end-of-data and leave what follows for the next reader. CCITTFaxDecode does not: it never recognises its end-of-block marker, stops only by running out of input, and decodes whatever was written after the marker as a further row -- reporting it damaged and consuming it. Task #330 carries the measurement. It is the same class as the lazy end-of-data desynchronisation that was found in all five stream decoders and fixed there; this one was not in that fix because it was not in that family of five. What removes it is the decoder recognising its own end-of-block marker and stopping there, as the other five stop at theirs; the cost is that the marker is optional in the encoding, so the decoder must still stop on running out of input and the two conditions have to agree. tests/filter_family_test.ps holds it to the WRONG answer with the task named, so the day it is fixed that test fails and asks to be made strict; this line is the same fact where a reader of the register will find it
 
 
-divergences 1
+divergences 0

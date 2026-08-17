@@ -94,21 +94,20 @@
 0 1 215 { /i exch def ROW i i 7 mul 31 add 255 and put } for
 
 % The third entry is what the member is held to on the last question.
-% /strict is the answer every member should give. /deviates is a member
-% that does not give it today, and it is held to the wrong answer on
-% purpose: CCITTFaxDecode does not recognise its end-of-block marker and
-% only stops by running out of input, so anything written after the
-% marker is decoded as a further row, reported as damaged and consumed.
-% Task #330 has the measurement. Holding it to the wrong answer is what
-% stops this note outliving the defect -- the day the decoder stops
-% eating the sentinel, this line fails and asks to be made strict.
+% /strict is the answer every member should give, and every member gives
+% it: each decoder stops at its own end-of-data and leaves the bytes after
+% it for whoever reads next. The column stays because it is what let the
+% one member that did not be held to the wrong answer on purpose, so the
+% note could not outlive the defect -- and it did not: the day
+% CCITTFaxDecode stopped eating the sentinel, this line failed and asked
+% to be made strict.
 /members [
     (ASCIIHex)  PLAIN /strict
     (ASCII85)   PLAIN /strict
     (RunLength) PLAIN /strict
     (LZW)       PLAIN /strict
     (Flate)     PLAIN /strict
-    (CCITTFax)  ROW   /deviates
+    (CCITTFax)  ROW   /strict
 ] def
 
 0 3 members length 3 sub {

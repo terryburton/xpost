@@ -3332,6 +3332,7 @@ typedef struct Xpost_FaxFile
     int rowbytes;
     int rowpos;
     int rowsdone;
+    int preeol;         /* end-of-line codes taken before the row decoder ran */
 } Xpost_FaxFile;
 
 static int
@@ -3454,13 +3455,23 @@ fax_eateol(Xpost_FaxFile *ff)
     return -1;
 }
 
-/* the trailing block marker: two end-of-line codes close a Group 4
-   stream, six close a Group 3 one; the source then stands at the
-   next byte.  Absent or malformed trailers are left alone. */
+/* how many end-of-line codes in a row close the data: two for a Group 4
+   stream, six -- the Return To Control -- for a Group 3 one.  One place,
+   because the row decoders have to recognise the same marker the finish
+   consumes; when they disagreed, the decoder read the marker as six
+   separators and went on to decode whatever followed it. */
+static int
+fax_blocklen(const Xpost_FaxFile *ff)
+{
+    return ff->k < 0 ? 2 : 6;
+}
+
+/* the trailing block marker; the source then stands at the next byte.
+   Absent or malformed trailers are left alone. */
 static void
 fax_finish(Xpost_FaxFile *ff)
 {
-    int need = ff->k < 0 ? 2 : 6;
+    int need = fax_blocklen(ff);
     int got = 0, c;
 
     if (ff->eob)
@@ -3486,6 +3497,7 @@ static int
 fax_1d_row(Xpost_FaxFile *ff)
 {
     int pos = 0, color = 0, ci = 0, run, guard = 0;
+    int eols = ff->preeol;
 
     while (pos < ff->columns)
     {
@@ -3499,7 +3511,14 @@ fax_1d_row(Xpost_FaxFile *ff)
         if (run == FAX_RUN_EOL)
         {
             if (pos == 0 && ci == 0)
+            {
+                /* one marker separates rows; a block's worth of them in
+                   succession is the end of the data, and stopping there
+                   is what leaves the bytes after it for the next reader */
+                if (ff->eob && ++eols >= fax_blocklen(ff))
+                    return -2;
                 continue;   /* marker before the row */
+            }
             return -1;
         }
         if (run < 0)
@@ -3518,7 +3537,7 @@ fax_1d_row(Xpost_FaxFile *ff)
 static int
 fax_2d_row(Xpost_FaxFile *ff)
 {
-    int a0 = -1, color = 0, ci = 0, ri = 0;
+    int a0 = -1, color = 0, ci = 0, ri = 0, eols = ff->preeol;
     int b1, b2, a1, r1, r2, start, mode;
 
     while (a0 < ff->columns)
@@ -3572,7 +3591,12 @@ fax_2d_row(Xpost_FaxFile *ff)
         case FAX_EOL:
             if (a0 < 0 && ci == 0)
             {
-                if (ff->k < 0)      /* first of the closing pair */
+                /* the same count the finish consumes: a Group 4 stream is
+                   closed by a pair and a Group 3 one by six, and reaching
+                   it here is what stops the data being read past */
+                if (ff->eob && ++eols >= fax_blocklen(ff))
+                    return -2;
+                if (!ff->eob && ff->k < 0)  /* first of the closing pair */
                     return -2;
                 continue;
             }
@@ -3602,13 +3626,21 @@ fax_decoderow(Xpost_FaxFile *ff)
     /* the mixed coding types each row by a tag bit behind an
        end-of-line marker, so for positive K the marker is
        structural, whatever EndOfLine says of the plain codings */
-    if (ff->k >= 0 && (ff->eol || ff->k > 0) && fax_eateol(ff) < 0)
+    /* a marker read here is the first of any block marker that follows, so
+       the row decoder is told about it: counting the block from zero would
+       leave it one short and read on past the end of the data */
+    ff->preeol = 0;
+    if (ff->k >= 0 && (ff->eol || ff->k > 0))
     {
-        if (ff->k > 0)
-            XPOST_LOG_ERR("CCITTFaxDecode: no end-of-line marker "
-                          "before row %d", ff->rowsdone);
-        ff->base.base.eod = 1;
-        return EOF;
+        if (fax_eateol(ff) < 0)
+        {
+            if (ff->k > 0)
+                XPOST_LOG_ERR("CCITTFaxDecode: no end-of-line marker "
+                              "before row %d", ff->rowsdone);
+            ff->base.base.eod = 1;
+            return EOF;
+        }
+        ff->preeol = 1;
     }
     if (ff->k < 0)
         twod = 1;
@@ -3629,8 +3661,9 @@ fax_decoderow(Xpost_FaxFile *ff)
     ret = twod ? fax_2d_row(ff) : fax_1d_row(ff);
     if (ret == -2)  /* the stream closed at a row boundary */
     {
-        if (ff->k < 0 && ff->eob)
-            (void)fax_eateol(ff);   /* second half of the block marker */
+        /* the row decoder consumed the whole block marker, so nothing is
+           read here: another end-of-line read speculatively would take
+           bits off whatever follows the data and lose them */
         ff->base.bitcnt = 0;
         b = xpost_file_getc(ff->base.base.source);
         if (b != EOF)
