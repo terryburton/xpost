@@ -346,6 +346,40 @@
                  /SpotFunction { pop pop 0 } >> >>
   sethalftone } /rangecheck (a type 5 nested in a type 5) raises
 
+% A component stands for one colorant, so the two types that carry four
+% screens at once are no more admissible there than a composite is.
+% PLRM 7.4.6 allows a component of any type except 2, 4 or 5, and all
+% three are refused alike -- a rule asked of one of them and not the
+% others is how a family acquires a hole.
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 2
+              /RedFrequency 60 /RedAngle 0 /RedSpotFunction { pop pop 0 }
+              /GreenFrequency 60 /GreenAngle 0 /GreenSpotFunction { pop pop 0 }
+              /BlueFrequency 60 /BlueAngle 0 /BlueSpotFunction { pop pop 0 }
+              /GrayFrequency 60 /GrayAngle 0 /GraySpotFunction { pop pop 0 } >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } /rangecheck (a type 2 as a type 5 component) raises
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 4
+              /RedWidth 2 /RedHeight 2 /RedThresholds <0180C8FF>
+              /GreenWidth 2 /GreenHeight 2 /GreenThresholds <0180C8FF>
+              /BlueWidth 2 /BlueHeight 2 /BlueThresholds <0180C8FF>
+              /GrayWidth 2 /GrayHeight 2 /GrayThresholds <0180C8FF> >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } /rangecheck (a type 4 as a type 5 component) raises
+
+% and the types the specification does allow there are still allowed
+{ << /HalftoneType 5
+     /Cyan << /HalftoneType 10 /Xsquare 2 /Ysquare 1
+              /Thresholds <0040808000> >>
+     /Magenta << /HalftoneType 6 /Width 2 /Height 2
+                 /Thresholds (0180C8FF) /ASCIIHexDecode filter >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } (a type 5 over the component types PLRM allows) works
+
 % a name rather than a halftone alongside the components is not a
 % component, and does not make the dictionary invalid
 { << /HalftoneType 5 /HalftoneName (screen)

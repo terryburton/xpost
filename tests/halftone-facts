@@ -63,8 +63,7 @@ entries 10
 # thorn    a known defect or gap, waiting on work
 # heading  being changed now
 
-component-2-4  thorn    PLRM 7.4.6 says a type 5 component may be of any type except 2, 4 or 5. This interpreter refuses a nested type 5 and accepts types 2 and 4, so the rule was written for one member of the family and not the others. Refusing them is a small change; it is held out of the factorisation work so that it carries its own test and its own adjudication
 transfer       thorn    PLRM makes TransferFunction optional in types 1, 3, 6, 10 and 16, unavailable in 2 and 4, and required for a type 5 component standing for a nonprimary or a DeviceN colorant. Nothing in this tree reads the entry: a dictionary carrying one is accepted, the procedure is kept as inert data and never overrides settransfer, and a type 5 component that PLRM says must have one is accepted without it
 side-extent    thorn    every type that states its cell in sides accepts a zero or negative one, and builds a screen with no places rather than refusing the dictionary. The behaviour is at least uniform across the family. PLRM gives the type of these entries but not the error for a value that describes no area, so which error to raise wants adjudicating before it is chosen
 
-divergences 3
+divergences 2

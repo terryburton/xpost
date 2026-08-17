@@ -1336,14 +1336,18 @@ setglobal
     }{ 5 eq {
         % a composite dictionary: one halftone per colorant, and the
         % Default the components that have no entry of their own fall
-        % back to. A component may not itself be composite
+        % back to. A component stands for a single colorant, so a
+        % dictionary that carries four screens at once cannot be one, and
+        % neither can a second composite: PLRM 7.4.6 allows a component
+        % of any type but 2, 4 and 5, and the three are refused alike
         ht /Default known not
             { /sethalftone cvx /undefined signalerror } if
         ht {
             exch pop
             dup type /dicttype eq {
                 dup //.xpostsys /.htvalidate get exec
-                /HalftoneType get 5 eq
+                /HalftoneType get
+                dup 2 eq exch dup 4 eq exch 5 eq or or
                     { /sethalftone cvx /rangecheck signalerror } if
             }{ pop } ifelse
         } forall
