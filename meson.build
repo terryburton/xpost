@@ -4798,6 +4798,15 @@ test('check-form-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# PLRM 3.10.1 names three function types. A sampled function's samples
+# are a continuous bit stream with no padding at a byte boundary, as a
+# mesh shading's vertices are, so both are read by one reader and the
+# widths each allows are the specification's rather than the reader's.
+test('check-function-facts',
+  find_program('tests/check-function-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,

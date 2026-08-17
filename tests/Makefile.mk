@@ -43,6 +43,8 @@ tests/check-shading-facts.sh \
 tests/shading-facts \
 tests/check-form-facts.sh \
 tests/form-facts \
+tests/check-function-facts.sh \
+tests/function-facts \
 tests/check-c-held-objects.sh \
 tests/c_held_objects.register \
 tests/check-awk-portability.sh \

@@ -1,0 +1,59 @@
+# What each function type is, which evaluator computes it, and where
+# this interpreter and the specification differ.
+#
+# PLRM 3.10.1 says three types of function are available, and names
+# them: a sampled function, an exponential interpolation, and a
+# stitching of other functions. All three are here.
+#
+# The family's interest is not the types but what they share. A sampled
+# function's samples are a bit stream -- a continuous one, with no
+# padding at a byte boundary -- and so is the vertex stream of a mesh
+# shading. Both are read by the same reader, and the widths each allows
+# are the specification's, not the reader's.
+#
+# Membership is DERIVED: the guard offers every type code from 0 to 20
+# and calls a type computed when a shading carrying such a function
+# paints. A type newly implemented shows up whether or not anyone said
+# so, and one that stops working shows up too.
+#
+#   <type>  <computes|refused>  <inputs>  <reason>
+
+0  computes  any   a table of samples, interpolated between the bracketing values, PLRM 3.10.1
+2  computes  one   an exponential interpolation between two sets of coefficients
+3  computes  one   a stitching of other functions, each over its own part of the domain
+
+types 3
+
+# The widths a sample may be, and the widths the specification allows.
+#
+# PLRM 3.10.1: the number of bits for each component of each sample must
+# be 1, 2, 4, 8, 12, 16, 24 or 32, and the samples are adjacent in a
+# continuous bit stream with no padding at a byte boundary. So the
+# reader counts bits, and the same reader serves a mesh shading's
+# vertices for the same reason.
+#
+# PROBED, one function per width, with the samples packed the way that
+# width requires.
+#
+#   width BitsPerSample <bits> <takes|refuses>
+
+width BitsPerSample 1   takes
+width BitsPerSample 2   takes
+width BitsPerSample 4   takes
+width BitsPerSample 8   takes
+width BitsPerSample 12  takes
+width BitsPerSample 16  takes
+width BitsPerSample 24  takes
+width BitsPerSample 32  takes
+
+widths 8
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+
+missing-required  settled  A function dictionary without an entry its type requires raises undefined, because the entry is fetched and the fetch is what fails. The same is true of a halftone, a shading and a form, so it is one behaviour across four families rather than this one being odd
+type-4-is-not-postscript  settled  A fourth function type exists in the page description language derived from this one, where it carries a program in a calculator notation. PLRM names three types and this is not among them, so a dictionary asking for it is refused. Accepting it would be implementing another language's feature and calling it this one's
+
+divergences 2
