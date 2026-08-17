@@ -30,6 +30,22 @@
 #   from drifting: a member the release frees and does not clear fails
 #   here whichever path calls it.
 #
+#   That function may be shared, and then it cannot be the one read: shared
+#   code does not know this device's handles, and calls through the page
+#   codec the device handed it. So the DEVICE's own release is derived --
+#   which member of a descriptor the shared body reaches, where that member
+#   sits in the descriptor type, and which function this device put at that
+#   position. The one name in that chain is the slot's, and a slot of the
+#   published descriptor is contract rather than layout: a device may rename
+#   its release, the descriptor may be reordered, and a further shared
+#   wrapper may be put between, without any of it being written here.
+#
+#   Reading only the release, and not every callback the shared body makes,
+#   is deliberate. The rule being applied -- a member handed to a call and
+#   not cleared is a handle the next Destroy follows -- holds in a body
+#   whose calls are releases and nowhere else. A writer hands the same
+#   members to calls that use them, and must not clear them.
+#
 #   The struct is stored back through the accessor it was loaded with. A
 #   Destroy that clears its local copy and does not store it releases the
 #   memory and leaves the instance holding the pointers it released.
@@ -92,6 +108,15 @@ guard_mirror register "$golden"
 golden="$mirror/$(basename "$golden")"
 
 fail=0
+
+# The descriptor slot that means "give up what this instance holds". It
+# is named here because it is the contract -- src/lib/xpost_dev_driver.h
+# declares it, every device fills it, and shared code calls through it --
+# in the same way the Destroy method slot is named above. What is NOT
+# named is which function any device puts there, or which file the shared
+# release is written in: those are derived, so that moving code does not
+# move this.
+RELEASE_MEMBER=reclaim
 
 # ---- the grounds for trusting a clearing macro ----
 #
@@ -549,6 +574,174 @@ analyse() {         # <file> <function> [ptr]
     }' "$work/code"
 }
 
+# ---- following a Destroy that hands its struct to shared code ----
+#
+# Which file a function is written in. A definition begins a line and a
+# call is indented, which is what separates them here; a declaration ends
+# its line with a semicolon.
+definer() {         # <function>
+    awk -F'\t' -v FN="$1" '
+        {
+            code = substr($0, length($1) + length($2) + 3)
+            if (code !~ /^[A-Za-z_]/) next
+            if (code ~ /;[ \t]*$/) next
+            if ((" " code) ~ ("[^A-Za-z0-9_]" FN "[ \t]*\\(")) print $1
+        }' "$work/code" | sort -u
+}
+
+# What a function's body reaches: the descriptor members it calls
+# through, and the functions it hands its own parameters to. Printed as
+#   SLOT <type> <member>     a call through a member of a pointer parameter
+#   PASSES <function>        a call handed one of this function's parameters
+reach() {           # <file> <function>
+    awk -F'\t' -v F="$1" -v FN="$2" '
+    BEGIN { KW["if"]=1; KW["for"]=1; KW["while"]=1; KW["switch"]=1
+            KW["return"]=1; KW["sizeof"]=1; KW["do"]=1; KW["else"]=1 }
+    $1 == F {
+        code = substr($0, length($1) + length($2) + 3)
+        nl++; T[nl] = code
+    }
+    END {
+        for (i = 1; i <= nl && bs == 0; i++) {
+            if (T[i] !~ /^[A-Za-z_]/) continue
+            if ((" " T[i]) !~ ("[^A-Za-z0-9_]" FN "[ \t]*\\(")) continue
+            S = ""; depth = 0; seen = 0; decl = 0; be = 0
+            for (j = i; j <= nl && !decl; j++) {
+                m = length(T[j])
+                for (k = 1; k <= m; k++) {
+                    c = substr(T[j], k, 1)
+                    S = S c
+                    if (c == "{") {
+                        if (depth == 0 && !seen) { seen = 1; bs = length(S) + 1 }
+                        depth++
+                    }
+                    else if (c == "}") {
+                        depth--
+                        if (seen && depth == 0) { be = length(S) - 1; break }
+                    }
+                    else if (c == ";" && !seen) { decl = 1; break }
+                }
+                if (be) break
+                S = S " "
+            }
+            if (decl || !be) { bs = 0; be = 0; continue }
+        }
+        if (!bs || be < bs) exit
+        body = substr(S, bs, be - bs + 1)
+
+        # the parameters, and the struct type each pointer one names
+        head = substr(S, 1, bs - 2)
+        p = index(head, "(")
+        d = 0
+        for (q = p; q <= length(head); q++) {
+            c = substr(head, q, 1)
+            if (c == "(") d++
+            else if (c == ")") { d--; if (d == 0) break }
+        }
+        n = split(substr(head, p + 1, q - p - 1), par, ",")
+        for (i = 1; i <= n; i++) {
+            s = par[i]
+            gsub(/^[ \t]+|[ \t]+$/, "", s)
+            if (s !~ /\*/) continue
+            nm = s; sub(/^.*[*][ \t]*/, "", nm)
+            ty = s; sub(/[ \t]*[*].*$/, "", ty)
+            sub(/^const[ \t]+/, "", ty)
+            gsub(/^[ \t]+|[ \t]+$/, "", ty)
+            if (nm ~ /^[A-Za-z_][A-Za-z0-9_]*$/ && ty ~ /^[A-Za-z_]/)
+                type[nm] = ty
+        }
+
+        # every call through a member of one of them
+        for (p = 1; p <= length(body); p++) {
+            if (substr(body, p, 2) != "->") continue
+            q = p - 1
+            while (q >= 1 && substr(body, q, 1) ~ /[A-Za-z0-9_]/) q--
+            id = substr(body, q + 1, p - q - 1)
+            r = p + 2
+            while (r <= length(body) && substr(body, r, 1) ~ /[A-Za-z0-9_]/) r++
+            mem = substr(body, p + 2, r - p - 2)
+            z = r
+            while (substr(body, z, 1) ~ /[ \t]/) z++
+            if (substr(body, z, 1) != "(") continue
+            if (!(id in type) || mem == "") continue
+            if (!seenslot[type[id] SUBSEP mem]++)
+                print "SLOT " type[id] " " mem
+        }
+
+        # every call handed one of this function`s pointer parameters,
+        # which is how the descriptor travels further in
+        for (p = 1; p <= length(body); p++) {
+            if (substr(body, p, 1) != "(") continue
+            q = p - 1
+            while (q >= 1 && substr(body, q, 1) ~ /[ \t]/) q--
+            e = q
+            while (q >= 1 && substr(body, q, 1) ~ /[A-Za-z0-9_]/) q--
+            nm = substr(body, q + 1, e - q)
+            if (nm == "" || nm ~ /^[0-9]/ || (nm in KW)) continue
+            d = 0
+            for (r = p; r <= length(body); r++) {
+                c = substr(body, r, 1)
+                if (c == "(") d++
+                else if (c == ")") { d--; if (d == 0) break }
+            }
+            args = " " substr(body, p + 1, r - p - 1) " "
+            for (v in type)
+                if (args ~ ("[^A-Za-z0-9_]" v "[^A-Za-z0-9_]")) {
+                    if (!seenpass[nm]++) print "PASSES " nm
+                    break
+                }
+            p = r
+        }
+    }' "$work/code"
+}
+
+# The members of a descriptor type, in the order they are declared. An
+# anonymous typedef, so the run is taken between a struct opening and the
+# line that gives it the name.
+slot_index() {      # <type> <member>
+    ( cd "$tree" && awk -v TY="$1" -v MEM="$2" '
+        /^typedef[ \t]+struct/ { n = 0; next }
+        /^}[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*;/ {
+            name = $0
+            sub(/^}[ \t]*/, "", name); sub(/[ \t]*;.*$/, "", name)
+            if (name == TY) { for (i = 1; i <= n; i++) if (m[i] == MEM) print i }
+            n = 0; next
+        }
+        /\([ \t]*\*[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\)/ {
+            s = $0
+            match(s, /\([ \t]*\*[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\)/)
+            t = substr(s, RSTART, RLENGTH)
+            gsub(/[()* \t]/, "", t)
+            m[++n] = t
+        }' src/lib/*.h )
+}
+
+# The function a device puts at a position in such a descriptor.
+slot_function() {   # <file> <type> <index>
+    awk -F'\t' -v F="$1" -v TY="$2" -v IX="$3" '
+        $1 != F { next }
+        {
+            code = substr($0, length($1) + length($2) + 3)
+            if (!open) {
+                if (code !~ ("[^A-Za-z0-9_]" TY "[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*=")) next
+                if (code !~ /\{/) next
+                open = 1
+                text = substr(code, index(code, "{") + 1)
+                next
+            }
+            if (code ~ /\}/) { text = text " " substr(code, 1, index(code, "}") - 1); done = 1; exit }
+            text = text " " code
+        }
+        END {
+            if (!open) exit
+            n = split(text, part, ",")
+            if (IX > n) exit
+            s = part[IX]
+            gsub(/[ \t&]/, "", s)
+            if (s ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print s
+        }' "$work/code"
+}
+
 : > "$work/verdicts"
 while read -r route cfile cfn; do
     [ -n "$cfn" ] || continue
@@ -568,16 +761,75 @@ while read -r route cfile cfn; do
     # is what the members have to be cleared by. So the shared name is
     # followed to that, and everything else is read where it is written.
     deleg=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "DELEGATE" { print $3 }')
-    [ "$deleg" = xpost_dev_page_retire ] && deleg=_reclaim
     [ -n "$deleg" ] || continue
-    rout=$(analyse "$cfile" "$deleg" 1)
+
+    relfile=$cfile
+    relfn=$deleg
+    # A name defined in this device's own file is that one: every device
+    # calls its release _reclaim and each is static to its file, so the
+    # search only leaves the file when the file has no such function.
+    home=$(definer "$deleg")
+    if printf '%s\n' "$home" | grep -qxF "$cfile"; then
+        home=$cfile
+    fi
+    nhome=$(printf '%s\n' "$home" | grep -c . || true)
+    if [ "$nhome" -ne 1 ]; then
+        echo "FAILURES: $cfn() in $cfile hands its private struct to $deleg(),"
+        echo "      which $nhome library sources define; this check cannot say"
+        echo "      which body releases the handles"
+        exit 1
+    fi
+    if [ "$home" != "$cfile" ]; then
+        # The release is shared, so it does not know this device: it calls
+        # through the descriptor it was handed, and the DEVICE says which
+        # of its own functions fills each slot. Both halves are derived --
+        # which member the shared body reaches, where that member sits in
+        # the descriptor type, and what this device put there -- so the
+        # only name here is the slot's, which is the contract in
+        # src/lib/xpost_dev_driver.h rather than anybody's layout.
+        slot=$(reach "$home" "$deleg" | awk -v M="$RELEASE_MEMBER" \
+                    '$1 == "SLOT" && $3 == M { print $2; exit }')
+        if [ -z "$slot" ]; then
+            # it may hand the descriptor on to something beside it
+            for onward in $(reach "$home" "$deleg" | awk '$1 == "PASSES" { print $2 }'); do
+                [ "$(definer "$onward")" = "$home" ] || continue
+                slot=$(reach "$home" "$onward" | awk -v M="$RELEASE_MEMBER" \
+                            '$1 == "SLOT" && $3 == M { print $2; exit }')
+                [ -n "$slot" ] && break
+            done
+        fi
+        if [ -z "$slot" ]; then
+            echo "FAILURES: $cfn() in $cfile hands its private struct to"
+            echo "      $deleg(), which reaches no /$RELEASE_MEMBER slot of any"
+            echo "      descriptor. A Destroy that hands its struct to shared"
+            echo "      code is released by the slot the device fills, and this"
+            echo "      check can no longer see which one that is."
+            exit 1
+        fi
+        ix=$(slot_index "$slot" "$RELEASE_MEMBER")
+        if [ -z "$ix" ]; then
+            echo "FAILURES: $slot has no $RELEASE_MEMBER member, so the slot this"
+            echo "      check follows a shared release through is not in the"
+            echo "      descriptor it is declared in"
+            exit 1
+        fi
+        relfn=$(slot_function "$cfile" "$slot" "$ix")
+        if [ -z "$relfn" ]; then
+            echo "FAILURES: $cfile installs no readable $slot, so the function it"
+            echo "      releases through cannot be named. A device reaching a"
+            echo "      shared release supplies one."
+            exit 1
+        fi
+    fi
+
+    rout=$(analyse "$relfile" "$relfn" 1)
     if [ -z "$rout" ]; then
-        echo "FAILURES: $cfn() in $cfile releases through $deleg(), which this"
+        echo "FAILURES: $cfn() in $cfile releases through $relfn(), which this"
         echo "      check cannot read; the handles it clears cannot be held"
         exit 1
     fi
     printf '%s\n' "$rout" \
-      | awk -v f="$cfile" -v n="$deleg" '{ print f "\t" n "\t" $0 }' >> "$work/verdicts"
+      | awk -v f="$relfile" -v n="$relfn" '{ print f "\t" n "\t" $0 }' >> "$work/verdicts"
 done < "$work/population"
 
 for kind in NOBODY NOSTRUCT INERT; do
