@@ -1,3 +1,4 @@
+%!testlib
 %!
 % The current path is a packed string in the graphics state dictionary,
 % and that dictionary is reachable from a program: /currpath can be
@@ -23,7 +24,7 @@
 % page came out blank.
 
 /fails 0 def
-/note { print (\n) print flush } def
+/say { print (\n) print flush } def
 
 /id 1183615869 internaldict def
 /pathisrect id /.pathisrect get def
@@ -73,11 +74,11 @@
   countdictstack d0 sub { end } repeat
   exch
   { dup (rangecheck) eq
-    { pop (ok   ) print label note }
+    { pop (ok   ) print label say }
     { /fails fails 1 add def
-      (FAIL: ) print label print ( raised ) print note } ifelse }
+      (FAIL: ) print label print ( raised ) print say } ifelse }
   { pop /fails fails 1 add def
-    (FAIL: ) print label print ( raised no error) note } ifelse
+    (FAIL: ) print label print ( raised no error) say } ifelse
 } def
 
 % proc errorname name  .  -    the proc must raise that error
@@ -89,18 +90,14 @@
   countdictstack d0 sub { end } repeat
   exch
   { dup want eq
-    { pop (ok   ) print label note }
+    { pop (ok   ) print label say }
     { /fails fails 1 add def
-      (FAIL: ) print label print ( raised ) print note } ifelse }
+      (FAIL: ) print label print ( raised ) print say } ifelse }
   { pop /fails fails 1 add def
-    (FAIL: ) print label print ( raised no error) note } ifelse
+    (FAIL: ) print label print ( raised no error) say } ifelse
 } def
 
 % bool name  .  -
-/assert {
-  exch { (ok   ) print note }
-  { /fails fails 1 add def (FAIL: ) print note } ifelse
-} def
 
 % -  .  -    a real four-sided path, and a clip that is one rectangle
 /realpath {
@@ -124,10 +121,8 @@ realpath cliptrivial
 realpath currentpoint 2 copy
 100 sub abs 0.01 lt exch 100 sub abs 0.01 lt and 3 1 roll pop pop
 (currentpoint reads a real path) assert
-realpath { flattenpath } stopped not
-(flattenpath walks a real path) assert
-realpath 200 200 moveto 300 200 lineto { closepath } stopped not
-(closepath closes a real subpath) assert
+realpath { flattenpath } (flattenpath walks a real path) works
+realpath 200 200 moveto 300 200 lineto { closepath } (closepath closes a real subpath) works
 
 % --- an extent larger than the string holding it ----------------------
 % Offset 0 says how much content the string has. A walk that takes it on

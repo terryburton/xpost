@@ -1,3 +1,4 @@
+%!testlib
 %!
 % The font cache's two byte parameters -- the cache's own capacity and
 % the ceiling above which a glyph renders uncached -- are set from a
@@ -11,11 +12,7 @@
 % currentcacheparams report is a size the cache can be, and the two
 % agree with each other.
 
-/failcount 0 def
-/note { print (\n) print } def
-/assert {
-  exch { pop } { (FAIL: ) print note /failcount failcount 1 add store } ifelse
-} def
+/say { print (\n) print } def
 
 % keep the cache as it was found
 cachestatus 7 array astore /cs0 exch def
@@ -54,8 +51,7 @@ limit 40000 eq (and the per-glyph ceiling stated with it) assert
 % at all, which admits no glyph -- a store that caches nothing, which is
 % a store this implementation can be.
 count /c0 exch def
-{ -1 setcachelimit } stopped not
-  (a per-glyph ceiling below the range raises no error) assert
+{ -1 setcachelimit } (a per-glyph ceiling below the range raises no error) works
 count c0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
 limit 0 eq
   (and the ceiling substituted for it is the floor of the range) assert
@@ -80,5 +76,5 @@ big cs0 1 get ge
 mark cp0 aload pop setcacheparams
 cs0 6 get setcachelimit
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
 quit
