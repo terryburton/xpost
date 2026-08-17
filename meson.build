@@ -4754,9 +4754,9 @@ test('check-counter-register',
 # only, while anything the second run pays for again is paid by every job
 # after it. A cost on the second run alone is mostly not a leak, and the
 # reason is the allocator rather than the collector: a released block serves
-# a later request only where the request fits it, so a run asking for a
-# spread of sizes needs fresh space for each size it holds no suitable
-# released block for. One workload here costs a megabyte and a half on its
+# a later request only where it is at least as large as the request, so a run
+# asking for a spread of sizes needs fresh space for every size larger than
+# anything released so far. One workload here costs a megabyte and a half on its
 # second run and exactly nothing from its fifth. So anything that costs
 # something is asked again after four more runs. Ninety-odd workloads are
 # held either to being free on a second run or to reaching nothing by the

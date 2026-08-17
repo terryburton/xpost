@@ -23,10 +23,11 @@
 #                 collections between runs instead of one, over both banks
 #                 instead of one, give the same figure to the byte -- but the
 #                 allocator serves a request out of a released block only
-#                 where the request fits it, and refuses a block more than
-#                 half again as large rather than waste the remainder. A run
+#                 where that block is at least as large as the request: the
+#                 admission test is a plain comparison of the two sizes,
+#                 best-fit upward from the request's own size class. A run
 #                 asking for a spread of sizes therefore needs fresh space
-#                 for each size it holds no suitable released block for.
+#                 for every size larger than anything released so far.
 #                 Measured directly: a body whose requests are all one size,
 #                 or descend in size, costs NOTHING from its second run,
 #                 while the same body with ascending sizes costs 69,480 then

@@ -16,6 +16,22 @@
 # paid by the first run and not the second. Anything the second run pays for
 # again is paid for every job after it too.
 #
+# WHAT THE NUMBER IS. Each round reports the difference in the second value
+# vmstatus gives, taken before and after one run, with a collection asked for
+# at the end of the run. That value is mem->used, which xpost_memory.h calls
+# the cursor to free space: allocation from fresh arena advances it and
+# nothing ever moves it back, because reclamation puts blocks on the free
+# list rather than rewinding the arena. An allocation served out of the free
+# list therefore costs nothing here.
+#
+# So a round measures exactly one quantity: HOW MANY BYTES THIS RUN HAD TO
+# TAKE FROM FRESH ARENA BECAUSE NO RELEASED BLOCK COULD SERVE THEM. That is
+# what makes it the right instrument and also what makes it a strange one.
+# It is not live bytes, not bytes allocated, and not bytes leaked. A run that
+# allocates a hundred megabytes and releases them all reads zero on its
+# second pass; a run that holds one small object reads the size of that
+# object, every pass, for ever.
+#
 # WHY THIS IS NOT ONE THRESHOLD OVER EVERY TEST, AND WHY IT IS NOT ONE RUN.
 # Two things were measured over the whole directory before any of it was
 # written.
@@ -31,12 +47,12 @@
 # the reason is the allocator rather than the collector. Reclamation is not
 # the limit -- asking for five collections between runs instead of one, and
 # asking for both banks instead of one, gives the same figure to the byte.
-# What limits reuse is fit: a released block can serve a later request only
-# if the request fits it, and a block more than half again as large as the
-# request is refused rather than have its remainder wasted. A run asking for
-# a spread of sizes therefore needs fresh space for each size it holds no
-# suitable released block for, and acquires one only as earlier runs release
-# it. One workload here costs 1,536,488 bytes on its second run, 428,756 on
+# What limits reuse is size: a released block serves a later request only
+# where it is at least as large as the request -- the admission test is a
+# plain comparison of the two, searched best-fit upward from the request's
+# own size class. A run asking for a spread of sizes therefore needs fresh
+# space for every size larger than anything released so far, and comes to be
+# served only once a block that big has been released. One workload here costs 1,536,488 bytes on its second run, 428,756 on
 # its third, 49,236 on its fourth and exactly nothing from its fifth
 # onwards. A gate reading the second run alone would have called that a leak
 # of a megabyte and a half.
@@ -61,12 +77,11 @@
 #   fits          Costs something on a second run and nothing by the sixth.
 #                 The collector is not at fault and this is not a leak: what
 #                 the previous run released has been given back, but the
-#                 allocator can only serve a request out of a released block
-#                 the request fits, and it refuses one more than half again
-#                 as large as the request rather than waste the remainder. So
-#                 a run asking for a spread of sizes needs fresh space for
-#                 every size it has no suitable corpse for, and acquires one
-#                 only as earlier runs release it. Measured directly: a body
+#                 allocator can serve a request out of a released block only
+#                 where the block is at least as large as the request. So a
+#                 run asking for a spread of sizes needs fresh space for
+#                 every size larger than anything released so far, and comes
+#                 to be served only once a block that big has been released. Measured directly: a body
 #                 whose requests are all one size, or descend in size, costs
 #                 NOTHING from its second run; the same body with ascending
 #                 sizes costs 69,480 bytes on its second run, 33,096 on its
@@ -187,9 +202,9 @@ PS
 
     # It cost something on the second run, which by itself does not mean it
     # holds anything: the allocator serves a request out of a released block
-    # only where the request fits it, so a run asking for a spread of sizes
-    # needs fresh space for each size it holds no suitable released block
-    # for, and acquires one only as earlier runs release it.
+    # only where that block is at least as large as the request, so a run
+    # asking for a spread of sizes needs fresh space for every size larger
+    # than anything released so far.
     #
     # So the ones that cost anything are asked again, after four more runs,
     # by which point the released blocks cover the sizes asked for. Only
