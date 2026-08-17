@@ -331,15 +331,72 @@ end
     graphicsdict /currgstate get /colorrendering get
 } //.xpostsys /.defop get exec
 
-% string  findcolorrendering  name bool
-% one rendering serves every condition: the default instance
-% the rendering intent is named, or given as the string of a name
+% renderingintent  findcolorrendering  name bool
+% The name of a colour rendering dictionary for the requested intent
+% under the current device configuration and halftone, and whether that
+% dictionary satisfies the request exactly (PLRM 8.2).
+%
+% The name is renderingintent.deviceconfig.halftone: the intent verbatim
+% from the operand, and the other two parts obtained by calling the
+% ColorRendering procedure set. Going through the procedure set rather
+% than reading the two entries here is what PLRM 7.1.3 prescribes and
+% what lets a device customise the selection by overriding one procedure
+% instead of replacing the operator.
+%
+% A dictionary of the formed name in the ColorRendering category
+% satisfies the request. Where there is none the substitute procedure
+% proposes an alternate and the answer is false, which is how a program
+% learns that the name it holds is a proposal rather than a match; a
+% true answer alongside a name nothing registered would tell it the
+% opposite of the truth.
 /findcolorrendering [ [ /nametype ] [ /stringtype ] ] {
-    pop /DefaultColorRendering true
+    /ColorRendering /ProcSet findresource
+    dup /GetPageDeviceName get exec
+    exch /GetHalftoneName get exec
+    //.xpostsys /.crdname get exec
+    dup /ColorRendering resourcestatus {
+        pop pop true
+    }{
+        /ColorRendering /ProcSet findresource /GetSubstituteCRD get exec
+        false
+    } ifelse
 } //.xpostsys /.defop get exec
 currentglobal true setglobal
 /DefaultColorRendering 0 dict dup /ColorRenderingType 1 put
 /ColorRendering defineresource pop
+
+% The parts of CRD selection a device is meant to be able to replace
+% (PLRM 7.1.3). They are a procedure set and not operators because that
+% is what the specification makes them, and because the point of them is
+% that a device overrides one: an operator in systemdict is sealed here,
+% and a procedure in a resource instance is not.
+/ColorRendering <<
+    % -  GetPageDeviceName  name
+    % the device configuration part of a CRD name: the page device's own
+    % PageDeviceName where it names one, and otherwise none. A null value
+    % names nothing, which is the state of a device with a single
+    % configuration, and is not distinguished here from the entry being
+    % absent.
+    /GetPageDeviceName {
+        currentpagedevice /PageDeviceName 2 copy known
+            { get dup null eq { pop /none } if }{ pop pop /none } ifelse
+    } bind
+    % -  GetHalftoneName  name
+    % the halftone part: the current halftone dictionary's HalftoneName
+    % where it carries one, and otherwise none. PLRM allows a screen to
+    % be analysed into a name instead; nothing here does, because a name
+    % derived from the screen would have to agree with whatever a program
+    % registered its dictionary under, and only the program knows that.
+    /GetHalftoneName {
+        currenthalftone /HalftoneName 2 copy known
+            { get dup null eq { pop /none } if }{ pop pop /none } ifelse
+    } bind
+    % name  GetSubstituteCRD  name
+    % the alternate to propose when no dictionary of the formed name
+    % exists. The choice is device-dependent and the last resort is the
+    % default instance, which is the only one this fleet registers.
+    /GetSubstituteCRD { pop /DefaultColorRendering } bind
+>> /ProcSet defineresource pop
 setglobal
 
 % redproc greenproc blueproc grayproc  setcolortransfer  -
@@ -1273,6 +1330,44 @@ put
     { /sethalftone cvx /rangecheck signalerror } if
 } bind put
 
+% The entries PLRM types that no halftone type requires, and the types
+% each one takes (PLRM Tables 7.4 to 7.9).
+%
+% Held by name over whatever dictionary arrives rather than per halftone
+% type, for the reason .htextent is: PLRM makes both available across
+% several types -- HalftoneName in every type it defines, AccurateScreens
+% in types 1 and 2 -- so a list per type would have to be extended for
+% every type, including one nobody had thought of yet.
+.xpostsys /.htoptypes <<
+    /AccurateScreens [ /booleantype ]
+    /HalftoneName [ /nametype /stringtype ]
+>> put
+
+% ht  .htoptional  -
+% Hold every optional entry the dictionary carries to the type PLRM gives
+% it. Neither value is read by anything here -- there is one screening
+% algorithm, so AccurateScreens leaves ordinary halftoning in force, and
+% HalftoneName is read by the CRD selection rather than by the screen --
+% but a value of the wrong type is still refused: currenthalftone hands
+% the dictionary back, so accepting one stores the fault where a later
+% reader meets it, and a program that misspells the value has no other
+% way of being told.
+.xpostsys /.htoptional {
+    3 dict begin
+    /ht exch def
+    //.xpostsys /.htoptypes get {
+        /want exch def
+        ht 1 index known {
+            ht exch get type
+            /ok false def
+            want { 1 index eq { /ok true def } if } forall
+            pop
+            ok not { /sethalftone cvx /typecheck signalerror } if
+        }{ pop } ifelse
+    } forall
+    end
+} bind put
+
 % name  .marktransfer  proc
 % The function a colour component goes through on its way to a mark:
 % the graphics state slot the name asks for, unless the halftone in
@@ -1520,6 +1615,7 @@ put
         /sethalftone cvx /rangecheck signalerror
     } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse
     ht //.xpostsys /.htextent get exec
+    ht //.xpostsys /.htoptional get exec
     end
 } put
 

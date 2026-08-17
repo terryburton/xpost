@@ -54,7 +54,8 @@ awk '$2 == "screens" { print $1 }' "$work/reg" | LC_ALL=C sort > "$work/reg-scre
 # the divergence section: a name, a disposition, and a reason
 grep -v '^[[:space:]]*#' "$src/tests/halftone-facts" \
     | awk 'NF >= 3 && $1 !~ /^[0-9]+$/ && $1 != "entries" && $1 != "divergences" \
-           && $1 != "entry" && $1 != "entries-reached"' \
+           && $1 != "entry" && $1 != "entries-reached" \
+           && $1 != "optional" && $1 != "optionals"' \
     > "$work/div"
 awk '{ print $1 }' "$work/div" | LC_ALL=C sort > "$work/div-names"
 
@@ -482,6 +483,183 @@ case $said in
         fi ;;
 esac
 
+# ---- the optional entries PLRM types, held to the interpreter's table
+#
+# .htoptypes is where the rule lives, so it is what the register is held
+# to: a name in one and not the other fails, and so does a disagreement
+# about which types the entry may hold. Nothing here READS either value,
+# which is exactly why the typing needs holding -- a check nothing
+# depends on is one that can be dropped without any test noticing.
+awk '/\.xpostsys \/\.htoptypes </, /^>> put/' "$src/data/gstate.ps" \
+    | sed -n 's|^[[:space:]]*/\([A-Za-z0-9]*\)[[:space:]]*\[\([^]]*\)\].*|\1 \2|p' \
+    | while read -r nm types; do
+          printf '%s %s\n' "$nm" \
+              "$(printf '%s\n' "$types" | tr -d '/' | tr -s ' ' '\n' \
+                 | grep . | LC_ALL=C sort | paste -sd, -)"
+      done | LC_ALL=C sort > "$work/opt-src"
+
+grep -v '^[[:space:]]*#' "$src/tests/halftone-facts" \
+    | awk '$1 == "optional" && NF >= 4 { print $2, $3 }' \
+    | while read -r nm types; do
+          printf '%s %s\n' "$nm" \
+              "$(printf '%s\n' "$types" | tr ',' '\n' | grep . \
+                 | LC_ALL=C sort | paste -sd, -)"
+      done | LC_ALL=C sort > "$work/opt-reg"
+
+nopt=$(grep -c . "$work/opt-reg" || true)
+if [ "$nopt" -lt 1 ] || [ "$(grep -c . "$work/opt-src")" -lt 1 ]; then
+    echo "FAILURES: the optional-entry table is empty on one side"
+    echo "      (register $nopt, source $(grep -c . "$work/opt-src")). Two"
+    echo "      empty sets agree about nothing, so this cannot report"
+    exit 1
+fi
+
+awk '{ print $1 }' "$work/opt-reg" > "$work/opt-reg-names"
+awk '{ print $1 }' "$work/opt-src" > "$work/opt-src-names"
+guard_held=0
+guard_hold "$work/opt-reg-names" "$work/opt-src-names" \
+    "named as an optional entry in tests/halftone-facts and absent from
+      .htoptypes in data/gstate.ps. Either the entry stopped being typed
+      or the line is stale:" \
+    "typed by .htoptypes and named by no 'optional' line in
+      tests/halftone-facts. Say what the entry is and which types PLRM
+      gives it:"
+[ "$guard_held" -eq 0 ] || fail=1
+
+if ! diff_out=$(diff "$work/opt-reg" "$work/opt-src" 2>&1); then
+    echo "FAIL: the register and .htoptypes disagree about which types an"
+    echo "      optional entry may hold. PLRM's tables decide, and the"
+    echo "      register carries the citation:"
+    printf '%s\n' "$diff_out" | sed 's/^/        /'
+    fail=1
+fi
+
+# and each one PROBED: a value of a type the entry may hold is accepted,
+# and one of a type it may not is a typecheck. Both directions, because a
+# check that refuses everything passes a test that only offers it a bad
+# value.
+litfor() {
+    case $1 in
+        booleantype) echo 'true' ;;
+        integertype) echo '42' ;;
+        realtype)    echo '1.5' ;;
+        numbertype)  echo '42' ;;
+        nametype)    echo '/probename' ;;
+        stringtype)  echo '(probe)' ;;
+        arraytype)   echo '[ 1 2 ]' ;;
+        dicttype)    echo '<< >>' ;;
+        proctype)    echo '{ }' ;;
+        *)           echo '' ;;
+    esac
+}
+
+cat > "$work/opt.ps" <<'PSEOF'
+/probe {                                % /Name value (label)  .  -
+    /lbl exch def /val exch def /nm exch def
+    nm 40 string cvs print ( ) print lbl print ( ) print
+    << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
+    dup nm val put
+    { sethalftone } stopped
+    { $error /errorname get 40 string cvs print }{ (ok) print } ifelse
+    (\n) print
+    clear
+} bind def
+PSEOF
+
+: > "$work/opt-want"
+while read -r nm types; do
+    for t in $(printf '%s\n' "$types" | tr ',' ' '); do
+        lit=$(litfor "$t")
+        if [ -z "$lit" ]; then
+            echo "FAIL: this cannot build a $t value, so it cannot probe"
+            echo "      $nm. Teach litfor the type or this reports on nothing."
+            fail=1
+            continue
+        fi
+        printf '/%s %s (takes-%s) probe\n' "$nm" "$lit" "$t" >> "$work/opt.ps"
+        printf '%s takes-%s ok\n' "$nm" "$t" >> "$work/opt-want"
+    done
+    # a type the entry may NOT hold, chosen from the candidates rather
+    # than written down, so an entry that gains a type does not leave a
+    # stale wrong-value case behind
+    for t in booleantype integertype nametype stringtype arraytype; do
+        case ",$types," in *",$t,"*) continue ;; esac
+        printf '/%s %s (refuses-%s) probe\n' "$nm" "$(litfor "$t")" "$t" \
+            >> "$work/opt.ps"
+        printf '%s refuses-%s typecheck\n' "$nm" "$t" >> "$work/opt-want"
+        break
+    done
+done < "$work/opt-reg"
+
+XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
+    "$work/opt.ps" </dev/null 2>/dev/null \
+    | tr -d "$cr" | awk 'NF == 3 { print }' > "$work/opt-got"
+
+if ! diff_out=$(diff "$work/opt-want" "$work/opt-got" 2>&1); then
+    echo "FAIL: an optional entry did not answer for its type as the"
+    echo "      register says it should (wanted < , got >):"
+    printf '%s\n' "$diff_out" | sed 's/^/        /'
+    fail=1
+fi
+
+# ---- the settled difference over accurate screening, held to whether a
+# second algorithm has arrived
+#
+# The register settles this on the ground that a true AccurateScreens
+# leaves ordinary halftoning in force and that the screen actually
+# achieved is reported honestly. Both halves are probed: if the two
+# settings ever produce different achieved frequencies then a second
+# algorithm exists and the line must be retired, and if the achieved
+# frequency stops being written the justification has gone.
+cat > "$work/acc.ps" <<'PSEOF'
+/ask {                                  % bool  .  -
+    /flag exch def
+    << /HalftoneType 1 /Frequency 60 /Angle 30 /SpotFunction { pop pop 0 }
+       /ActualFrequency 0 /ActualAngle 0 /AccurateScreens flag >>
+    dup sethalftone
+    dup /ActualFrequency get 20 string cvs print ( ) print
+    /ActualAngle get 20 string cvs print (\n) print
+} bind def
+true ask
+false ask
+PSEOF
+XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
+    "$work/acc.ps" </dev/null 2>/dev/null \
+    | tr -d "$cr" | awk 'NF == 2 { print }' > "$work/acc-got"
+accn=$(grep -c . "$work/acc-got" || true)
+if [ "$accn" -ne 2 ]; then
+    echo "FAILURES: the accurate-screening probe answered $accn lines, not 2,"
+    echo "      so it cannot report on the difference the register settles"
+    exit 1
+fi
+acc_true=$(sed -n 1p "$work/acc-got")
+acc_false=$(sed -n 2p "$work/acc-got")
+if [ "$acc_true" = "$acc_false" ]; then
+    if ! grep -q '^one-screening-algorithm ' "$work/div"; then
+        echo "FAIL: asking for accurate screening changes nothing about the"
+        echo "      screen achieved, and the register does not say so. Add a"
+        echo "      'one-screening-algorithm' line with the reason."
+        fail=1
+    fi
+else
+    if grep -q '^one-screening-algorithm ' "$work/div"; then
+        echo "FAIL: tests/halftone-facts settles the accurate-screening"
+        echo "      difference on there being one algorithm, and the two"
+        echo "      settings now achieve different screens ($acc_true vs"
+        echo "      $acc_false). Retire the line in the commit that changed it."
+        fail=1
+    fi
+fi
+# the justification rests on the achieved screen being reported at all
+case $acc_true in
+    "0 0"|"")
+        echo "FAIL: the register settles accurate screening on sethalftone"
+        echo "      reporting the screen it achieved, and ActualFrequency and"
+        echo "      ActualAngle came back as '$acc_true'. Without that report"
+        echo "      the difference is silent and is not settled."
+        fail=1 ;;
+esac
+
 # ---- every divergence says what will become of it
 while read -r what disp rest; do
     case $disp in
@@ -510,6 +688,20 @@ case $entries in
             fail=1
         fi ;;
 esac
+# the declared optionals count, for the reason the divergences count is
+# declared: nothing else would stop the section being emptied, and two
+# empty sets agree
+noptsaid=$(awk '/^optionals /{ print $2; found = 1 } END { if (!found) print "" }' \
+    "$src/tests/halftone-facts")
+case $noptsaid in
+    ''|*[!0-9]*)
+        echo "FAILURES: tests/halftone-facts has no 'optionals <n>' line"
+        fail=1 ;;
+    *)  if [ "$noptsaid" -ne "$nopt" ]; then
+            echo "FAILURES: tests/halftone-facts records $noptsaid optional entries and holds $nopt"
+            fail=1
+        fi ;;
+esac
 ndivsaid=$(awk '/^divergences /{ print $2; found = 1 } END { if (!found) print "" }' \
     "$src/tests/halftone-facts")
 ndiv=$(grep -c . "$work/div" || true)
@@ -524,5 +716,5 @@ case $ndivsaid in
 esac
 
 [ "$fail" = 0 ] || exit 1
-printf 'SUCCESS (%s types classified, %s screened, %s normalised, %s differences named)\n' \
-    "$nreg" "$nscr" "$(grep -c . "$work/reg-pairs")" "$ndiv"
+printf 'SUCCESS (%s types classified, %s screened, %s normalised, %s optional entr(y|ies) typed, %s differences named)\n' \
+    "$nreg" "$nscr" "$(grep -c . "$work/reg-pairs")" "$nopt" "$ndiv"

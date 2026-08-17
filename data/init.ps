@@ -289,6 +289,25 @@ currentglobal true setglobal
     string dup 0 6 -1 roll putinterval % b an str
     dup 4 2 roll exch putinterval % (ab)
 } bind put
+
+% intent deviceconfig halftone  .crdname  name
+% The three parts of a colour rendering dictionary's name, joined with
+% the separator PLRM 8.2 spells the name with. Each part may arrive as a
+% name or as a string and contributes its text either way, so the intent
+% goes in verbatim however the program supplied it.
+.xpostsys /.crdname {
+    4 dict begin
+    /astext { dup type /stringtype ne { dup length string cvs } if } bind def
+    /ht exch astext def
+    /dc exch astext def
+    astext
+    (.) //.xpostsys /.strcat get exec
+    dc //.xpostsys /.strcat get exec
+    (.) //.xpostsys /.strcat get exec
+    ht //.xpostsys /.strcat get exec
+    cvn
+    end
+} bind put
 setglobal
 
 % -  .adoptexactpage  -

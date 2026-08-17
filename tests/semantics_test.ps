@@ -331,8 +331,23 @@ false setstrokeadjust
 0.5 setsmoothness currentsmoothness 0.5 eq (smoothness is recorded) assert
 /StandardEncoding findencoding length 256 eq
 (findencoding resolves through the Encoding category) assert
-(any) findcolorrendering exch /DefaultColorRendering eq and
-(findcolorrendering names the default instance) assert
+% findcolorrendering forms intent.deviceconfig.halftone and answers true
+% only when a dictionary of that name is registered (PLRM 8.2). An intent
+% nothing was registered for gets the substitute and FALSE, which is what
+% tells the program the name is a proposal rather than a match.
+(any) findcolorrendering
+not exch /DefaultColorRendering eq and
+(findcolorrendering proposes the default for an unregistered intent) assert
+/Perceptual.none.none << /ColorRenderingType 1 >> /ColorRendering defineresource pop
+/Perceptual findcolorrendering
+exch /Perceptual.none.none eq and
+(findcolorrendering finds a dictionary registered under the name it forms) assert
+<< /HalftoneType 1 /Frequency 60 /Angle 0 /SpotFunction { pop pop 0 }
+   /HalftoneName /Named >> sethalftone
+/Perceptual.none.Named << /ColorRenderingType 1 >> /ColorRendering defineresource pop
+/Perceptual findcolorrendering
+exch /Perceptual.none.Named eq and
+(the current halftone's name is part of the name it forms) assert
 count /st.cd exch def
 cachestatus
 count st.cd sub 7 eq (cachestatus reports seven values) assert
