@@ -95,6 +95,8 @@ xpost_create
 xpost_ctx
 xpost_data_dir_get
 xpost_destroy
+xpost_dev_band_clamp_rows
+xpost_dev_band_page_begin
 xpost_dev_blit_row
 xpost_dev_class_install
 xpost_dev_create_begin

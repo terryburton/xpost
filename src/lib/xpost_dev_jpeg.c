@@ -195,11 +195,7 @@ static void _clear(PrivateData *p, int from, int to)
     Xpost_Jpeg_Pixel init;
     Xpost_Dev_Raster_Offset i, n;
 
-    if (from < 0)
-        from = 0;
-    if (to > p->band.bufrows - 1)
-        to = p->band.bufrows - 1;
-    if (from > to)
+    if (!xpost_dev_band_clamp_rows(&p->band, &from, &to))
         return;
 
     init.red = init.green = init.blue = 255;
@@ -745,15 +741,6 @@ static void _prime(Xpost_Context *ctx, Xpost_Object devdic, PrivateData *p)
 /* Begin a page: nothing of it written and no stream open for it. What
    the raster holds is not touched -- the marks of the page about to be
    written are already on it by the time anything here runs. */
-static void _page_begin(void *state)
-{
-    PrivateData *p = state;
-
-    p->band.next = 0;
-    p->band.primed = 0;
-    p->band.open = 0;
-    p->band.done = 0;
-}
 
 /* The row of the page at @p y as the compressor wants it: the buffer's,
    where this device is holding that row, and the ground where it is

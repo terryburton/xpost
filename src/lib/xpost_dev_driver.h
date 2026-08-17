@@ -624,6 +624,29 @@ int xpost_dev_page_moveband_call(Xpost_Context *ctx, Xpost_Object devdic,
                                  Xpost_Object top, Xpost_Object rows,
                                  const Xpost_Dev_Page_Codec *codec);
 
+
+/**
+ * @brief Put the band state back to where a page begins.
+ *
+ * Four flags, and which four is the whole of it: a page that began
+ * without clearing @c primed would never have its ground laid again,
+ * and would show the page before's wherever the new one paints nothing.
+ * There is nothing device-specific here, which is why it is here.
+ */
+void xpost_dev_band_page_begin(Xpost_Dev_Band *band);
+
+/**
+ * @brief Hold a run of rows to the raster the device actually has.
+ *
+ * Clamps @p from and @p to onto the buffer and answers whether anything
+ * is left. Three bounds and an emptiness test, none of them obvious
+ * enough to be worth writing twice.
+ *
+ * @return nonzero where the run has rows in it
+ */
+int xpost_dev_band_clamp_rows(const Xpost_Dev_Band *band,
+                              int *from, int *to);
+
 /**
  * @brief Define the five accessors a device's codec answers with.
  *
@@ -663,6 +686,10 @@ int xpost_dev_page_moveband_call(Xpost_Context *ctx, Xpost_Object devdic,
     static void _disown(void *p)                                        \
     {                                                                   \
         ((P *)p)->bufowned = 0;                                         \
+    }                                                                   \
+    static void _page_begin(void *p)                                    \
+    {                                                                   \
+        xpost_dev_band_page_begin(&((P *)p)->band);                     \
     }                                                                   \
     static void _prime_of(Xpost_Context *c, Xpost_Object d, void *p)    \
     {                                                                   \

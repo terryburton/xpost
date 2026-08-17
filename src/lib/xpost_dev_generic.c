@@ -2432,6 +2432,29 @@ void xpost_dev_page_retire(void *priv, Xpost_Dev_Band *band, int has_raster,
     codec->reclaim(priv);
 }
 
+/* Where a page begins, for the band state. Four flags and no device in
+   them; the one that matters is primed, since a page that began without
+   clearing it would never have its ground laid again. */
+void
+xpost_dev_band_page_begin(Xpost_Dev_Band *band)
+{
+    band->next = 0;
+    band->primed = 0;
+    band->open = 0;
+    band->done = 0;
+}
+
+/* A run of rows held to the raster the device has. */
+int
+xpost_dev_band_clamp_rows(const Xpost_Dev_Band *band, int *from, int *to)
+{
+    if (*from < 0)
+        *from = 0;
+    if (*to > band->bufrows - 1)
+        *to = band->bufrows - 1;
+    return *from <= *to;
+}
+
 /* A MoveBand method entire. Which rows the raster next stands for is
    the band machinery's; what a device adds is beginning a page, laying
    the ground and clearing the run, and the order of those three is the
