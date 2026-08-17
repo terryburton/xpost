@@ -1,0 +1,126 @@
+# The counters that name things, and what a counter that runs out gives up.
+#
+# A cache is asked whether it already holds the answer to a question, and
+# it answers by comparing a key. Where part of that key is a number a
+# counter handed out, the cache is only as trustworthy as the promise
+# that the number is never handed out twice. A counter is not state that
+# leaks; it is state that REPEATS, which is worse, because the second use
+# of a number looks exactly as legitimate as the first and what comes
+# back is the wrong answer to a question nobody thought to ask again.
+#
+# Two things break that promise. A counter kept in virtual memory is
+# wound back by restore, and the entries it named are not, so the next
+# value is one the cache has already filed something under. And a counter
+# of any width eventually runs out; when it starts again, everything it
+# named before is indistinguishable from everything it is about to name.
+#
+# The first is answered by where the counter lives: every counter here
+# that names anything is a file-scope static in C, which no restore can
+# reach. The second cannot be answered by where it lives, only by what
+# happens when it happens -- so that is what each counter is held to
+# saying.
+#
+# The disposition each counter carries:
+#
+#   mints <function>      The values become part of a cache key. When the
+#                         counter runs out, that function is called to
+#                         give up everything the old numbers named,
+#                         before any number is handed out again. Checked:
+#                         the function exists, and the function that
+#                         advances the counter both tests it for
+#                         exhaustion and calls it.
+#
+#   mints-signalled <why> The values become part of a cache key, and what
+#                         they name is not this module's to give up. The
+#                         counter restarts BELOW the last value it handed
+#                         out, and the holder of the cache reads that as
+#                         the instruction to drop it. The reason must say
+#                         who reads it and how. Checked: the function
+#                         that advances the counter tests it for
+#                         exhaustion.
+#
+#   decides <why>         The value is not part of any key, but a cache
+#                         reads it to decide whether what it holds is
+#                         still usable. A cache that declines to hold is
+#                         not obviously broken and costs more than no
+#                         cache at all, so the reason must say what the
+#                         reading decides.
+#
+#   counts <why>          It names nothing and decides nothing: a total,
+#                         a limit, a length or a nesting depth. Running
+#                         out costs an inaccurate number, never a wrong
+#                         answer. The reason must say which it is.
+#
+# The population is derived, not listed: every file-scope static in
+# src/lib whose declaration carries no * and whose type is integral --
+# pointers belong to tests/library_statics.golden, which speaks for a
+# different question -- and which is ADVANCED somewhere in its own file,
+# by ++, --, += or -=. Advancing is the mechanism, not the name: a
+# counter called _serial_next and a counter called n are the same thing
+# to a cache, and deriving on the spelling would have found the ones
+# already thought about and missed exactly the one nobody had.
+#
+#   <file>  <name>  <disposition>  <reason or function>
+
+src/lib/xpost_op_font.c      _fontserial_next     mints  xpost_mask_cache_clear
+src/lib/xpost_dev_generic.c  _region_serial_next  mints  _region_memo_flush
+
+src/lib/xpost_op_path.c      _form_serial_next    mints-signalled  the form cache lives in
+  graphicsdict beside .formlast, the last serial it was given; a serial no greater than
+  that one is the counter having restarted, and .formcachedrop gives the cache up
+
+src/lib/xpost_op_path.c      _clipcuts            decides  the count of clips applied,
+  read before a form's drawing is captured and again after, so a capture made under a clip
+  that changed part way through is not offered to a later placement
+
+src/lib/xpost_dev_generic.c  _region_memo_clock   counts  the order the memo's entries were
+  last used, so the one to give up is the one used longest ago; a wrap costs a poor choice
+  of victim, never a wrong region
+src/lib/xpost_font.c         gcache_bsize         counts  the bytes of glyph raster held
+src/lib/xpost_font.c         gcache_csize         counts  the glyphs held
+src/lib/xpost_font.c         gcache_nstate        counts  the live entries in the per-face
+  transform table, which is an extent, not a name
+src/lib/xpost_font.c         _xpost_font_faces    counts  the faces open at this moment,
+  which is what xpost_font_faces_held answers
+src/lib/xpost_op_font.c      face_cache_n         counts  the slots of the face cache in
+  use, which is an extent
+src/lib/xpost_garbage.c      _xpost_garbage_work_n  counts  the entries on the collector's
+  work list
+src/lib/xpost_interpreter.c  _contexts_created    counts  how many contexts this process
+  has built, read only to tell the first from the rest
+src/lib/xpost_main.c         _xpost_at_quit_n     counts  the functions registered to be
+  called when the library goes down
+src/lib/xpost_main.c         _xpost_init_count    counts  how deep the library's init and
+  quit are nested, so the last quit is the one that takes it down
+src/lib/xpost_op_context.c   _join_wait_spins     counts  how many times a join has spun
+  waiting, which is reported and never compared
+
+# ---- obligations ----
+#
+# Two invariants the counters above rest on which are not properties of a
+# counter, and so have nowhere else to be written down. Each is held to
+# the mechanism that enforces it, so that removing the enforcement fails
+# here rather than going quiet.
+#
+#   colocated <file> <dict> <a> <b>
+#       Two names must live in the same dictionary. A serial and the
+#       cache it keys are wound back by restore together only if one
+#       restore reaches both; put them in different dictionaries and the
+#       cache outlives the number that says which entries are whose.
+#
+#   detects <file> <remembered> <dropper>
+#       A counter that gives up nothing itself, and restarts below the
+#       last value it handed out so that somebody else does, is only
+#       safe if that somebody exists. The remembered value and the
+#       giving up must sit together, so that a signal sent has a reader.
+#
+#   releases <file> <function> <field>
+#       A cache keyed on the address of a thing must give up its entries
+#       where that thing is released, not at the teardown. An address is
+#       reissued freely within one run, so entries surviving the release
+#       of what they name are entries a later, unrelated thing collides
+#       with.
+
+obligation  colocated  data/init.ps          graphicsdict          .formcache  .formlast
+obligation  detects    data/init.ps          .formlast             .formcachedrop
+obligation  releases   src/lib/xpost_font.c  xpost_font_face_free  k1

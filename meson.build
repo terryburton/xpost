@@ -4718,6 +4718,18 @@ test('check-library-lifetime',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# Part of several cache keys is a number a counter handed out, and such a
+# cache is exactly as good as the promise that no number is handed out
+# twice. A counter in virtual memory is wound back by restore while what
+# it named is not, and a counter of any width runs out. Every counter the
+# source advances is held to saying which kind it is, and one that names
+# anything is held to giving up what the old numbers named before it
+# starts again.
+test('check-counter-register',
+  find_program('tests/check-counter-register.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table
 # and the .devicemakers dictionary name the same devices -- and the test
