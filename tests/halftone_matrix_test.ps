@@ -192,6 +192,10 @@
     /undefined (a type 3 with no Height) raises
 { << /HalftoneType 3 /Width 2 /Height 2 >> sethalftone }
     /undefined (a type 3 with no Thresholds) raises
+{ << /HalftoneType 3 /Width 4 /Height 4 /Thresholds <0011> >> sethalftone }
+    /rangecheck (a type 3 with fewer thresholds than it declares) raises
+{ << /HalftoneType 10 /Xsquare 3 /Ysquare 2 /Thresholds <0011> >> sethalftone }
+    /rangecheck (a type 10 with fewer thresholds than its squares hold) raises
 
 % A type 6 demands the same three entries, and PLRM Table 7.6 makes its
 % Thresholds a file specifically -- a string is the type 3 spelling.

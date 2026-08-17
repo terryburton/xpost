@@ -1,0 +1,70 @@
+# What each halftone type is, how it is screened, and where this
+# interpreter and the specification differ about it.
+#
+# PLRM Table 7.3 names ten types of halftone dictionary. They are not
+# alike: some carry a spot function, some a threshold array, one is a
+# composite keyed by colorant, two describe a cell that sits at an
+# angle, and two carry no screen at all. A program meets those
+# differences directly -- a type that answers rangecheck is a type it
+# cannot use -- and a feature given to one of them is a question that
+# has to be put to the rest.
+#
+# Membership is DERIVED. The guard asks the interpreter about every type
+# code from 0 to 100 and calls a type SCREENED when sethalftone answers
+# anything but rangecheck, so a type newly implemented shows up here
+# whether or not anyone remembered to say so, and one that quietly stops
+# working shows up too. The register is held to that answer in both
+# directions.
+#
+# Each line is
+#
+#   <type>  <screens|refused>  <lattice>  <normaliser>  <component>  <reason>
+#
+# lattice     where the cell geometry comes from. spot: searched for
+#             from a frequency and an angle. sides: stated outright.
+#             parts: the components carry their own. none: no cell.
+#             Held to the source: whatever the value, the determinant
+#             and the tile side must come from the one derivation, so a
+#             second parameterisation cannot be written without saying
+#             so here.
+# normaliser  which helper presents this type as a simpler one, or none.
+#             DERIVED from the router in data/gstate.ps and held to this
+#             column both ways: a type that acquires a helper of its own
+#             fails here rather than passing unexamined.
+# component   whether PLRM 7.4.6 allows the type inside a type 5
+#             dictionary -- may, or maynot. Probed against the
+#             interpreter; a disagreement must appear in the divergences
+#             below or the guard fails.
+# reason      required. For a screened type, what the type is; for a
+#             refused one, why there is nothing to screen with.
+
+1    screens  spot   none        may     a single screen given as frequency, angle and spot function, PLRM Table 7.4
+2    screens  spot   graytriple  maynot  four screens, one per primary, each a frequency, angle and spot function; this interpreter screens grey, so the grey triple is the one that reaches a device
+3    screens  sides  none        may     a single screen given as an 8-bit threshold array in a string, PLRM Table 7.5
+4    screens  sides  graytriple  maynot  four threshold screens, one per primary; the grey one reaches the device as in a type 2
+5    screens  parts  component   maynot  a composite keyed by colorant name, whose components are dictionaries of other types, PLRM 7.4.6
+6    screens  sides  none        may     a type 3 whose threshold array arrives through a file rather than a string, PLRM Table 7.6
+9    refused  none   none        may     a proprietary halftone (PLRM 7.4.7) carrying no screen: only the type and perhaps a name. The screen lives in a device built for the technique, and no device here has one
+10   screens  sides  angledcell  may     a cell at a nonzero screen angle, given as the two squares it divides into, PLRM Table 7.7
+16   screens  sides  angledcell  may     a type 6 at two bytes a threshold, optionally with the second rectangle that makes it an angled cell, PLRM Table 7.8
+100  refused  none   none        may     a proprietary halftone as type 9 is, able to carry further entries private to one product. Same reason, same absence of a device with the technique
+
+entries 10
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference. A difference the guard can see and this
+# list does not name is a failure; so is a line here naming a difference
+# the guard can no longer find, because a line that has outlived its
+# defect reads exactly like one that still holds.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+#
+# settled  the difference is deliberate and is not going to change
+# thorn    a known defect or gap, waiting on work
+# heading  being changed now
+
+component-2-4  thorn    PLRM 7.4.6 says a type 5 component may be of any type except 2, 4 or 5. This interpreter refuses a nested type 5 and accepts types 2 and 4, so the rule was written for one member of the family and not the others. Refusing them is a small change; it is held out of the factorisation work so that it carries its own test and its own adjudication
+transfer       thorn    PLRM makes TransferFunction optional in types 1, 3, 6, 10 and 16, unavailable in 2 and 4, and required for a type 5 component standing for a nonprimary or a DeviceN colorant. Nothing in this tree reads the entry: a dictionary carrying one is accepted, the procedure is kept as inert data and never overrides settransfer, and a type 5 component that PLRM says must have one is accepted without it
+side-extent    thorn    every type that states its cell in sides accepts a zero or negative one, and builds a screen with no places rather than refusing the dictionary. The behaviour is at least uniform across the family. PLRM gives the type of these entries but not the error for a value that describes no area, so which error to raise wants adjudicating before it is chosen
+
+divergences 3

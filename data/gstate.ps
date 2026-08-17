@@ -1170,6 +1170,13 @@ setglobal
             { /sethalftone cvx /typecheck signalerror } if
         ht /Thresholds get type dup /stringtype ne exch /filetype ne and
             { /sethalftone cvx /typecheck signalerror } if
+        % a string holds every threshold the array declares, or the
+        % array is short of the screen it describes (PLRM Table 7.5). A
+        % file is drawn from as far as it goes
+        ht /Thresholds get type /stringtype eq {
+            ht /Thresholds get length ht /Width get ht /Height get mul lt
+                { /sethalftone cvx /rangecheck signalerror } if
+        } if
     }{ dup 6 eq {
         pop
         % the same threshold array as a type 3, delivered through a file
@@ -1220,6 +1227,11 @@ setglobal
         % tile whose side is the sample count, so the tile is that
         % squared. One too large to hold is refused here rather than
         % truncated into a screen that is not the one asked for
+        ht /Thresholds get type /stringtype eq {
+            ht /Thresholds get length
+            ht /Xsquare get dup mul ht /Ysquare get dup mul add lt
+                { /sethalftone cvx /rangecheck signalerror } if
+        } if
         ht /Xsquare get dup mul ht /Ysquare get dup mul add
         ht /Xsquare get ht /Ysquare get //.xpostsys /.gcd get exec idiv
         dup mul 65535 gt

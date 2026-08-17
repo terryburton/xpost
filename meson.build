@@ -4766,6 +4766,15 @@ test('check-filter-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# And the same for halftones: PLRM names ten types of halftone
+# dictionary, this interpreter screens with eight, and the two it
+# refuses carry no screen to begin with. Which is which was written down
+# nowhere until the register.
+test('check-halftone-facts',
+  find_program('tests/check-halftone-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A Type 42 font dictionary owes the glyph complement PLRM Table 5.7
 # states, whether or not the TrueType file behind it names its glyphs,
 # and what it publishes has to be what the face can be asked to paint.

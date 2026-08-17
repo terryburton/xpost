@@ -266,6 +266,7 @@ graphics test graphics-load-stop
 graphics test graphics-regression
 graphics test gstate-*
 graphics test halftone-*
+graphics test check-halftone-facts
 graphics test imaging-bbox
 graphics test mask-cache-range
 graphics test matrix-backup
