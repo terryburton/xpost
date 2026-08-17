@@ -4952,7 +4952,7 @@ test('shared-helpers',
 # read as correctly refusing what they were actually testing. So the register
 # of suites that have not moved yet is held both ways, and a suite that asks
 # for the framework and then defines one of its names is refused outright.
-test('testlib',
+test('check-testlib',
   find_program('tests/check-testlib.sh'),
   args: [ meson.current_source_dir() ],
   suite: cost_fast,

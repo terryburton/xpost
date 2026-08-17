@@ -62,17 +62,61 @@ for legend in 'own    <suite>' 'cannot <suite>'; do
     fi
 done
 
-# ---- the harness prepends it, and only on the marker
-if ! grep -q 'testlib.ps' "$src/tests/run-ps-test.sh"; then
-    echo "FAIL: tests/run-ps-test.sh does not mention testlib.ps, so nothing"
-    echo "      prepends the framework and every suite asking for it is"
-    echo "      running without one."
+# ---- the framework is prepended, and only on the marker
+prep=$src/tests/testlib-prepend.sh
+if ! grep -q 'testlib.ps' "$prep" 2>/dev/null; then
+    echo "FAIL: tests/testlib-prepend.sh does not mention testlib.ps, so"
+    echo "      nothing prepends the framework and every suite asking for it"
+    echo "      is running without one."
     fail=1
 fi
-if ! grep -q "'%!testlib'" "$src/tests/run-ps-test.sh"; then
-    echo "FAIL: the harness does not look for the %!testlib marker. Prepending"
-    echo "      unconditionally breaks the suites that assert their own"
-    echo "      dictionary starts empty and the six that read their own source."
+if ! grep -q "'%!testlib'" "$prep" 2>/dev/null; then
+    echo "FAIL: the prepend helper does not look for the %!testlib marker."
+    echo "      Prepending unconditionally breaks the suites that assert their"
+    echo "      own dictionary starts empty and the six that read their own"
+    echo "      source through currentfile."
+    fail=1
+fi
+
+# ---- EVERY runner that runs a marked suite goes through that helper
+#
+# run-ps-test.sh is not the only script that runs a suite: eighty-five bespoke
+# runners here run the rest, each for its own reason -- an environment
+# variable, a device, a work directory. A marked suite handed to one of those
+# gets no framework at all, so its first assert is an undefined name and the
+# rest of the file reports nothing else. Running the suite through
+# run-ps-test.sh will not show it, because that one does prepend; only the
+# runner meson uses for it can.
+#
+# The pairing of suite to runner is read out of meson.build -- the nearest
+# find_program above the files() that names the suite -- and a runner that
+# runs a marked suite without sourcing the helper fails here.
+awk "
+    /find_program\('tests\/run-[A-Za-z0-9-]*\.sh'\)/ {
+        match(\$0, /run-[A-Za-z0-9-]*\.sh/); runner = substr(\$0, RSTART, RLENGTH)
+    }
+    /files\('tests\/[A-Za-z0-9_]*\.ps'\)/ {
+        match(\$0, /tests\/[A-Za-z0-9_]*\.ps/); suite = substr(\$0, RSTART, RLENGTH)
+        if (runner != \"\") print runner, suite
+    }
+" "$src/meson.build" | LC_ALL=C sort -u > "$work/pairs"
+
+: > "$work/unprepared"
+while read -r runner suite; do
+    [ -f "$src/$suite" ] || continue
+    head -n 1 "$src/$suite" 2>/dev/null | grep -q '^%!testlib' || continue
+    [ "$runner" = run-ps-test.sh ] && continue
+    grep -q 'testlib-prepend' "$src/tests/$runner" 2>/dev/null && continue
+    echo "$runner $suite" >> "$work/unprepared"
+done < "$work/pairs"
+
+if [ -s "$work/unprepared" ]; then
+    echo "FAIL: these suites ask for the shared framework and are run by a"
+    echo "      script that does not prepend it, so they run with no framework"
+    echo "      at all and their first assert is an undefined name. Source"
+    echo "      tests/testlib-prepend.sh in the runner and hand the"
+    echo "      interpreter \$testlib_run instead of \$script:"
+    sed 's/^/        /' "$work/unprepared"
     fail=1
 fi
 

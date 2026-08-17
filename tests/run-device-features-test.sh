@@ -26,6 +26,9 @@ case $script in /* | ?:/* | ?:\\*) ;; *) script=$PWD/$script ;; esac
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$script" "$work"
+
 # The window devices need a display and the Windows ones another platform;
 # everything else renders headless. The raster device is named once per
 # pixel format, since each keeps its buffer differently.
@@ -36,7 +39,7 @@ devices="$DEVICE_FLEET_MARKING raster:rgb raster:argb raster:bgr raster:bgra"
 fail=0
 ran=0
 for dev in $devices; do
-    out=$("$xpost" -q --no-sandbox -d "$dev" -o "$work/out.bin" "$script" \
+    out=$("$xpost" -q --no-sandbox -d "$dev" -o "$work/out.bin" "$testlib_run" \
           </dev/null 2>&1)
     status=$?
     ran=$((ran + 1))
@@ -63,7 +66,7 @@ has_xcb=no
 if [ "$has_xcb" = no ]; then
     echo "note: this interpreter has no window device, it was not tried"
 elif command -v xvfb-run >/dev/null 2>&1; then
-    out=$(xvfb-run -a "$xpost" -q --no-sandbox -d xcb "$script" </dev/null 2>&1)
+    out=$(xvfb-run -a "$xpost" -q --no-sandbox -d xcb "$testlib_run" </dev/null 2>&1)
     status=$?
     ran=$((ran + 1))
     if [ "$status" -ne 0 ]; then

@@ -25,7 +25,11 @@ else
 fi
 
 work=$(mktemp -d)
-out=$(XPOST_GROW_MOVES=1 "$xpost" -q $ns -d "$dev" -o "$work/out" "$script" </dev/null 2>&1)
+
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$script" "$work"
+
+out=$(XPOST_GROW_MOVES=1 "$xpost" -q $ns -d "$dev" -o "$work/out" "$testlib_run" </dev/null 2>&1)
 status=$?
 rm -rf "$work"
 printf '%s\n' "$out"

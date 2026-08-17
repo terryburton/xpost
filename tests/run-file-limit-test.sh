@@ -31,10 +31,13 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$script" "$work"
+
 out=$(
     cd "$work" || exit 1
     ulimit -n "$allowance"
-    "$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1
+    "$xpost" -q --no-sandbox -d null "$testlib_run" </dev/null 2>&1
 )
 status=$?
 printf '%s\n' "$out"

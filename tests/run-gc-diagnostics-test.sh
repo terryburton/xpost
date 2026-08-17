@@ -17,8 +17,14 @@ xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
 
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT INT TERM
+
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$script" "$work"
+
 out=$(XPOST_GC_VERIFY=1 XPOST_GC_XBANK_CHECK=1 XPOST_GC_CENSUS=1 \
-      "$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
+      "$xpost" -q --no-sandbox -d null "$testlib_run" </dev/null 2>&1)
 status=$?
 printf '%s\n' "$out"
 

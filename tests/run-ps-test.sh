@@ -44,19 +44,13 @@ define=${3:-}
 # through currentfile, which prepending would shift. So the opt-in is a
 # marker in the file, where a reader of the file can see it, rather than a
 # list kept over here.
-run=$script
-lib=$(dirname "$0")/testlib.ps
-case $(head -n 1 "$script" 2>/dev/null) in
-    '%!testlib'*)
-        if [ ! -f "$lib" ]; then
-            echo "FAILURES: $script asks for the test framework and"
-            echo "      $lib is not there"
-            exit 1
-        fi
-        run=$(mktemp "${TMPDIR:-/tmp}/xpost-testlib-XXXXXX.ps") || exit 1
-        trap 'rm -f "$run"' EXIT INT TERM
-        cat "$lib" "$script" > "$run" || exit 1 ;;
-esac
+# The marker is honoured in tests/testlib-prepend.sh, which every runner
+# here goes through -- this one is not the only script that runs a suite.
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT INT TERM
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$script" "$work"
+run=$testlib_run
 # A definition is passed only when one was asked for: every other suite
 # here asserts that a program's own dictionary starts empty, and a
 # definition made for one of them would be the thing that filled it.
