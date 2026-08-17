@@ -1,3 +1,4 @@
+%!testlib
 % What the object width means to a program, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -26,18 +27,6 @@
 % one another so that a build which widens one and not the others says
 % which.
 
-/failcount 0 def
-/checks 0 def
-/assert { % bool (name)  .  -
-    exch { pop }{ (FAIL: ) print print (\n) print
-        /failcount failcount 1 add store } ifelse
-    /checks checks 1 add store
-} def
-/erris { % {proc} /want (tag)  .  -
-    /e.tag exch def /e.want exch def
-    stopped { $error /errorname get e.want eq }{ false } ifelse
-    e.tag assert clear
-} def
 
 % ----------------------------------------------------- the three probes
 % Each face of the width is asked its own question, so a build that
@@ -111,7 +100,7 @@ widesz {
     -1 32 bitshift 0 eq (a shift of the whole field leaves nothing) assert
 
     % PLRM cvi: a real too large for an integer is a rangecheck
-    { 4294967296 cvi } /rangecheck (cvi refuses what the integer cannot hold) erris
+    { 4294967296 cvi } /rangecheck (cvi refuses what the integer cannot hold) raises
 
     % single precision: a third rounds up, so three of them pass three
     1.0 3 { 2 3 div add } repeat ceiling 4.0 eq
@@ -125,6 +114,6 @@ widesz {
 % carries, on top of the three shared ones, and a run that reports a
 % different number has taken a branch that stopped asserting -- which is
 % the way a test of two personalities goes quiet without failing.
-checks expected eq (every check in this build's arm was reached) assert
+checkcount expected eq (every check in this build's arm was reached) assert
 
-failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse
+verdict

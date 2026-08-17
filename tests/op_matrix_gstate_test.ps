@@ -1,3 +1,4 @@
+%!testlib
 % Matrix/coordinate and graphics-state operator compliance (PLRM 8.2), run through
 % `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
@@ -10,39 +11,34 @@
 %     nearest value in the range and raises nothing
 %   - rotate built its matrix through a truncated RAD_PER_DEG
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /assertnear { 3 1 roll sub abs 1e-3 lt exch assert } def
-/erris { 3 dict begin /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse
-    tag assert clear end } def
 
 initgraphics
 
 % --- a bad-length matrix is rangecheck (was an out-of-bounds read) ---
-{ 10 20 [1 0 0 1] transform }   /rangecheck (transform: short matrix is rangecheck) erris
-{ 10 20 [1 2 3 4 5 6 7] transform } /rangecheck (transform: long matrix is rangecheck) erris
-{ 10 20 [1 0 0 1] dtransform }  /rangecheck (dtransform: short matrix is rangecheck) erris
-{ 25 67 [1 0 0 1] itransform }  /rangecheck (itransform: short matrix is rangecheck) erris
-{ 20 60 [1 0 0 1] idtransform } /rangecheck (idtransform: short matrix is rangecheck) erris
-{ [1 0 0 1] matrix invertmatrix } /rangecheck (invertmatrix: short matrix is rangecheck) erris
+{ 10 20 [1 0 0 1] transform }   /rangecheck (transform: short matrix is rangecheck) raises
+{ 10 20 [1 2 3 4 5 6 7] transform } /rangecheck (transform: long matrix is rangecheck) raises
+{ 10 20 [1 0 0 1] dtransform }  /rangecheck (dtransform: short matrix is rangecheck) raises
+{ 25 67 [1 0 0 1] itransform }  /rangecheck (itransform: short matrix is rangecheck) raises
+{ 20 60 [1 0 0 1] idtransform } /rangecheck (idtransform: short matrix is rangecheck) raises
+{ [1 0 0 1] matrix invertmatrix } /rangecheck (invertmatrix: short matrix is rangecheck) raises
 
 % --- a bad-length destination matrix is rangecheck (was a silent arena overwrite) ---
-{ [1 2 3] identmatrix } /rangecheck (identmatrix: short destination is rangecheck) erris
-{ 90 [1 2 3] rotate } /rangecheck (rotate: short destination matrix is rangecheck) erris
-{ 2 2 [0 0 0] scale } /rangecheck (scale: short destination matrix is rangecheck) erris
-{ 1 1 [0 0 0 0 0] translate } /rangecheck (translate: short destination matrix is rangecheck) erris
-{ [1 0 0 1 0 0] [1 0 0 1 0 0] [1 2 3] concatmatrix } /rangecheck (concatmatrix: short destination is rangecheck) erris
+{ [1 2 3] identmatrix } /rangecheck (identmatrix: short destination is rangecheck) raises
+{ 90 [1 2 3] rotate } /rangecheck (rotate: short destination matrix is rangecheck) raises
+{ 2 2 [0 0 0] scale } /rangecheck (scale: short destination matrix is rangecheck) raises
+{ 1 1 [0 0 0 0 0] translate } /rangecheck (translate: short destination matrix is rangecheck) raises
+{ [1 0 0 1 0 0] [1 0 0 1 0 0] [1 2 3] concatmatrix } /rangecheck (concatmatrix: short destination is rangecheck) raises
 
 % --- a non-number coordinate is a typecheck: the matrix form's higher arity
 %     must not turn it into a stackunderflow; too few operands still underflows ---
-{ (x) 2 transform }   /typecheck (transform: a non-number coordinate is typecheck) erris
-{ 2 (y) transform }   /typecheck (transform: a non-number ordinate is typecheck) erris
-{ (x) 2 dtransform }  /typecheck (dtransform: a non-number coordinate is typecheck) erris
-{ (x) 2 itransform }  /typecheck (itransform: a non-number coordinate is typecheck) erris
-{ (x) 2 idtransform } /typecheck (idtransform: a non-number coordinate is typecheck) erris
-{ 3 transform }       /stackunderflow (transform: a single operand is stackunderflow) erris
-{ transform }         /stackunderflow (transform: no operands is stackunderflow) erris
+{ (x) 2 transform }   /typecheck (transform: a non-number coordinate is typecheck) raises
+{ 2 (y) transform }   /typecheck (transform: a non-number ordinate is typecheck) raises
+{ (x) 2 dtransform }  /typecheck (dtransform: a non-number coordinate is typecheck) raises
+{ (x) 2 itransform }  /typecheck (itransform: a non-number coordinate is typecheck) raises
+{ (x) 2 idtransform } /typecheck (idtransform: a non-number coordinate is typecheck) raises
+{ 3 transform }       /stackunderflow (transform: a single operand is stackunderflow) raises
+{ transform }         /stackunderflow (transform: no operands is stackunderflow) raises
 
 % --- transform / itransform round-trip with an explicit matrix ---
 10 20 [2 0 0 3 5 7] transform /ty exch def /tx exch def
@@ -76,13 +72,13 @@ save1 setmatrix matrix currentmatrix 0 get save1 0 get (currentmatrix restored) 
 % it, and the parameter goes on holding what it held.
 0 setlinecap currentlinecap 0 eq (setlinecap 0) assert
 2 setlinecap currentlinecap 2 eq (setlinecap 2) assert
-{ 3 setlinecap }  /rangecheck (setlinecap 3 is rangecheck) erris
-{ -1 setlinecap } /rangecheck (setlinecap -1 is rangecheck) erris
+{ 3 setlinecap }  /rangecheck (setlinecap 3 is rangecheck) raises
+{ -1 setlinecap } /rangecheck (setlinecap -1 is rangecheck) raises
 currentlinecap 2 eq (a refused cap leaves the parameter alone) assert
 1 setlinejoin currentlinejoin 1 eq (setlinejoin 1) assert
 2 setlinejoin currentlinejoin 2 eq (setlinejoin 2) assert
-{ 3 setlinejoin }  /rangecheck (setlinejoin 3 is rangecheck) erris
-{ -1 setlinejoin } /rangecheck (setlinejoin -1 is rangecheck) erris
+{ 3 setlinejoin }  /rangecheck (setlinejoin 3 is rangecheck) raises
+{ -1 setlinejoin } /rangecheck (setlinejoin -1 is rangecheck) raises
 currentlinejoin 2 eq (a refused join leaves the parameter alone) assert
 
 % --- setmiterlimit: >= 1 ---
@@ -92,10 +88,10 @@ currentlinejoin 2 eq (a refused join leaves the parameter alone) assert
 % magnitude.
 10 setmiterlimit currentmiterlimit 10 sub abs 1e-3 lt (setmiterlimit 10) assert
 1 setmiterlimit currentmiterlimit 1 sub abs 1e-3 lt (setmiterlimit 1 is the boundary) assert
-{ 0.5 setmiterlimit }   /rangecheck (setmiterlimit below 1 is rangecheck) erris
-{ 0.999 setmiterlimit } /rangecheck (setmiterlimit just below 1 is rangecheck) erris
-{ 0 setmiterlimit }     /rangecheck (setmiterlimit 0 is rangecheck) erris
-{ -3 setmiterlimit }    /rangecheck (a negative miter limit is rangecheck) erris
+{ 0.5 setmiterlimit }   /rangecheck (setmiterlimit below 1 is rangecheck) raises
+{ 0.999 setmiterlimit } /rangecheck (setmiterlimit just below 1 is rangecheck) raises
+{ 0 setmiterlimit }     /rangecheck (setmiterlimit 0 is rangecheck) raises
+{ -3 setmiterlimit }    /rangecheck (a negative miter limit is rangecheck) raises
 currentmiterlimit 1 sub abs 1e-3 lt
     (a refused miter limit leaves the parameter alone) assert
 
@@ -130,9 +126,9 @@ currentmiterlimit 1 sub abs 1e-3 lt
 % negative offset puts the ink is asserted in the graphics regression
 % test, which can see the stroke.
 [3 2] 1 setdash
-{ [1 -2] 0 setdash } /rangecheck (setdash: a negative element is rangecheck) erris
-{ [0 0] 0 setdash }  /rangecheck (setdash: an all-zero array is rangecheck) erris
-{ [0] 0 setdash }    /rangecheck (setdash: a single zero is rangecheck) erris
+{ [1 -2] 0 setdash } /rangecheck (setdash: a negative element is rangecheck) raises
+{ [0 0] 0 setdash }  /rangecheck (setdash: an all-zero array is rangecheck) raises
+{ [0] 0 setdash }    /rangecheck (setdash: a single zero is rangecheck) raises
 currentdash exch length 2 eq exch 1.0 sub abs 1e-3 lt and
     (a refused pattern leaves the parameter alone) assert
 { [0 1] 0 setdash } stopped not (setdash: one positive element is accepted) assert
@@ -146,4 +142,4 @@ currentdash exch length 2 eq exch 1.0 sub abs 1e-3 lt and
 5 setmiterlimit gsave 9 setmiterlimit grestore
 currentmiterlimit 5 sub abs 1e-3 lt (grestore restores miterlimit) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

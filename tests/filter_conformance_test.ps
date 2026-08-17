@@ -1,3 +1,4 @@
+%!testlib
 % Filter and scanner behaviours that a program packaging itself as a ProcSet
 % relies on (PLRM 3.8.4, 3.13), run through `xpost -d null` by run-ps-test.sh:
 % prints SUCCESS iff every assertion holds.
@@ -12,10 +13,6 @@
 % Two divergences from Adobe are recorded at the foot of this file rather than
 % asserted, so that neither is frozen in as though it were correct.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
-/erris { 3 dict begin /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse tag assert clear end } def
 
 % --- data sources: a filter takes a string, a file, or a procedure ---------
 
@@ -78,13 +75,13 @@ pk { pop /n n 1 add store } forall
 n 3 eq (forall walks a packed procedure) assert
 mark { pk 0 2 getinterval pop } stopped not exch cleartomark
     (getinterval reads a packed procedure) assert
-{ pk 0 /x put } /invalidaccess (a packed procedure refuses put) erris
+{ pk 0 /x put } /invalidaccess (a packed procedure refuses put) raises
 
 /ro { 1 2 add } cvlit readonly def
 /m 0 def
 ro { pop /m m 1 add store } forall
 m 3 eq (forall walks a read-only procedure) assert
-{ ro 0 /x put } /invalidaccess (a read-only procedure refuses put) erris
+{ ro 0 /x put } /invalidaccess (a read-only procedure refuses put) raises
 
 % --- gcheck reports which memory an object was allocated in ---------------
 % A library that must decide whether its queue may outlive a restore asks
@@ -100,4 +97,4 @@ gd gcheck (gcheck is true for a global object) assert
 % tests/filter_proc_test.ps, which holds the calls to the contract PLRM
 % 3.13.1 states for them.
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

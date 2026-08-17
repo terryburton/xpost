@@ -1,13 +1,10 @@
+%!testlib
 % get and put require an integer index for arrays and strings: a real index
 % is a typecheck (PLRM). A dictionary key may be any type, so a real key is
 % still valid; an array element may be any object, so a real value in a put is
 % still valid, while a string holds bytes, so a real value in a string put is a
 % typecheck. Run through `xpost -d null` by run-ps-test.sh.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
-/erris { 3 dict begin /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse tag assert clear end } def
 
 % integer indices work as before
 [10 20 30] 1 get 20 eq (array get by integer) assert
@@ -16,15 +13,15 @@
 (abc) dup 0 88 put 0 get 88 eq (string put by integer) assert
 
 % a real index is a typecheck for arrays and strings
-{ [1 2 3] 1.0 get } /typecheck (array get by a real index is typecheck) erris
-{ [1 2 3] 1.5 get } /typecheck (array get by a fractional index is typecheck) erris
-{ [0 0 0] 1.0 9 put } /typecheck (array put by a real index is typecheck) erris
-{ (abc) 1.0 get } /typecheck (string get by a real index is typecheck) erris
-{ (abc) 1.0 65 put } /typecheck (string put by a real index is typecheck) erris
+{ [1 2 3] 1.0 get } /typecheck (array get by a real index is typecheck) raises
+{ [1 2 3] 1.5 get } /typecheck (array get by a fractional index is typecheck) raises
+{ [0 0 0] 1.0 9 put } /typecheck (array put by a real index is typecheck) raises
+{ (abc) 1.0 get } /typecheck (string get by a real index is typecheck) raises
+{ (abc) 1.0 65 put } /typecheck (string put by a real index is typecheck) raises
 
 % a string byte must be an integer; a real value is a typecheck
-{ (abc) 0 65.0 put } /typecheck (string put of a real value is typecheck) erris
-{ (abc) 0 65.5 put } /typecheck (string put of a fractional value is typecheck) erris
+{ (abc) 0 65.0 put } /typecheck (string put of a real value is typecheck) raises
+{ (abc) 0 65.5 put } /typecheck (string put of a fractional value is typecheck) raises
 
 % an array element is any object, so a real value is accepted
 [0 0 0] dup 1 9.5 put 1 get 9.5 sub abs 1e-6 lt (array put of a real value is accepted) assert
@@ -33,4 +30,4 @@
 3 dict dup 2.5 7 put 2.5 get 7 eq (dict put and get by a real key) assert
 <</a 1>> dup 1.5 known not (dict known of an absent real key) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

@@ -1,3 +1,4 @@
+%!testlib
 % exit must terminate every PLRM looping context -- cshow, filenameforall,
 % for (integer and real), forall over array/dict/string, kshow, loop,
 % pathforall, repeat and resourceforall, the whole list of PLRM 8.2 -- and
@@ -10,8 +11,6 @@
 % procedure fell through the frame into any enclosing loop (or underflowed
 % the exec stack), and the glob results leaked.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 % --- exit terminates each simple looping context ---
 /n 0 def
@@ -173,15 +172,9 @@ m 1 eq (and runs exactly once) assert
 % --- exit with no enclosing loop is invalidexit (PLRM 8.2) ---
 % It must be an error, and an ordinary one: the enclosing stopped context
 % catches it, the interpreter carries on, and $error names it.
-/erris { % { proc } /name (tag)  -> asserts proc raises error /name
-    3 dict begin
-    /tag exch def /want exch def
-    stopped { $error /errorname get want eq }{ false } ifelse
-    tag assert clear
-    end } def
 
-{ exit } /invalidexit (exit outside any loop is invalidexit) erris
-{ { exit } exec } /invalidexit (exit outside a loop inside a procedure is invalidexit) erris
+{ exit } /invalidexit (exit outside any loop is invalidexit) raises
+{ { exit } exec } /invalidexit (exit outside a loop inside a procedure is invalidexit) raises
 
 % the interpreter is still usable afterwards
 1 2 add 3 eq (execution continues after an invalidexit) assert
@@ -191,4 +184,4 @@ m 1 eq (and runs exactly once) assert
 5 { /n n 1 add def exit } repeat
 n 1 eq (exit still leaves an enclosing loop) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
