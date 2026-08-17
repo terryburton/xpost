@@ -79,7 +79,7 @@ route kshow       0   invalidfont
 route kshow       1   ok
 route kshow       3   ok
 route kshow       42  ok
-route glyphshow   0   ok
+route glyphshow   0   invalidfont
 route glyphshow   1   ok
 route glyphshow   3   ok
 route glyphshow   42  ok
@@ -122,10 +122,8 @@ reads 4
 #
 #   <what>  <settled|thorn|heading>  <reason>
 
-glyphshow-takes-a-composite  thorn  PLRM 8.2 says of glyphshow that if the current font is a composite font an invalidfont error occurs, in the same words it uses of kshow. kshow refuses one and glyphshow does not: it asks only whether the font is a Type 3 and treats everything else alike. MEASURED, with a composite font carrying a face, glyphshow returns having painted. Both reference implementations consulted raise invalidfont. It has been unnoticed because the ordinary way to reach glyphshow is a font with no face beneath it, where the machinery below fails for its own reasons and looks like a refusal; give the composite a face and the guard evaporates. What removes it is the site asking the whole question rather than half of it, which is one line -- and the reason it is a thorn rather than done is that the same half-question is at six other sites and they should be changed together, through one place that answers it
-
 charpath-of-a-procedure-glyph  settled  A Type 3 glyph is described by a procedure, and charpath through one appends only the advance rather than the outline the procedure would paint. MEASURED as a degenerate box. This is not a deviation to correct: BOTH reference implementations consulted return the same degenerate box for the same font, to the digit. A glyph built by running a procedure has no outline until it is run, and running it would paint rather than append; PLRM 5.7 acknowledges as much where it excuses glyphs described by images. Changing it would put this interpreter alone among the three
 
 cidfont-type-never-stamped  thorn  PLRM Table 5.11 requires definefont and defineresource to stamp a CIDFont dictionary with a FontType saying which kind of CIDFont it is -- 9, 10, 11 or 32 by its CIDFontType -- and for a CIDFontType 2 to REPLACE the 42 the dictionary states with 11. None of the four values is ever written here, so the four rows of PLRM's table that this register would otherwise carry do not exist as anything a program can observe. What removes it is stamping at both operators; the cost is that nothing here reads the value yet, so the stamp would be written for the specification's sake and for a program that asks, with no machinery depending on it -- which is worth doing but is not the same job as making the routes agree
 
-divergences 3
+divergences 2

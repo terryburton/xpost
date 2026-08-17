@@ -225,6 +225,10 @@ fi
 # together, so the line retires only when the two agree
 [ "$(outcome 0 glyphshow)" = ok ] && [ "$(outcome 0 kshow)" = invalidfont ] \
     && echo glyphshow-takes-a-composite >> "$work/got.diverge"
+# the two operators the specification says the same thing about now say the
+# same thing; if either drifts, the route table above reports the cell and
+# this pair reports the difference returning
+
 # charpath through a procedure glyph appends only the advance
 {
     printf '<< /PageSize [80 40] >> setpagedevice\n'

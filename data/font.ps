@@ -1049,7 +1049,16 @@ setglobal
     /glyphshow //.xpostsys /.needpoint get exec
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
-    dup //.xpostsys /.fontroute get exec /build ne {
+    % PLRM 8.2, of glyphshow: "if the current font is a composite font,
+    % an invalidfont error occurs" -- the same sentence it gives kshow.
+    % Asking for the face route asks the whole question; asking only
+    % whether the font was procedural asked half of it, and a composite
+    % font with a face beneath it then painted, because the half that
+    % was missing is the one that would have refused it.
+    dup //.xpostsys /.fontroute get exec /composite eq {
+        /glyphshow cvx /invalidfont signalerror
+    } if
+    dup //.xpostsys /.fontroute get exec /face eq {
         pop
         null { .glyphshow } //.xpostsys /.showroute get exec
     }{
