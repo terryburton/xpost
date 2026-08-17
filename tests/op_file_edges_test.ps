@@ -1,3 +1,4 @@
+%!testlib
 % Edge cases of the file operators (PLRM 3.8 and 8.2), run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints SUCCESS iff every
 % assertion holds.
@@ -35,9 +36,6 @@
 % is a sparse file and costs nothing on the file systems where the check
 % can fire, and is three gigabytes written on the one where it cannot.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 /erris { % { proc } /name (tag)  -> asserts proc raises error /name
     3 dict begin
     /tag exch def /want exch def
@@ -487,4 +485,4 @@ false echo
     (a parameter dictionary carries the subfile's count) assert
     not (the count in the dictionary ends the data) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

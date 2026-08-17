@@ -1,3 +1,4 @@
+%!testlib
 % The interpreter's own debugging operators, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -14,9 +15,6 @@
 % unharmed afterwards, and that the tracing they switch on can be
 % switched off again.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /id 1183615869 internaldict def
 
@@ -54,4 +52,4 @@ count /dbg.n exch def
 { id /dumpvm get exec } stopped pop
 count dbg.n eq (dumpvm leaves the operand stack as it found it) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

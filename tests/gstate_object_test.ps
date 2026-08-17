@@ -1,3 +1,4 @@
+%!testlib
 % The gstate object: what gstate puts in one and what setgstate takes
 % back out. Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -14,9 +15,6 @@
 % number that comes back wrong but a region, and a region that comes back
 % as the empty path is one that admits no ink at all.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 /assertnear { % val expected (name)  .  -
     3 1 roll sub abs 0.001 lt exch assert
 } def
@@ -187,4 +185,4 @@ wide 0 setgray fill
 150 150 inkat (setgstate installs the clip its operand carries) assert
 230 230 inkat not (setgstate replaces the clip that was in force) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

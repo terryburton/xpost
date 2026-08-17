@@ -1,3 +1,4 @@
+%!testlib
 % A malformed or truncated JPEG stream must end the decode, not hang it.
 % Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -17,9 +18,6 @@
 % The last part of this test makes that visible by hiding an end-of-image
 % marker inside a comment in an image that decodes.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % start of image, then an APP0 marker whose declared length promises
 % bytes that never arrive
@@ -118,4 +116,4 @@ clear
 % the interpreter is still usable afterwards
 1 2 add 3 eq (the interpreter still works after the malformed streams) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

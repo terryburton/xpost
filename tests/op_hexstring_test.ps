@@ -1,3 +1,4 @@
+%!testlib
 % writehexstring / readhexstring round-trip over the whole byte range,
 % run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -7,9 +8,6 @@
 % negative and indexes before the digit table, producing wrong output for
 % half the range and reading out of bounds to do it.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % the file's bytes, as a string
 /slurp { % (name) . (contents)
@@ -63,4 +61,4 @@ back all eq (writehexstring output reads back as the original bytes) assert
 
 hx deletefile
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

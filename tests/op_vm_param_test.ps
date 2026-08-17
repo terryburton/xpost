@@ -1,3 +1,4 @@
+%!testlib
 % The virtual-memory parameter operators (PLRM 8.2), run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -12,9 +13,6 @@
 % vmreclaim controls the collector and answers rangecheck outside the five
 % values it defines.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 /isint { type /integertype eq } def
 
 % --- vmstatus answers three integers ---
@@ -108,4 +106,4 @@ keepstr (survivor) eq (a string survives a collection) assert
 0 vmreclaim
 clear
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

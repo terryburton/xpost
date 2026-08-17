@@ -1,3 +1,4 @@
+%!testlib
 % Every mutating operator against save and restore, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -18,9 +19,6 @@
 % result with no collection at all and with one every two thousand
 % bytes.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % ---------------------------------------------------------------- arrays
 % "Resets the values of all composite objects in local VM, except
@@ -173,4 +171,4 @@ a 0 get 1 eq (the outer restore goes back the rest) assert
 vmstatus pop pop before 1 add eq (the save level is counted) assert
 v1 restore
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

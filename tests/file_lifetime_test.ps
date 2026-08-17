@@ -1,3 +1,4 @@
+%!testlib
 % File lifetime under everything that can end one, run by
 % run-file-lifetime-test.sh with the open-file allowance lowered.
 %
@@ -12,9 +13,6 @@
 % interpreter outside its stacks and a collection is where that goes
 % wrong.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /nm (flife.scratch) def
 /seed nm (w) file def seed (0123456789abcdef) writestring seed closefile
@@ -123,4 +121,4 @@ count ef.d0 eq
 
 % The refusal case -- a directory the run may search but not write -- is
 % held by run-file-refusal-test.sh, which can make one; this file cannot.
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

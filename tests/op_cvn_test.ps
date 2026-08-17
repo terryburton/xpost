@@ -1,3 +1,4 @@
+%!testlib
 % cvn: a string becomes the name its characters spell (PLRM 8.2).
 % Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -9,9 +10,6 @@
 % interns many names it has never seen while allocating between them,
 % which is where that goes wrong.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % --- what cvn answers ---
 (abc) cvn /abc eq (cvn answers the name its characters spell) assert
@@ -62,4 +60,4 @@ mismatches 0 eq (every interned name spells its own characters) assert
 29999 spell cvn 30 string cvs 29999 spell eq
     (a name interned during the churn keeps its characters) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

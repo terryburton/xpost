@@ -1,3 +1,4 @@
+%!testlib
 % Relocation stress: every operation here derives a pointer into the
 % memory file and then allocates, which can move the file.
 %
@@ -11,9 +12,6 @@
 % construction and filling (.fillpolyargs), and image blitting
 % (.blitrow) on a raster device.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % --- dictionary growth across relocations ---
 /d 1 dict def
@@ -68,4 +66,4 @@ patherr not (repeated path fills survive relocation) assert
 } for } stopped { /imgerr true store } if
 imgerr not (repeated images survive relocation) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

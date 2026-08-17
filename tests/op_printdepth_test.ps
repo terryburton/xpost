@@ -1,3 +1,4 @@
+%!testlib
 % What == does with a structure that contains itself, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -7,9 +8,6 @@
 % structures are unaffected, and the bound is deep enough that ordinary
 % nesting never reaches it.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % a string to print into, so the output can be examined rather than
 % merely produced
@@ -48,4 +46,4 @@ q 0 p put
 12 { [ deep ] /deep exch def } repeat
 { deep == } stopped not (an array twelve deep prints) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

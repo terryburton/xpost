@@ -1,3 +1,4 @@
+%!testlib
 % String and number literals as the scanner reads them (PLRM 3.2), run
 % through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -7,9 +8,6 @@
 % scanned: about a quarter of the tokenizer went unreached, and what was
 % unreached was the escape handling rather than the error paths.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % --- the named escapes (PLRM 3.2.2) ---
 (a\nb) 1 get 10 eq (\\n is a newline) assert
@@ -90,4 +88,4 @@ s 1 get 10 eq (a newline alone reads as a newline) assert
 
 (literal_cr.scratch) deletefile
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

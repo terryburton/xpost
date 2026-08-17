@@ -1,3 +1,4 @@
+%!testlib
 % The clock operators (PLRM 8.2), run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -8,9 +9,6 @@
 % Each loop below runs until its clock ticks rather than for a fixed
 % number of turns, so a fast machine cannot make it fail.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /spins 4000000 def   % a bound, not an expectation
 
@@ -59,4 +57,4 @@ usertime u1 sub 0 gt (usertime advances while the interpreter executes) assert
 usertime u0 sub realtime r0 sub slack add le
     (the time used is within the real time that passed) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

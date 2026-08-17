@@ -1,3 +1,4 @@
+%!testlib
 % Work for the collector's own diagnostics to inspect, run by
 % run-gc-diagnostics-test.sh with the verifier and the cross-bank scan
 % enabled.
@@ -9,9 +10,6 @@
 % held object intact is what the interpreter itself asserts; the
 % diagnostics assert the collector's invariants alongside it.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % garbage of every composite kind for a collection to find
 /churn {
@@ -58,4 +56,4 @@ keepdict /string get (survivor) eq (a dictionary's string value survives) assert
 globaldict.test /garray get length 3 eq (a global array survives) assert
 globaldict.test /gstring get (global) eq (a global string survives) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

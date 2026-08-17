@@ -1,3 +1,4 @@
+%!testlib
 % Running out of open files is a limitcheck (PLRM 8.2, file): "If the
 % number of files opened by the current context exceeds an implementation
 % limit, a limitcheck error occurs." Run by run-file-limit-test.sh, which
@@ -7,9 +8,6 @@
 % reached by files the program still holds rather than by any that were
 % opened and dropped.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % something to open repeatedly
 /seed (filelimit.scratch) (w) file def
@@ -47,4 +45,4 @@ held 0 get 1 string readstring pop (x) eq
     (an open succeeds again once the files are closed) assert
 clear
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

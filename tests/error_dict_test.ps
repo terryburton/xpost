@@ -1,3 +1,4 @@
+%!testlib
 % What the error dictionary is defined to carry, and what the standard
 % handler is defined to do to it, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
@@ -10,9 +11,6 @@
 % flag that says an error is outstanding, and the context entry that
 % belongs to the error just reported.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % ------------------------------------------------------------ the entries
 % Every entry the language names, present before anything has gone
@@ -115,4 +113,4 @@ errordict /execstackunderflow known {
 
 } if
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

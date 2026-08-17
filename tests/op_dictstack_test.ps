@@ -1,3 +1,4 @@
+%!testlib
 % The dictionary stack operators (PLRM 8.2), run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -7,9 +8,6 @@
 % them and nothing else; countdictstack reports the depth; dictstack
 % copies the whole stack into an array, bottommost first.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 % This helper must not begin a dictionary of its own: some of the
 % procedures below move the dictionary stack, which is the point of them.
 /erris { % {proc} /name (tag)  -  asserts proc raises error /name
@@ -103,4 +101,4 @@ afterceiling 5 eq (a definition still works after the ceiling) assert
 { (str) begin } /typecheck (begin refuses a string) erris
 cleardictstack
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

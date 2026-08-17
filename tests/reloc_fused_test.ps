@@ -1,3 +1,4 @@
+%!testlib
 % Relocation underneath the interpreter's fused operators.
 %
 % Executing a procedure resolves the array's storage to a pointer once
@@ -41,9 +42,6 @@
 % bytes. The slack it reads is a headroom figure, not a difference
 % across work.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % what is left in the global file before it must be extended again
 /gslack { globalvmstatus 3 -1 roll pop exch sub } bind def
@@ -123,4 +121,4 @@ putok (every fused array store survives the copy its save forces) assert
 
 count 0 eq (the operand stack is left as it was found) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

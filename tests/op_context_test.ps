@@ -1,3 +1,4 @@
+%!testlib
 % Execution-context operators, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -12,9 +13,6 @@
 % finished therefore cannot succeed; it reports rather than waiting
 % forever.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 /erris { % { proc } /name (tag)  -  asserts proc raises error /name
     3 dict begin
     /tag exch def /want exch def
@@ -73,4 +71,4 @@ clear
 % the interpreter runs normally afterwards
 1 2 add 3 eq (execution continues after the context operators) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

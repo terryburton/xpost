@@ -1,3 +1,4 @@
+%!testlib
 % readline (PLRM 8.2), run through `xpost -q --no-sandbox -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
@@ -9,9 +10,6 @@
 % filled *before* a terminator is encountered -- a line that exactly fills
 % the string has been read, not overrun.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 /erris { % { proc } /name (tag)  -> asserts proc raises error /name
     3 dict begin
     /tag exch def /want exch def
@@ -110,4 +108,4 @@ f closefile
 (rdln_nl1st.scratch) deletefile
 (rdln_empty.scratch) deletefile
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

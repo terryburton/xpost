@@ -1,3 +1,4 @@
+%!testlib
 % Every graphics state parameter through gsave and grestore, run
 % through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -14,9 +15,6 @@
 % is set to a value distinguishable from its default inside a gsave, and
 % checked against its original after the matching grestore.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 % Compare two arrays elementwise: the dash and matrix parameters are
 % arrays, and eq on two separate arrays compares identity, not value.
@@ -144,4 +142,4 @@ gsave gsave gsave 9 setlinewidth
 grestoreall
 currentlinewidth 1.0 eq (grestoreall unwinds them all) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
