@@ -24,20 +24,14 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 /plainop /plainop /body load ID /.wrapop get exec def
 /oneint /oneint /body load [ /integertype ] ID /.wrapopsig get exec def
 
-/accepts { % {proc} (what)
-    /a.w exch def /a.p exch def
-    clear
-    /a.p load stopped not a.w assert
-    clear
-} def
 
 % the plain wrapping takes anything it is handed
-{ 42 plainop } (the plain wrapping takes an integer) accepts
-{ (x) plainop } (the plain wrapping takes a string too) accepts
+{ 42 plainop } (the plain wrapping takes an integer) works
+{ (x) plainop } (the plain wrapping takes a string too) works
 { plainop } /stackunderflow (the plain wrapping still needs an operand) raises
 
 % the declared one takes what it says and nothing else
-{ 42 oneint } (the declared operator takes an integer) accepts
+{ 42 oneint } (the declared operator takes an integer) works
 { (x) oneint } /typecheck (the declared operator refuses a string) raises
 { 4.5 oneint } /typecheck (the declared operator refuses a real) raises
 { null oneint } /typecheck (the declared operator refuses a null) raises
@@ -45,24 +39,29 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 { oneint } /stackunderflow (the declared operator reports a shortage) raises
 
 % more than one operand, and the families the declaration understands
-/twonum /twonum { pop pop } ID /.wrapop get exec pop
+% wrapped plainly first and then re-wrapped with a declaration below, so the
+% declaration is shown to replace a wrapping rather than to need a bare name.
+% Both operands go: the wrapper consumes the name and the procedure and leaves
+% the operator, so discarding the operator alone leaves the leading name on the
+% stack, and a later case that means to underflow then finds an operand.
+/twonum /twonum { pop pop } ID /.wrapop get exec pop pop
 /twonum /twonum { pop pop } [ /numbertype /numbertype ]
     ID /.wrapopsig get exec def
-{ 1 2 twonum } (two integers) accepts
-{ 1 2.5 twonum } (an integer and a real) accepts
+{ 1 2 twonum } (two integers) works
+{ 1 2.5 twonum } (an integer and a real) works
 { 1 (x) twonum } /typecheck (a string in the second place) raises
 { (x) 1 twonum } /typecheck (a string in the first place) raises
 { 1 twonum } /stackunderflow (one operand where two are wanted) raises
 
 /aproc /aproc { pop } [ /proctype ] ID /.wrapopsig get exec def
-{ { 1 } aproc } (a procedure where one is wanted) accepts
+{ { 1 } aproc } (a procedure where one is wanted) works
 { [ 1 ] aproc } /typecheck (a literal array is not a procedure) raises
 { 42 aproc } /typecheck (a number is not a procedure) raises
 
 /anyone /anyone { pop } [ /anytype ] ID /.wrapopsig get exec def
-{ 42 anyone } (anytype takes a number) accepts
-{ (x) anyone } (anytype takes a string) accepts
-{ null anyone } (anytype takes a null) accepts
+{ 42 anyone } (anytype takes a number) works
+{ (x) anyone } (anytype takes a string) works
+{ null anyone } (anytype takes a null) works
 { anyone } /stackunderflow (anytype still needs an operand) raises
 
 % ------------------------------------------------- more than one shape
@@ -74,8 +73,8 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 
 /twoshape /twoshape { pop }
     [ [ /integertype ] [ /stringtype ] ] ID /.wrapopsig get exec def
-{ 42 twoshape } (the first shape) accepts
-{ (x) twoshape } (the second shape) accepts
+{ 42 twoshape } (the first shape) works
+{ (x) twoshape } (the second shape) works
 { 4.5 twoshape } /typecheck (neither shape) raises
 { null twoshape } /typecheck (neither shape, again) raises
 { twoshape } /stackunderflow (no operand for either shape) raises
@@ -84,13 +83,13 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 % first refusal, and the shorter answers when the longer cannot
 /mixed /mixed { }
     [ [ /integertype /integertype ] [ /stringtype ] ] ID /.wrapopsig get exec def
-{ 1 2 mixed clear } (the longer shape) accepts
-{ (x) mixed clear } (the shorter shape) accepts
+{ 1 2 mixed clear } (the longer shape) works
+{ (x) mixed clear } (the shorter shape) works
 { mixed } /stackunderflow (nothing for either) raises
 
 % a shorter shape matches on the operands it names, whatever lies
 % beneath them: those belong to the program, not to the operator
-{ 1 (x) mixed clear } (the shorter shape, with the caller's own operand beneath) accepts
+{ 1 (x) mixed clear } (the shorter shape, with the caller's own operand beneath) works
 
 % a wrong-typed operand where a shape's arity was met is a typecheck,
 % not the shortage reported by a longer shape that ran out of operands
@@ -101,7 +100,7 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 % all a variadic operator can state: the types named are the ones
 % nearest the top of the stack, and the body answers for the rest.
 /partial /partial { pop pop } [ /integertype ] ID /.wrapopsig get exec def
-{ (x) 42 partial } (an unstated operand beneath a stated one) accepts
+{ (x) 42 partial } (an unstated operand beneath a stated one) works
 { 1 (x) partial } /typecheck (the stated operand is still checked) raises
 
 % the widest shape the dispatcher takes, which is what setcolorscreen
@@ -110,7 +109,7 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
     [ /integertype /integertype /integertype /integertype /integertype /integertype
       /integertype /integertype /integertype /integertype /integertype /integertype ]
     ID /.wrapopsig get exec def
-{ 1 2 3 4 5 6 7 8 9 10 11 12 twelve } (twelve operands) accepts
+{ 1 2 3 4 5 6 7 8 9 10 11 12 twelve } (twelve operands) works
 { (x) 2 3 4 5 6 7 8 9 10 11 12 twelve } /typecheck
     (the deepest of twelve is checked) raises
 { 1 2 3 4 5 6 7 8 9 10 11 twelve } /stackunderflow (eleven where twelve are wanted) raises

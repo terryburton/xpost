@@ -17,10 +17,6 @@
 % from the error cases would not catch.
 
 
-/accepts { % {proc} (what)
-    /a.w exch def /a.p exch def
-    clear /a.p load stopped not a.w assert clear
-} def
 % the shape was accepted and the body took over: whatever went wrong
 % afterwards, it was not the dispatcher refusing the operands
 /gate { % {proc} (what)
@@ -41,19 +37,19 @@
 % x y width height  |  numarray  |  numstring, and for rectstroke a
 % matrix may follow any of the three
 
-{ 10 20 30 40 rectfill } (rectfill takes four numbers) accepts
-{ [ 10 20 30 40 ] rectfill } (rectfill takes a numarray) accepts
-{ numstring rectfill } (rectfill takes a numstring) accepts
-{ [ 10 20 30 40 20 20 30 30 ] rectfill } (rectfill takes several rectangles) accepts
-{ 10 20 30 40 rectclip } (rectclip takes four numbers) accepts
-{ [ 10 20 30 40 ] rectclip } (rectclip takes a numarray) accepts
-{ numstring rectclip } (rectclip takes a numstring) accepts
-{ 10 20 30 40 rectstroke } (rectstroke takes four numbers) accepts
-{ [ 10 20 30 40 ] rectstroke } (rectstroke takes a numarray) accepts
-{ numstring rectstroke } (rectstroke takes a numstring) accepts
-{ 10 20 30 40 matrix rectstroke } (rectstroke takes four numbers and a matrix) accepts
-{ [ 10 20 30 40 ] matrix rectstroke } (rectstroke takes a numarray and a matrix) accepts
-{ numstring matrix rectstroke } (rectstroke takes a numstring and a matrix) accepts
+{ 10 20 30 40 rectfill } (rectfill takes four numbers) works
+{ [ 10 20 30 40 ] rectfill } (rectfill takes a numarray) works
+{ numstring rectfill } (rectfill takes a numstring) works
+{ [ 10 20 30 40 20 20 30 30 ] rectfill } (rectfill takes several rectangles) works
+{ 10 20 30 40 rectclip } (rectclip takes four numbers) works
+{ [ 10 20 30 40 ] rectclip } (rectclip takes a numarray) works
+{ numstring rectclip } (rectclip takes a numstring) works
+{ 10 20 30 40 rectstroke } (rectstroke takes four numbers) works
+{ [ 10 20 30 40 ] rectstroke } (rectstroke takes a numarray) works
+{ numstring rectstroke } (rectstroke takes a numstring) works
+{ 10 20 30 40 matrix rectstroke } (rectstroke takes four numbers and a matrix) works
+{ [ 10 20 30 40 ] matrix rectstroke } (rectstroke takes a numarray and a matrix) works
+{ numstring matrix rectstroke } (rectstroke takes a numstring and a matrix) works
 
 { 10 20 30 null rectfill } /typecheck (rectfill refuses a null for a length) raises
 { null rectfill } /typecheck (rectfill refuses a null) raises
@@ -68,20 +64,20 @@
 % ------------------------------------------------------------- the in tests
 % x y  |  userpath, and the user-path forms take the aperture on top
 
-{ 10 20 infill } (infill takes a point) accepts
-{ upath infill } (infill takes a user path) accepts
-{ 10 20 ineofill } (ineofill takes a point) accepts
-{ upath ineofill } (ineofill takes a user path) accepts
-{ 10 20 instroke } (instroke takes a point) accepts
-{ upath instroke } (instroke takes a user path) accepts
-{ 10 20 upath inufill } (inufill takes a point and an aperture) accepts
-{ upath upath inufill } (inufill takes two user paths) accepts
-{ 10 20 upath inueofill } (inueofill takes a point and an aperture) accepts
-{ upath upath inueofill } (inueofill takes two user paths) accepts
-{ 10 20 upath inustroke } (inustroke takes a point and an aperture) accepts
-{ upath upath inustroke } (inustroke takes two user paths) accepts
-{ 10 20 upath matrix inustroke } (inustroke takes a point, an aperture and a matrix) accepts
-{ upath upath matrix inustroke } (inustroke takes two user paths and a matrix) accepts
+{ 10 20 infill } (infill takes a point) works
+{ upath infill } (infill takes a user path) works
+{ 10 20 ineofill } (ineofill takes a point) works
+{ upath ineofill } (ineofill takes a user path) works
+{ 10 20 instroke } (instroke takes a point) works
+{ upath instroke } (instroke takes a user path) works
+{ 10 20 upath inufill } (inufill takes a point and an aperture) works
+{ upath upath inufill } (inufill takes two user paths) works
+{ 10 20 upath inueofill } (inueofill takes a point and an aperture) works
+{ upath upath inueofill } (inueofill takes two user paths) works
+{ 10 20 upath inustroke } (inustroke takes a point and an aperture) works
+{ upath upath inustroke } (inustroke takes two user paths) works
+{ 10 20 upath matrix inustroke } (inustroke takes a point, an aperture and a matrix) works
+{ upath upath matrix inustroke } (inustroke takes two user paths and a matrix) works
 
 { (x) (y) infill } /typecheck (infill refuses two strings) raises
 { null infill } /typecheck (infill refuses a null) raises
@@ -95,13 +91,13 @@
 % five operands  |  one dictionary
 
 { 8 8 true [8 0 0 -8 0 8] {<ff00ff00ff00ff00>} imagemask }
-    (imagemask takes five operands) accepts
+    (imagemask takes five operands) works
 { 8 8 true [8 0 0 -8 0 8] (\377\000\377\000\377\000\377\000) imagemask }
-    (imagemask takes a string source) accepts
+    (imagemask takes a string source) works
 { << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
      /Decode [1 0] /ImageMatrix [8 0 0 -8 0 8]
      /DataSource {<ff00ff00ff00ff00>} >> imagemask }
-    (imagemask takes a dictionary) accepts
+    (imagemask takes a dictionary) works
 
 { 8.5 8 true [8 0 0 -8 0 8] {<ff>} imagemask }
     /typecheck (imagemask refuses a real width) raises
@@ -113,9 +109,9 @@
 { imagemask } /stackunderflow (imagemask reports a shortage) raises
 
 { 4 4 8 [4 0 0 -4 0 4] {<010203040506070809101112>} false 3 colorimage }
-    (colorimage takes an interleaved source) accepts
+    (colorimage takes an interleaved source) works
 { 4 4 8 [4 0 0 -4 0 4] {<01020304>} {<05060708>} {<09101112>} true 3 colorimage }
-    (colorimage takes one source per component) accepts
+    (colorimage takes one source per component) works
 { 4 4 8 [4 0 0 -4 0 4] {<01>} false 3.5 colorimage }
     /typecheck (colorimage refuses a real component count) raises
 { 4 4 8 [4 0 0 -4 0 4] {<01>} 0 3 colorimage }
@@ -125,11 +121,11 @@
 % ------------------------------------------------------------------ the colour
 % a component  |  a pattern, and setpattern always takes the pattern
 
-{ /DeviceGray setcolorspace 0.5 setcolor } (setcolor takes a component) accepts
-{ /DeviceRGB setcolorspace 0.1 0.2 0.3 setcolor } (setcolor takes three components) accepts
-{ /DeviceGray setcolorspace 1 setcolor } (setcolor takes an integer component) accepts
-{ pat dup /Pattern setcolorspace setcolor } (setcolor takes a pattern) accepts
-{ pat setpattern } (setpattern takes a pattern) accepts
+{ /DeviceGray setcolorspace 0.5 setcolor } (setcolor takes a component) works
+{ /DeviceRGB setcolorspace 0.1 0.2 0.3 setcolor } (setcolor takes three components) works
+{ /DeviceGray setcolorspace 1 setcolor } (setcolor takes an integer component) works
+{ pat dup /Pattern setcolorspace setcolor } (setcolor takes a pattern) works
+{ pat setpattern } (setpattern takes a pattern) works
 
 { /DeviceGray setcolorspace (x) setcolor } /typecheck (setcolor refuses a string) raises
 { /DeviceGray setcolorspace /Gray setcolor } /typecheck (setcolor refuses a name) raises
@@ -143,15 +139,15 @@
 % frequency angle spot, where the spot may be named
 
 { 60 45 {dup mul exch dup mul add 1 exch sub} setscreen }
-    (setscreen takes a spot function) accepts
-{ 60 45 /Round setscreen } (setscreen takes a named spot function) accepts
+    (setscreen takes a spot function) works
+{ 60 45 /Round setscreen } (setscreen takes a named spot function) works
 { 60 45 (x) setscreen } /typecheck (setscreen refuses a string spot) raises
 { 60 (x) {pop pop 1} setscreen } /typecheck (setscreen refuses a string angle) raises
 { 60 45 setscreen } /stackunderflow (setscreen refuses two operands) raises
 { setscreen } /stackunderflow (setscreen reports a shortage) raises
 
 { 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1}
-  setcolorscreen } (setcolorscreen takes twelve operands) accepts
+  setcolorscreen } (setcolorscreen takes twelve operands) works
 { 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} (x) 45 {pop pop 1}
   setcolorscreen } /typecheck (setcolorscreen checks the deepest frequency) raises
 { 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} 60 (x) {pop pop 1}
