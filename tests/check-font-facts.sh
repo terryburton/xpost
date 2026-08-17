@@ -60,6 +60,7 @@ awk '$1 == "type"  { print $2 " " $3 }'            "$work/reg" | sort -n > "$wor
 awk '$1 == "route" { print $2 " " $3 " " $4 }'     "$work/reg" | sort   > "$work/reg.route"
 awk 'NF >= 3 && $2 ~ /^(settled|thorn|heading)$/ { print $1 }' "$work/reg" \
     | sort -u > "$work/reg.diverge"
+awk '$1 == "reads" && NF >= 3 { n++ } END { print n+0 }' "$work/reg" > "$work/reg.reads"
 
 [ -s "$work/reg.route" ] || { echo "FAILURES: the register names no route"; exit 1; }
 
@@ -203,6 +204,20 @@ count() {           # <keyword> <have>
 count types       "$(grep -c . "$work/reg.type")"
 count routes      "$(grep -c . "$work/reg.route")"
 count divergences "$(grep -c . "$work/reg.diverge")"
+
+# ---- and the type is read nowhere the register does not account for
+sites=$(grep -hnE "[^A-Za-z]FontType" "$src/data/font.ps" "$src/data/cid.ps" \
+        | grep -cE "get|known" || true)
+want=$(cat "$work/reg.reads")
+if [ "${sites:-0}" -ne "${want:-0}" ]; then
+    echo "FAIL: the font type is read at $sites place(s) in data and the register"
+    echo "      accounts for $want. The route question has one home; a new"
+    echo "      reader either belongs in it or owes a line in tests/font-facts"
+    echo "      saying what it asks instead:"
+    grep -nE "[^A-Za-z]FontType" "$src/data/font.ps" "$src/data/cid.ps" \
+      | grep -E "get|known" | sed 's|.*/data/|      data/|'
+    fail=1
+fi
 
 # ---- the divergences, each found by its own probe
 : > "$work/got.diverge"

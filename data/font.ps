@@ -57,6 +57,23 @@ currentglobal true setglobal
 } put
 setglobal
 
+% font  .fontroute  /composite | /build | /face
+% Which machinery paints a glyph from this font, and the only place that
+% decides. Thirteen sites read the type for themselves and between them
+% asked three questions -- is it composite, is it procedural, does a face
+% lie under it -- but each asked only the part it needed, so no two were
+% obliged to agree. Whether that mattered was not visible in any of them:
+% every site reads reasonably on its own, and a site asking half the
+% question simply treats the other half's fonts as ordinary ones.
+%
+% Naming the three routes makes the halves impossible to write. A site
+% wanting the face route asks for it, and a font that is neither
+% composite nor procedural is the only thing that answers.
+.xpostsys /.fontroute {
+    /FontType 2 copy known { get }{ pop pop -1 } ifelse
+    dup 0 eq { pop /composite }{ 3 eq { /build }{ /face } ifelse } ifelse
+} put
+
 /definefont [ /anytype /dicttype ] { % /fontname -dict-
     dup type /dicttype ne
     2 index type /nulltype eq or {
@@ -762,10 +779,10 @@ setglobal
     /show //.xpostsys /.needpoint get exec
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 0 eq {
+    dup //.xpostsys /.fontroute get exec /composite eq {
         exch //.xpostsys /.showtype0 get exec
     }{
-    dup /FontType get 3 ne {
+    dup //.xpostsys /.fontroute get exec /face eq {
         pop
         null { //show } //.xpostsys /.showroute get exec
     }{
@@ -796,7 +813,7 @@ setglobal
     /widthshow //.xpostsys /.needpoint get exec
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 0 eq {
+    dup //.xpostsys /.fontroute get exec /composite eq {
         % a composite font: add the delta after the character whose full
         % (multi-byte) code matches, as the ordinary composite show walks it
         7 dict begin
@@ -805,7 +822,7 @@ setglobal
         fnt str //.xpostsys /.showtype0 get exec
         end
     }{
-    dup /FontType get 3 ne {
+    dup //.xpostsys /.fontroute get exec /face eq {
         pop
         4 dict begin
         /wstr exch def /wchar exch def /wcy exch def /wcx exch def
@@ -851,7 +868,7 @@ setglobal
     /ashow //.xpostsys /.needpoint get exec
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 0 eq {
+    dup //.xpostsys /.fontroute get exec /composite eq {
         % a composite font decodes to descendant glyphs; walk it with the
         % ordinary composite show and add the delta after each character
         6 dict begin
@@ -860,7 +877,7 @@ setglobal
         fnt str //.xpostsys /.showtype0 get exec
         end
     }{
-    dup /FontType get 3 ne {
+    dup //.xpostsys /.fontroute get exec /face eq {
         pop
         3 dict begin
         /astr exch def /aady exch def /aadx exch def
@@ -903,7 +920,7 @@ setglobal
     /awidthshow //.xpostsys /.needpoint get exec
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 0 eq {
+    dup //.xpostsys /.fontroute get exec /composite eq {
         % a composite font: the ashow delta after every character, plus the
         % widthshow delta after the character whose full code matches
         9 dict begin
@@ -913,7 +930,7 @@ setglobal
         fnt str //.xpostsys /.showtype0 get exec
         end
     }{
-    dup /FontType get 3 ne {
+    dup //.xpostsys /.fontroute get exec /face eq {
         pop
         % the binding takes both deltas in device space; the outline
         % route moves the pen in user space, which is where the
@@ -977,7 +994,7 @@ setglobal
     % the byte-wise walk below is that the walk would reach its own
     % failure first -- a composite font cannot be decoded one byte at a
     % time and would report a range error about the string instead.
-    graphicsdict /currgstate get /currfont get /FontType get 0 eq {
+    graphicsdict /currgstate get /currfont get //.xpostsys /.fontroute get exec /composite eq {
         /kshow cvx /invalidfont signalerror
     } if
     % The walk compiles into a program here and the program runs after
@@ -1032,7 +1049,7 @@ setglobal
     /glyphshow //.xpostsys /.needpoint get exec
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 3 ne {
+    dup //.xpostsys /.fontroute get exec /build ne {
         pop
         null { .glyphshow } //.xpostsys /.showroute get exec
     }{
@@ -1088,7 +1105,7 @@ setglobal
 currentglobal true setglobal
 .xpostsys /.glyphbytes { % str p -> w
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 0 eq {
+    dup //.xpostsys /.fontroute get exec /composite eq {
         dup /FMapType get 9 eq {
             /CMap get //.xpostsys /.cmapnext get exec exch pop
         }{
@@ -1159,7 +1176,7 @@ setglobal
 /stringwidth [ /stringtype ] {
     /stringwidth //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get dup 3 eq exch 0 eq or not { pop //stringwidth }{
+    dup //.xpostsys /.fontroute get exec /face eq { pop //stringwidth }{
     pop
     % the measurement needs no currentpoint of its own: the string
     % shows from the origin on the null device and the point it
@@ -1234,7 +1251,7 @@ currentglobal true setglobal
     2 dict begin
     /cpstr exch def
     /cpfont exch def
-    cpfont /FontType 2 copy known { get }{ pop pop -1 } ifelse 0 eq {
+    cpfont //.xpostsys /.fontroute get exec /composite eq {
         cpfont /FMapType 2 copy known { get 9 eq }{ pop pop false } ifelse {
             cpfont cpstr
             { //.xpostsys /.glyphcharpath get exec }
@@ -1323,7 +1340,7 @@ setglobal
     /cpwant exch def
     /cpstr exch def
     /cpfont graphicsdict /currgstate get /currfont get def
-    cpfont /FontType 2 copy known { get }{ pop pop -1 } ifelse 3 eq {
+    cpfont //.xpostsys /.fontroute get exec /build eq {
         cpstr stringwidth rmoveto
     }{
         cpwant

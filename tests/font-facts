@@ -102,6 +102,21 @@ route cshow       42  ok
 
 routes 40
 
+# Where the font type may be read at all.
+#
+# The route question has one home now. What stops a fourteenth site from
+# appearing is this: every place in data that reads the type is counted,
+# and a new one fails here until whoever added it says why it is not
+# .fontroute's business. The three that remain are not route questions.
+#
+#   reads <file> <what>
+
+reads font.ps definefont-dispatches-on-the-type-it-is-validating
+reads font.ps definefont-checks-the-last-arm-is-a-charstring-format
+reads font.ps needfont-asks-only-whether-the-entry-is-present
+reads font.ps fontroute-is-the-one-home-of-the-route-question
+reads 4
+
 # Where this interpreter and the specification differ, and what is to
 # become of each difference.
 #

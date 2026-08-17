@@ -534,7 +534,7 @@ setglobal
 /cshow [ /proctype /stringtype ] {
     /cshow //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 0 eq {
+    dup //.xpostsys /.fontroute get exec /composite eq {
     dup /FMapType get 9 ne {
         % a byte-mapped composite: the procedure runs with the
         % selected descendant current, as the mapping chose it
