@@ -53,7 +53,8 @@ awk '$2 == "screens" { print $1 }' "$work/reg" | LC_ALL=C sort > "$work/reg-scre
 
 # the divergence section: a name, a disposition, and a reason
 sed 's/#.*//' "$src/tests/halftone-facts" \
-    | awk 'NF >= 3 && $1 !~ /^[0-9]+$/ && $1 != "entries" && $1 != "divergences"' \
+    | awk 'NF >= 3 && $1 !~ /^[0-9]+$/ && $1 != "entries" && $1 != "divergences" \
+           && $1 != "entry" && $1 != "entries-reached"' \
     > "$work/div"
 awk '{ print $1 }' "$work/div" | LC_ALL=C sort > "$work/div-names"
 
@@ -397,6 +398,88 @@ case $extent in
     *)  echo "FAIL: the zero-side probe answered '$extent', which is neither"
         echo "      accepted nor refused, so this cannot report on it"
         fail=1 ;;
+esac
+
+# ---- what the extent rule reaches, offered to the interpreter
+#
+# The rule matches an entry by the end of its name, so it reaches names
+# nobody chose. Each name it reaches is offered at nought inside an
+# otherwise valid type 1 dictionary -- the rule reads every entry
+# whatever the type, so one shape asks about any name -- and the verdict
+# is held to what the register says the name is. This is the check that
+# was missing when a rule meant to refuse an empty cell began refusing
+# an answer the operator writes.
+sed 's/#.*//' "$src/tests/halftone-facts" | awk '$1 == "entry" && NF >= 3' \
+    > "$work/reach"
+nreach=$(grep -c . "$work/reach" || true)
+
+cat > "$work/reach.ps" <<'PSEOF'
+/probe {                                % /Name  .  -
+    /nm exch def
+    nm 40 string cvs print ( ) print
+    << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
+    dup nm 0 put
+    { sethalftone } stopped
+    { $error /errorname get /rangecheck eq { (refused) }{ (other) } ifelse }
+    { (accepted) } ifelse
+    print (\n) print
+    clear
+} bind def
+PSEOF
+awk '{ printf "/%s probe\n", $2 }' "$work/reach" >> "$work/reach.ps"
+
+XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
+    "$work/reach.ps" </dev/null 2>/dev/null \
+    | tr -d "$cr" | awk 'NF == 2 { print }' > "$work/reach-answers"
+
+nans=$(grep -c . "$work/reach-answers" || true)
+if [ "$nreach" -lt 10 ] || [ "$nans" -ne "$nreach" ]; then
+    echo "FAILURES: the register names $nreach entries the extent rule reaches"
+    echo "      and $nans answered. A reach this cannot read is one it must"
+    echo "      not report on, and it has always been more than ten"
+    exit 1
+fi
+while read -r nm answer; do
+    said=$(awk -v n="$nm" '$2 == n { print $3; exit }' "$work/reach")
+    case "$said:$answer" in
+        extent:refused|answer:accepted) ;;
+        extent:*)
+            echo "FAIL: $nm is an extent and nought was $answer. A size of"
+            echo "      nought describes no area and the rule exists to say so."
+            fail=1 ;;
+        answer:*)
+            echo "FAIL: $nm is a value the OPERATOR writes and nought was"
+            echo "      $answer. What a program leaves in the slot states"
+            echo "      nothing, so reading it as an extent refuses the"
+            echo "      dictionary the specification asks for."
+            fail=1 ;;
+        *)  echo "FAIL: $nm is '$said', which is neither extent nor answer"
+            fail=1 ;;
+    esac
+done < "$work/reach-answers"
+
+# The two kinds have to be told apart for any of the above to mean
+# anything -- but only where nothing above already said something more
+# useful, since a rule that refuses everything fails both tests and the
+# specific one is the one worth reading.
+if [ "$fail" = 0 ] \
+   && { [ "$(awk '$2 == "refused"' "$work/reach-answers" | grep -c .)" -lt 1 ] \
+     || [ "$(awk '$2 == "accepted"' "$work/reach-answers" | grep -c .)" -lt 1 ]; }; then
+    echo "FAILURES: every entry the rule reaches answered the same way, so"
+    echo "      this comparison cannot tell the two kinds apart"
+    exit 1
+fi
+
+said=$(awk '/^entries-reached /{ print $2; found = 1 } END { if (!found) print "" }' \
+    "$src/tests/halftone-facts")
+case $said in
+    ''|*[!0-9]*)
+        echo "FAILURES: tests/halftone-facts has no 'entries-reached <n>' line"
+        fail=1 ;;
+    *)  if [ "$said" -ne "$nreach" ]; then
+            echo "FAILURES: tests/halftone-facts records $said reached entries and holds $nreach"
+            fail=1
+        fi ;;
 esac
 
 # ---- every divergence says what will become of it

@@ -51,6 +51,54 @@
 
 entries 10
 
+# Every entry name the extent rule reaches, and what it is.
+#
+# A cell of no extent is refused, and the rule that does it matches an
+# entry by the END of its name so that the copies a type 2 makes for
+# each primary, and the second rectangle of an angled cell, are covered
+# without any of them being listed. Matching by ending reaches names
+# nobody thought about, which is the point of it and also its hazard:
+# ActualFrequency ends in Frequency and is not an extent at all but an
+# answer the operator writes, and it was refused for weeks of nothing
+# noticing because every test of the rule asked whether it REFUSED and
+# none asked what it had stopped ACCEPTING.
+#
+# So the reach is written down. Every name in PLRM's halftone tables
+# that ends in a word the rule matches is here, with what it is, and the
+# guard offers each one to sethalftone at nought and requires the
+# verdict this says. A suffix added to the rule, or an entry the
+# specification gains, changes what is reached and fails here until
+# somebody says which of the two it is.
+#
+#   entry <name>  <extent|answer>  <what it is>
+#
+# extent  a size the program states; nought or less describes no area
+# answer  a value the operator writes; what the program put there is
+#         not a statement about anything and must not be read as one
+
+entry Frequency       extent  the screen frequency of a type 1, PLRM Table 7.4
+entry Width           extent  the width of a threshold cell, PLRM Table 7.5
+entry Height          extent  the height of a threshold cell, PLRM Table 7.5
+entry Width2          extent  the width of an angled cell's second rectangle, PLRM Table 7.8
+entry Height2         extent  the height of that second rectangle
+entry Xsquare         extent  the side of a type 10's first square, PLRM Table 7.7
+entry Ysquare         extent  the side of its second square
+entry RedFrequency    extent  a type 2's red screen frequency, PLRM 7.4.4
+entry GreenFrequency  extent  a type 2's green screen frequency
+entry BlueFrequency   extent  a type 2's blue screen frequency
+entry GrayFrequency   extent  a type 2's grey screen frequency, the one that reaches a device here
+entry RedWidth        extent  a type 4's red cell width, PLRM 7.4.4
+entry RedHeight       extent  a type 4's red cell height
+entry GreenWidth      extent  a type 4's green cell width
+entry GreenHeight     extent  a type 4's green cell height
+entry BlueWidth       extent  a type 4's blue cell width
+entry BlueHeight      extent  a type 4's blue cell height
+entry GrayWidth       extent  a type 4's grey cell width
+entry GrayHeight      extent  a type 4's grey cell height
+entry ActualFrequency answer  what sethalftone sets to the frequency achieved, PLRM Table 7.4. The program supplies the slot and reads it back, so its incoming value states nothing
+
+entries-reached 20
+
 # Where this interpreter and the specification differ, and what is to
 # become of each difference. A difference the guard can see and this
 # list does not name is a failure; so is a line here naming a difference
