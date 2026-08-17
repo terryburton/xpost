@@ -131,20 +131,64 @@ trait compiled bgr jpeg png pngalpha raster record
     in bands are PostScript classes with no driver at all.
 disposition settled
 
-trait pagecodec jpeg png
-    That this device drives its page out through a stream codec, which
-    is the descriptor of four calls in xpost_dev_driver.h -- open the
-    stream, write the rows, finish it, drop it -- rather than writing
-    the bytes itself.
-    Only these two compress. A codec that wants rows fed to it in order
-    and finished before the file means anything is a shape the plain
-    writers do not have: pgm, ppm, pbm and tiff put their bytes down as
-    they are, so the machinery that would carry them through a codec
-    would be carrying them past nothing.
+trait pagecodec jpeg png pngalpha
+    That this device drives its page out through a stream codec, the
+    descriptor in xpost_dev_driver.h that says how to open a stream,
+    feed it rows, finish it, give it up and reach the instance's own
+    page, rather than writing the bytes itself. How many calls that is
+    is not written here: it is counted off the type below, because it
+    has grown twice since this line was written and prose saying four
+    survived both.
+    Only these compress. A codec that wants rows fed to it in order and
+    finished before the file means anything is a shape the plain writers
+    do not have: pgm, ppm, pbm and tiff put their bytes down as they
+    are, so the machinery that would carry them through a codec would be
+    carrying them past nothing.
+    Three devices out of two drivers: png and pngalpha are one body
+    holding one descriptor, and they differ in what goes in the pixel
+    rather than in how the page leaves. Which devices a driver makes is
+    asked once for this and for whether the device is compiled, because
+    asking twice is how pngalpha came to be compiled by one answer and
+    codec-less by the other.
     So the descriptor has exactly the clients it was written for, and
     the four other devices that take a page in bands do not want one. It
     is not the band route that calls for a codec; it is compression.
 disposition settled
+
+# ---- and what each of them promises
+#
+# Carrying a codec is one bit, and it was the only bit held. A
+# descriptor is a list of promises: a device carrying one fills every
+# slot, and a slot left empty tells the shared machinery not to call it
+# for this device. That is a difference between two members of a family
+# and it was being made in a trailing comment.
+#
+# The number of slots is counted off the type, and this must equal it.
+# It is here so that a slot arriving is a line to write rather than a
+# silence -- the prose above said four while the descriptor held
+# fourteen, and nothing was wrong enough to fail.
+
+codecslots 14
+
+# A slot a device leaves empty, and what the device means by it.
+#
+#   codecgap <device> <slot>
+#
+# Derived from each device's own initialiser and held both ways: an
+# empty slot with no line fails, and a line for a slot that has been
+# filled fails too.
+
+codecgap jpeg defers_rows
+    Whether a page must be held whole rather than written as its rows
+    arrive. png answers it because an interlaced png is one image and
+    not a sequence of rows, so a banded interlaced page has to be
+    assembled before anything is written. This compressor takes each row
+    as it is handed over and has no arrangement that needs the rest of
+    the page first, so the answer would be no for every instance and
+    every page. The shared machinery reads a missing slot as no, which
+    is that answer.
+    Should this device ever gain a mode that reorders the page, the slot
+    is what it gains with it.
 
 # ---------------------------------------------------------------------
 # The questions

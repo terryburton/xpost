@@ -101,6 +101,11 @@ guard_require_file "$fleet" "the device roster"
 
 fail=0
 
+# The page codec, by the name of its type. Everything about it below is
+# read off that type and off what each device puts in one, so this is the
+# only place the descriptor is named.
+CODEC_TYPE=Xpost_Dev_Page_Codec
+
 # ---------------------------------------------------------------------
 # What the devices say
 #
@@ -249,6 +254,11 @@ awk '
     $1 == "disposition" {
         print key, $2 > (out "/reg.disp"); last = "disp:" key ":" $2; next
     }
+    $1 == "codecslots" { print $2 > (out "/reg.codecslots"); last = ""; next }
+    $1 == "codecgap" {
+        print $2, $3 > (out "/reg.codecgap")
+        last = "codecgap:" $2 ":" $3; next
+    }
     $1 == "family" { print key, $2 > (out "/reg.family"); last = "family:" key; next }
     $1 == "answer" {
         print key, $2, $3, ($4 == "" ? "-" : $4) > (out "/reg.answer")
@@ -261,7 +271,8 @@ awk '
         exit bad ? 1 : 0
     }
 ' out="$work" "$work/reg" || fail=1
-for f in reg.kind reg.carry reg.family reg.answer reg.prose reg.disp; do
+for f in reg.kind reg.carry reg.family reg.answer reg.prose reg.disp \
+         reg.codecslots reg.codecgap; do
     [ -f "$work/$f" ] || : > "$work/$f"
 done
 if [ ! -s "$work/reg.kind" ]; then
@@ -373,21 +384,34 @@ done
 # it is the PostScript class the compiled drivers copy, and matching it
 # would call every device that derives from it compiled, which is the
 # opposite of the truth.
+#
+# Which driver, if any, makes a device is asked ONCE and both traits are
+# read off the answer. It used to be asked twice: whether a device is
+# compiled looked for the leaf class as well as the file, and whether it
+# drives a codec looked only at the file name -- so pngalpha, a second
+# device out of one driver body, was compiled according to one question
+# and had no codec according to the other, while sharing the very
+# descriptor the second question is about.
+driver_of() {       # <device> -- the source that makes it, or nothing
+    _u=$(echo "$1" | tr 'a-z' 'A-Z')
+    if [ -f "$src/src/lib/xpost_dev_$1.c" ]; then
+        echo "$src/src/lib/xpost_dev_$1.c"
+        return
+    fi
+    grep -l "\"\.xpost_${_u}DEVICE\"" "$src"/src/lib/xpost_dev_*.c 2>/dev/null \
+        | head -1
+}
+
 : > "$work/trait.derived"
 while read -r d; do
-    u=$(echo "$d" | tr 'a-z' 'A-Z')
-    if [ -f "$src/src/lib/xpost_dev_$d.c" ] ||
-       grep -lq "\"\.xpost_${u}DEVICE\"" "$src"/src/lib/xpost_dev_*.c 2>/dev/null
-    then
-        echo "compiled $d" >> "$work/trait.derived"
-    fi
+    f=$(driver_of "$d")
+    [ -n "$f" ] || continue
+    echo "compiled $d" >> "$work/trait.derived"
+    # the descriptor by its TYPE, so that what the device happens to have
+    # called its own instance of it does not decide the answer
+    grep -q "$CODEC_TYPE[ \t][ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*=" "$f" &&
+        echo "pagecodec $d" >> "$work/trait.derived"
 done < "$work/made"
-for f in "$src"/src/lib/xpost_dev_*.c; do
-    [ -f "$f" ] || continue
-    grep -q "Xpost_Dev_Page_Codec[ \t][ \t]*_codec" "$f" || continue
-    b=$(basename "$f" .c); b=${b#xpost_dev_}
-    grep -qx "$b" "$work/made" && echo "pagecodec $b" >> "$work/trait.derived"
-done
 
 while read -r t; do
     want=$(awk -v t="$t" '$1 == t { for (i = 2; i <= NF; i++) print $i }' \
@@ -404,6 +428,99 @@ while read -r t; do
         fail=1
     fi
 done < "$work/keys.trait"
+
+# ---- the slots of the page codec
+#
+# Carrying a codec is one bit, and the register held only that bit. A
+# descriptor is a list of promises, though: a device carrying one fills
+# every slot of it, and a slot left empty tells the shared machinery not
+# to call it for this device. That is a difference between two members of
+# a family, and it was being made in a trailing comment.
+#
+# Both sides are derived. The slots come from the type in the driver
+# header, in the order they are declared; the fills come from each
+# device's own initialiser, read positionally against that order. So a
+# slot added to the descriptor, or a device that stops filling one, shows
+# up here whether or not anybody remembered.
+slots=$(sed 's|/\*.*\*/||' "$src"/src/lib/*.h | awk -v TY="$CODEC_TYPE" '
+    /^typedef[ \t]+struct/ { n = 0; next }
+    /^}[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*;/ {
+        name = $0; sub(/^}[ \t]*/, "", name); sub(/[ \t]*;.*$/, "", name)
+        if (name == TY) for (i = 1; i <= n; i++) print m[i]
+        n = 0; next
+    }
+    /\([ \t]*\*[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\)/ {
+        match($0, /\([ \t]*\*[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\)/)
+        t = substr($0, RSTART, RLENGTH); gsub(/[()* \t]/, "", t); m[++n] = t
+    }')
+nslots=$(printf '%s\n' "$slots" | grep -c . || true)
+if [ "$nslots" -lt 2 ]; then
+    echo "FAILURES: $CODEC_TYPE reads as $nslots slot(s), so the descriptor is"
+    echo "      not being found and no device could be held to filling it"
+    exit 1
+fi
+regslots=$(awk '{ print $1 }' "$work/reg.codecslots" 2>/dev/null | head -1)
+case ${regslots:-} in
+    ''|*[!0-9]*)
+        echo "FAILURES: the register states no 'codecslots <n>'. The number of"
+        echo "      promises the descriptor makes is what a device carrying one"
+        echo "      is signing up to, and prose describing it has gone stale"
+        echo "      before now by nobody counting."
+        fail=1 ;;
+    *)  if [ "$regslots" -ne "$nslots" ]; then
+            echo "FAILURES: the register says the page codec is $regslots calls"
+            echo "      and $CODEC_TYPE declares $nslots. Say what the ones that"
+            echo "      arrived are for."
+            fail=1
+        fi ;;
+esac
+
+: > "$work/codecgap.derived"
+for d in $(awk '$1 == "pagecodec" { print $2 }' "$work/trait.derived" | sort -u)
+do
+    f=$(driver_of "$d")
+    [ -n "$f" ] || continue
+    init=$(sed 's|/\*.*\*/||' "$f" | awk -v TY="$CODEC_TYPE" '
+        !open {
+            if ($0 ~ TY "[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*=" && index($0, "{")) {
+                open = 1; text = substr($0, index($0, "{") + 1)
+            }
+            next
+        }
+        index($0, "}") { text = text " " substr($0, 1, index($0, "}") - 1); exit }
+        { text = text " " $0 }
+        END { print text }')
+    i=0
+    for s in $slots; do
+        i=$((i + 1))
+        v=$(printf '%s' "$init" | awk -F, -v k="$i" '{ s = $k; gsub(/[ \t&]/, "", s); print s }')
+        [ "$v" = NULL ] && echo "$d $s" >> "$work/codecgap.derived"
+    done
+done
+sort -u "$work/codecgap.derived" -o "$work/codecgap.derived"
+sort -u "$work/reg.codecgap" 2>/dev/null > "$work/codecgap.reg" || : > "$work/codecgap.reg"
+
+guard_held=0
+guard_hold "$work/codecgap.reg" "$work/codecgap.derived" \
+    "recorded as leaving a codec slot empty and now filling it. Retire
+      the line, so that a device said to want nothing from the shared
+      machinery is one that still wants nothing:" \
+    "leaving a codec slot empty with nothing said about it. A device
+      carrying a descriptor promises every slot of it; write in
+      tests/device-facts what this one means by refusing:"
+[ "$guard_held" -eq 0 ] || fail=1
+
+# a gap says nothing unless it says why
+while read -r gd gs; do
+    [ -n "$gs" ] || continue
+    n=$(awk -v k="codecgap:$gd:$gs" '$1 == k { print $2 }' "$work/reg.prose")
+    if [ -z "$n" ]; then
+        echo "FAIL: the register records $gd leaving $gs empty and gives no"
+        echo "      reason. What the device means by refusing a call the rest"
+        echo "      of the family takes is the whole of the entry."
+        fail=1
+    fi
+done < "$work/codecgap.reg"
 
 # ---- what a difference is, and where it is going
 #
