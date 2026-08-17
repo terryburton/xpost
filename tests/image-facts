@@ -1,0 +1,113 @@
+# What each image type is, what an image dictionary must carry, and where
+# this interpreter and the specification differ.
+#
+# PLRM 4.10.5: "Every image dictionary contains an entry named ImageType
+# ... The most straightforward are type 1 dictionaries (LanguageLevel 2)
+# ... Two more image types, 3 and 4 (LanguageLevel 3), represent masked
+# images." Three types, and no PLRM table defines any other value.
+#
+# The family's interest is not the count but the reading. An image's
+# samples are a bit stream, and so are a sampled function's samples and a
+# mesh shading's vertices. Those two are read by one reader with an
+# allowed-width table that refuses anything outside it. The image path had
+# a third reader, written as a chain of depth cases with a bare final
+# branch that assumed twelve bits, and nothing anywhere checked the width
+# -- so three widths were accepted and read as though they were twelve.
+#
+# Membership is DERIVED: the guard offers every type code from -3 to 20
+# and calls a type accepted when an image of it PAINTS.
+#
+#   <type>  <accepted|refused>  <reason>
+
+1  accepted  samples painted straight, the only type imagemask also takes, PLRM Table 4.20
+3  accepted  an image and an explicit mask, interleaved or separate, PLRM Table 4.22
+4  accepted  an image whose masked pixels are named by a colour range, PLRM Table 4.25
+
+types 3
+
+# The widths a sample may be.
+#
+# PLRM Table 4.20: "Allowed values are 1, 2, 4, 8, and 12." That is a
+# SHORTER list than a sampled function's, which PLRM 3.10.1 extends to
+# 16, 24 and 32 -- so the two readers cannot share one table even though
+# they share the problem, and the difference is the specification's rather
+# than this interpreter's.
+#
+# PROBED, one image per width, with the samples packed the way that width
+# requires: data of the wrong shape runs out, and running out raises what
+# being refused raises, so a probe reusing one string would report every
+# width as unsupported.
+#
+#   width <bits>  <takes|refuses>
+
+width 1   takes
+width 2   takes
+width 4   takes
+width 8   takes
+width 12  takes
+width 16  refuses
+width 24  refuses
+width 32  refuses
+width 3   refuses
+width 0   refuses
+
+widths 10
+
+# The entries a type 1 image dictionary must carry, PROBED by leaving each
+# one out.
+#
+#   entry <name>  <required|optional>
+
+entry ImageType         required
+entry Width             required
+entry Height            required
+entry BitsPerComponent  required
+entry ImageMatrix       required
+entry Decode            required
+entry DataSource        required
+entry Interpolate       optional
+entry MultipleDataSources optional
+
+entries 9
+
+# A required entry must come from the image dictionary and from nowhere
+# else.
+#
+# The dictionary is made current so its entries can be read, which puts
+# it on the dictionary stack above whatever the program already had there.
+# An entry read as a bare name is then satisfied by any enclosing
+# dictionary that happens to define that name, so an image missing a
+# required entry painted from a value that was never part of it. A
+# program with a typo got a plausible page instead of an error, and the
+# names involved -- Width, Height, Decode -- are ordinary enough for a
+# program to have defined for its own purposes.
+#
+# PROBED by defining each required entry in an enclosing dictionary and
+# leaving it out of the image, for both operators that make an image
+# dictionary current.
+#
+#   isolated <operator> <entry>  <isolated|leaks>
+
+isolated image     Width             isolated
+isolated image     Height            isolated
+isolated image     BitsPerComponent  isolated
+isolated image     ImageMatrix       isolated
+isolated image     Decode            isolated
+isolated imagemask ImageType         isolated
+isolated imagemask Width             isolated
+isolated imagemask Height            isolated
+isolated imagemask Decode            isolated
+isolated imagemask ImageMatrix       isolated
+
+isolateds 10
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+
+missing-required  settled  An entry the specification marks required and the dictionary does not carry raises undefined, because the entry is fetched and the fetch is what fails. The same is true of a halftone, a shading, a form, a function and a colour space, so it is one behaviour across six families rather than this one being odd
+
+imagemask-value-rules-unchecked  thorn  PLRM Table 4.20 requires that an imagemask dictionary state BitsPerComponent 1, that MultipleDataSources be false or absent, and that Decode be exactly [0 1] or [1 0]. None of the three is checked: the stencil path is wired to one bit and reads none of them, so a dictionary stating eight bits is accepted and painted as one bit. MEASURED accepted here and refused with rangecheck by one reference implementation. What removes it is asking for the three values where the stencil dictionary is read; the cost is that the stencil path deliberately shares nothing with the sampled path, so the checks cannot come from the image reader and would be written again here
+
+divergences 2

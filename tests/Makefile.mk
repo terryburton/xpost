@@ -49,6 +49,8 @@ tests/check-colourspace-facts.sh \
 tests/colourspace-facts \
 tests/check-pattern-facts.sh \
 tests/pattern-facts \
+tests/check-image-facts.sh \
+tests/image-facts \
 tests/check-c-held-objects.sh \
 tests/c_held_objects.register \
 tests/check-awk-portability.sh \

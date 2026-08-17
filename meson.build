@@ -4829,6 +4829,18 @@ test('check-pattern-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# PLRM 4.10.5 defines three image types. An image's samples are a bit
+# stream, as a sampled function's and a mesh shading's vertices are, and
+# those two are read by one reader with a width table that refuses
+# anything outside it. The image path had a third reader with no table, so
+# a width it could not read was read as though it were twelve -- which
+# does not fail, it paints the wrong page. Every width is held to the ramp
+# its own samples describe.
+test('check-image-facts',
+  find_program('tests/check-image-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,

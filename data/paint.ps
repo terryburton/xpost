@@ -614,6 +614,17 @@
 % unpack rawrow's rowsamples samples at depth bits into buf, one
 % byte per sample: sub-byte depths spread to the byte range, twelve
 % bits keep their high byte
+% The widths a sample may be, PLRM Table 4.20: "Allowed values are 1, 2,
+% 4, 8, and 12."
+%
+% This is a SHORTER list than a sampled function's, which the language
+% extends to 16, 24 and 32, so the two cannot share one table even though
+% they share the problem. The reader below has a case per width and a
+% final branch that reads twelve bits; without this table a width outside
+% the list reached that branch and was read at the wrong stride, which
+% does not fail -- it paints a page from samples that were never there.
+.xpostsys /.imgbits << 1 true 2 true 4 true 8 true 12 true >> put
+
 .xpostsys /.rownorm {
     bits 8 eq {
         buf 0 rawrow putinterval
@@ -754,6 +765,13 @@
         24 dict begin
         //.xpostsys /.refreshscreencell get exec
         {mranges mbits ncomp decode datasrc mat bits height width}{exch def}forall
+        % the width is refused here, where it is first known and before
+        % any row is read, because every route into this painter -- the
+        % dictionary forms, the five-operand form, colorimage and the two
+        % masked types -- arrives through it
+        //.xpostsys /.imgbits get bits known not {
+            /image cvx /rangecheck signalerror
+        } if
         % the dictionary image form leaves its Interpolate request in
         % the local private dict for this one painting, out of a
         % program's sight; anything else paints stepped
@@ -1314,14 +1332,24 @@
         dup /ImageType get
         dup 1 eq {
             pop
-            begin
-            currentdict /Interpolate 2 copy known { get }{ pop pop false } ifelse
+            % every entry is fetched from the image dictionary by name
+            % through the dictionary itself, never as a bare name. Making
+            % the dictionary current would put it above whatever the
+            % program already had on the dictionary stack, and a bare
+            % lookup then finds the program's own Width or Decode when
+            % the image has none -- painting from a value that was never
+            % part of it. A procedure source is also fetched rather than
+            % looked up, since a bare lookup would run it instead of
+            % handing it over. The two masked types read their entries
+            % this way already.
+            1 dict begin
+            /d exch def
+            d /Interpolate 2 copy known { get }{ pop pop false } ifelse
             dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
-            Width Height BitsPerComponent ImageMatrix
-            % fetch through the dictionary: a procedure source fetched
-            % by name would execute instead of arriving as the operand
-            currentdict /DataSource get //.xpostsys /.imgsource get exec
-            Decode
+            d /Width get d /Height get
+            d /BitsPerComponent get d /ImageMatrix get
+            d /DataSource get //.xpostsys /.imgsource get exec
+            d /Decode get
             end
             //.xpostsys /.ncomponents get exec //.xpostsys /.imagepaint get exec
         }{ dup 3 eq {
@@ -1584,15 +1612,20 @@ setglobal
 /imagemask [ [ /integertype /integertype /booleantype /arraytype /anytype ]
              [ /dicttype ] ] {
     dup type /dicttype eq {
-        begin
-        ImageType 1 ne { end /imagemask cvx /rangecheck signalerror } if
-        Width Height
-        Decode 0 get 0 ne
-        ImageMatrix
-        % fetch through the dictionary: a procedure source fetched by
-        % name would execute instead of arriving as the operand
-        currentdict /DataSource get //.xpostsys /.imgsource get exec
-        currentdict /Interpolate 2 copy known { get }{ pop pop false } ifelse
+        % as in image: every entry comes from the dictionary by name and
+        % none as a bare name, so a stencil missing a required entry
+        % cannot be completed from whatever the program had on the
+        % dictionary stack. ImageType leaked that way too, which meant a
+        % program defining it for its own purposes could get a stencil out
+        % of a dictionary that named no type at all.
+        1 dict begin
+        /d exch def
+        d /ImageType get 1 ne { end /imagemask cvx /rangecheck signalerror } if
+        d /Width get d /Height get
+        d /Decode get 0 get 0 ne
+        d /ImageMatrix get
+        d /DataSource get //.xpostsys /.imgsource get exec
+        d /Interpolate 2 copy known { get }{ pop pop false } ifelse
         dup type /booleantype ne { pop false } if
         end
     }{
