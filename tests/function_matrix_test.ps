@@ -1,3 +1,4 @@
+%!testlib
 % Every kind of function against every kind of shading it can drive,
 % run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -14,22 +15,9 @@
 % So every function type is put through every shading type that takes
 % one, and each combination reports for itself.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { % (what) (which)
-    (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store
-} def
 % The tag is put away before the procedure runs: a procedure that fails
 % may leave anything at all on the stack.
-/works { % {proc} (what) (which)
-    /f.w2 exch def /f.w1 exch def
-    stopped { f.w1 f.w2 note } if
-    clear
-} def
 
 % One function of each type, every one of them mapping a single
 % parameter in [0 1] to three components running from red to blue, so
@@ -53,25 +41,25 @@ funcs {
 
     % an axial shading, which asks along a line
     { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
-         /Function fd >> shfill } (drives an axial shading) fn works
+         /Function fd >> shfill } (drives an axial shading) fn works2
 
     % a radial shading, which asks along a pair of circles
     { << /ShadingType 3 /ColorSpace /DeviceRGB /Coords [30 30 0 30 30 25]
-         /Function fd >> shfill } (drives a radial shading) fn works
+         /Function fd >> shfill } (drives a radial shading) fn works2
 
     % the ends of the domain, which is where an off-by-one in a table or
     % a bound in a stitching function shows up
     { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
          /Domain [0 0.0001] /Function fd >> shfill }
-        (is asked at the start of its domain) fn works
+        (is asked at the start of its domain) fn works2
     { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
          /Domain [0.9999 1] /Function fd >> shfill }
-        (is asked at the end of its domain) fn works
+        (is asked at the end of its domain) fn works2
 
     % extension past the ends, which asks outside the domain entirely
     { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [20 0 40 0]
          /Extend [true true] /Function fd >> shfill }
-        (is asked outside its domain) fn works
+        (is asked outside its domain) fn works2
 
     % a shading used as a pattern rather than painted directly
     { << /PatternType 2 /Shading
@@ -80,12 +68,12 @@ funcs {
       matrix makepattern
       [/Pattern] setcolorspace setcolor
       newpath 0 0 60 40 rectfill
-      0 setgray } (backs a shading pattern) fn works
+      0 setgray } (backs a shading pattern) fn works2
 
     % and driving a space rather than a shading: the same evaluation, in
     % the other place a function is asked for colours
     { [ /Indexed /DeviceRGB 1 <FF00000000FF> ] setcolorspace
-      0 setcolor 0 setgray } (leaves the colour usable) fn works
+      0 setcolor 0 setgray } (leaves the colour usable) fn works2
 } forall
 
 % Each type also has to answer sensibly on its own account, through the
@@ -94,19 +82,11 @@ funcs {
     aload pop /fn exch def /fd exch def
     { << /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 60 0]
          /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>
-      shfill } (drives a single-component shading) fn works
+      shfill } (drives a single-component shading) fn works2
 } forall
 
 % A malformed function is refused rather than painted, for each type
 % that can be malformed in an obvious way.
-/refuses { % {proc} (what)
-    /f.w1 exch def
-    stopped not {
-        (FAIL: ) print f.w1 print ( is not refused\n) print
-        /bad bad 1 add store
-    } if
-    clear
-} def
 % the language defines three function types; a dictionary claiming any
 % other is refused rather than guessed at, including the calculator type
 % that belongs to the document format rather than to this language
@@ -121,7 +101,4 @@ funcs {
      /Function << /FunctionType 3 /Domain [0 1] /Functions [ ]
                   /Bounds [ ] /Encode [ ] >> >> shfill }
     (a stitching function with no subfunctions) refuses
-
-bad 0 eq (every function type drives every shading) assert
-
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

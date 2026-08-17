@@ -1,3 +1,4 @@
+%!testlib
 % Every halftone dictionary fault against the error it is defined to
 % raise, run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -14,35 +15,10 @@
 % So each fault is introduced in each type that can carry it, and the
 % error name is checked rather than the mere fact of an error.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { % (what) (which)
-    (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store
-} def
 
 % The tag is put away before the procedure runs: a procedure that fails
 % may leave anything at all on the stack.
-/raises { % {proc} /errname (what)  -  the named error, and no other
-    /h.w exch def /h.e exch def
-    stopped {
-        $error /errorname get dup h.e ne {
-            (FAIL: ) print h.w print ( raised ) print ==
-            /bad bad 1 add store
-        }{ pop } ifelse
-    }{
-        h.w (is not refused at all) note
-    } ifelse
-    clear
-} def
-/works { % {proc} (what)
-    /h.w exch def
-    stopped { h.w (is refused) note } if
-    clear
-} def
 
 % A file of n zero bytes, for the types whose thresholds must arrive
 % through one rather than in a string: the hexadecimal for them, decoded.
@@ -515,7 +491,4 @@ currenthalftone /Frequency get 33 eq
 
 % and the operand is still refused when it is not a dictionary at all
 { 7 sethalftone } /typecheck (a halftone that is not a dictionary) raises
-
-bad 0 eq (every halftone fault raises the error it is defined to) assert
-
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
