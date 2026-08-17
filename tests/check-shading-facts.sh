@@ -268,6 +268,33 @@ paint() {           # <dictionary body> -> "<errorname>" or "ink <n> of <m>"
         }'
 }
 
+# The same measurement for a painted path, so that a shading's coverage
+# can be held to the coverage of the shape it stands for.
+paintpath() {       # <path and paint operators> -> "ink <n> of <m>"
+    {
+        printf '<< /PageSize [32 32] >> setpagedevice 4 4 scale\n'
+        printf '0.5 setgray\n%s\nshowpage\n' "$1"
+    } > "$work/case.ps"
+    rm -f "$work/case.pgm"
+    ( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+      "$xpost" -q --no-sandbox -d pgm -o case.pgm case.ps </dev/null ) >/dev/null 2>&1
+    od -An -v -tu1 "$work/case.pgm" 2>/dev/null | awk '
+        { for (i = 1; i <= NF; i++) v[n++] = $i }
+        END {
+            t = 0; i = 0
+            while (t < 4 && i < n) {
+                while (i < n && (v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
+                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
+                while (i < n && !(v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
+                t++
+            }
+            i++
+            ink = 0; tot = 0
+            for (; i < n; i++) { tot++; if (v[i] != 255) ink++ }
+            print "ink " ink " of " tot
+        }'
+}
+
 # ---- every registered type paints
 : > "$work/painted"
 while read -r t painter; do
@@ -497,6 +524,18 @@ FBAD=00000000000000FFFF000080008000FFFFFF10FFFFFFFF40
 ans=$(paint "/ShadingType 4 $CS /DataSource <$FBAD> $BITS /BitsPerFlag 8")
 case $ans in
     ink\ *) echo flag-value >> "$work/got.diverge" ;;
+esac
+
+# a mesh triangle covering what the same triangle covers when filled.
+# It does so by construction -- the leaf of the subdivision builds a path
+# and calls fill, as every shading painter here does -- so what this
+# guards is that sharing. A painter that grew a coverage rule of its own
+# would part from the fill, and the register would ask for its line back.
+mtri=$(paint "/ShadingType 4 $CS /DataSource <$(meshdata 16 8)> $BITS
+              /BitsPerFlag 8")
+ftri=$(paintpath "newpath 0 0 moveto 8 0 lineto 0 8 lineto closepath fill")
+case $mtri in
+    ink\ *) [ "$mtri" = "$ftri" ] && echo mesh-coverage >> "$work/got.diverge" ;;
 esac
 
 # one rule for how finely to subdivide, or two. Both painters ask
