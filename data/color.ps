@@ -622,6 +622,31 @@ currentglobal true setglobal
     /Pattern eq
 } put
 
+% space  .spacenomarks  bool
+% Whether a colour set in this space can produce visible output at all.
+%
+% PLRM 4.8.5 gives the colorant name None exactly this meaning: painting
+% in a Separation space named None "has no effect on the current page",
+% and the space ignores its alternative space and tint transform. So the
+% answer follows from the space and nothing else -- not from the tint, and
+% not from what the transform would have returned, which is the reason
+% this can be settled once when the space is set. The name arrives as a
+% name or as a string, because PLRM 4.8.5 admits either.
+%
+% The sibling special name All is NOT this: it paints in every available
+% colorant, which is the opposite of painting in none.
+.xpostsys /.spacenomarks {
+    dup type /arraytype eq {
+        dup length 2 ge {
+            dup 0 get /Separation eq {
+                1 get
+                dup type /stringtype eq { cvn } if
+                /None eq
+            }{ pop false } ifelse
+        }{ pop false } ifelse
+    }{ pop false } ifelse
+} put
+
 % space  .spacereduce  space
 % Walk a colour space down to the one a colour in it is finally recorded
 % in: an Indexed space through its base, a Separation or DeviceN through

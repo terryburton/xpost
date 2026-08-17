@@ -118,6 +118,28 @@ currentglobal true setglobal
     graphicsdict /currgstate get /colorspace get /Pattern eq
 } bind def
 
+% -  .colorroute  /pattern | /nomarks | /direct
+% How the current colour reaches the page, and the only place that
+% decides.
+%
+% Every painting operator asked one question here -- is the colour a
+% pattern -- and took the device route when the answer was no. That left
+% no room for a third answer, and there is one: a colour that can never
+% produce visible output marks nothing, which is neither tiling a pattern
+% nor handing a colour to the device. Naming the three routes is what
+% makes the missing one expressible at every operator rather than at
+% whichever ones somebody remembered.
+%
+% The pattern route is first because it already carries a case of the
+% third: the null pattern paints nothing, and it does so inside the
+% tiling walk, where a pattern space's own empty colour belongs.
+/.colorroute {
+    graphicsdict /currgstate get /colorspace get /Pattern eq { /pattern }{
+    graphicsdict /currgstate get /setspace get
+    //.xpostsys /.spacenomarks get exec { /nomarks }{ /direct } ifelse
+    } ifelse
+} bind def
+
 % -  .patterntile  -
 % tile the current pattern colour over the current clip region: every
 % cell whose pattern-space step position meets the region's box runs

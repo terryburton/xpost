@@ -805,13 +805,19 @@ currentglobal true setglobal
 % The font's PaintType is asked first, because the answer to it is what
 % the outline route needs anyway, and the colour only when the font has
 % not already settled the route. What makes a colour one the raster
-% cannot carry is .patternactive's to say, and Type 3 text -- which has no
+% cannot carry is .colorroute's to say, and Type 3 text -- which has no
 % outlines to leave for, and leaves the mask capture instead -- asks the
 % same question of the same place.
+%
+% Any colour but the plain device one leaves for the outline route, which
+% is where the colour's own route is taken: a pattern is tiled over the
+% glyph and a colour that can never produce visible output marks nothing.
+% Asking for "not the direct route" rather than for the pattern route is
+% what keeps text from having to learn each such colour separately.
 .xpostsys /.showroute {
     graphicsdict /currgstate get /currfont get
     /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse
-    dup { true }{ //.xpostsys /.patternactive get exec } ifelse
+    dup { true }{ //.xpostsys /.colorroute get exec /direct ne } ifelse
     { exch pop //.xpostsys /.showoutline get exec }
     { pop exch pop exec } ifelse
 } put

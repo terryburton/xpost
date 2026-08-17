@@ -102,6 +102,5 @@ space-array-rebuilt  settled  currentcolorspace does not hand back the object th
 
 special-names-in-devicen  settled  PLRM 4.8.5 says the special colorant names All and None are not allowed in a DeviceN names array, and one there is accepted and painted through the transform like any other name. Both reference implementations consulted accept it too, so refusing it would turn pages that render everywhere today into errors for a rule nothing enforces. The names are meaningful only to a Separation, where they are honoured
 
-none-colorant-marks  thorn  PLRM 4.8.5: the special colorant name None "will never produce any visible output", and painting in a Separation space named None has no effect on the current page. Here it paints, MEASURED as a full region of ink at full tint, because the name is not consulted and the tint goes through the transform into the alternative space like any other. Both reference implementations consulted leave the page blank. What removes it is a way for the current colour to mean "make no marks", consulted once where marks reach the device; the cost is that no such place exists -- the null pattern, which is the one colour that already paints nothing, is handled inside the pattern tiling walk rather than anywhere general, so the point would have to be introduced and every painting operator routed through it
 
-divergences 4
+divergences 3

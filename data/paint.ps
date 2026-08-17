@@ -293,7 +293,11 @@
 } bind put
 
 /fill [ ] {
-    //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
+    //.xpostsys /.colorroute get exec
+    dup /pattern eq { pop //.xpostsys /.patternfill get exec }{
+    % a colour that can never produce visible output: the path is
+    % consumed, as fill consumes it, and nothing is painted
+    /nomarks eq { newpath }{
     closepath
     //.xpostsys /.devtakespath get exec {
         //.xpostsys /.devsendclip get exec
@@ -338,6 +342,7 @@
     newpath
     } ifelse
     } ifelse
+    } ifelse
 } //.xpostsys /.defop get exec
 
 % -  eofill  -
@@ -348,7 +353,9 @@
 % intersection and the device FillPoly. A vector device consuming
 % whole paths through FillPath carries the rule to its consumer.
 /eofill [ ] {
-    //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
+    //.xpostsys /.colorroute get exec
+    dup /pattern eq { pop //.xpostsys /.patterneofill get exec }{
+    /nomarks eq { newpath }{
     //.xpostsys /.devtakespath get exec {
         graphicsdict /currgstate get /.eorule true put
         % this implementation's own fill, immune to a program's
@@ -367,6 +374,7 @@
 
         flushpage
         newpath
+    } ifelse
     } ifelse
     } ifelse
 } //.xpostsys /.defop get exec
@@ -497,9 +505,11 @@
 % thinnest line the device can draw -- and the outline it would fill
 % encloses no area at all.
 /stroke [ ] {
-    //.xpostsys /.patternactive get exec {
-        strokepath //.xpostsys /.patternfill get exec
+    //.xpostsys /.colorroute get exec
+    dup /pattern eq {
+        pop strokepath //.xpostsys /.patternfill get exec
     }{
+    /nomarks eq { newpath }{
     DEVICE /StrokePath known {
         % dashing and non-rectangular clipping consume line segments;
         % with neither active the path passes through unflattened, so
@@ -570,6 +580,7 @@
     } ifelse
 
     newpath
+    } ifelse
     } ifelse
     } ifelse
 } //.xpostsys /.defop get exec

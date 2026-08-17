@@ -342,11 +342,83 @@ case $(run "[ /DeviceN [ /None ] /DeviceGray { } ] setcolorspace
     ink\ 0) ;;
     ink\ *) echo special-names-in-devicen >> "$work/got.diverge" ;;
 esac
-case $(run "[ /Separation /None /DeviceGray { 1 exch sub } ] setcolorspace
-            1 setcolor 5 5 30 30 rectfill") in
-    ink\ 0) ;;
-    ink\ *) echo none-colorant-marks >> "$work/got.diverge" ;;
-esac
+# ---- the None colorant, asked of every painting operator
+#
+# PLRM 4.8.5: painting in a Separation named None "has no effect on the
+# current page". Asked of every operator that can mark, because that is
+# the only way the statement can be true -- a colour honoured by the
+# operators somebody remembered is a colour that marks through the rest,
+# and which ones were remembered is invisible from any single test.
+#
+# Two operators are expected to mark and are right to. The operand form of
+# image carries grey samples and a shading carries its own ColorSpace, so
+# neither paints in the current space at all, and a None separation being
+# current says nothing about either. Both are held to MARKING for the same
+# reason the others are held to silence: if one of them ever went quiet
+# under a colour that has nothing to do with it, that would be the defect.
+#
+# Every case carries an inking control in an ordinary colour. A case whose
+# control is blank proves nothing about the colour, and would otherwise
+# read as a success.
+nonefam='[ /Separation /None /DeviceGray { 1 exch sub } ] setcolorspace 1 setcolor'
+glyph='/Courier findfont 40 scalefont setfont 5 8 moveto'
+none_case() {
+    case $1 in
+      fill)       echo 'newpath 5 5 moveto 35 5 lineto 35 35 lineto closepath fill' ;;
+      eofill)     echo 'newpath 5 5 moveto 35 5 lineto 35 35 lineto closepath eofill' ;;
+      stroke)     echo 'newpath 5 20 moveto 35 20 lineto 10 setlinewidth stroke' ;;
+      rectfill)   echo '5 5 30 30 rectfill' ;;
+      rectstroke) echo '10 setlinewidth 5 5 30 30 rectstroke' ;;
+      show)       echo "$glyph (M) show" ;;
+      ashow)      echo "$glyph 0 0 (M) ashow" ;;
+      widthshow)  echo "$glyph 0 0 8#115 (M) widthshow" ;;
+      xshow)      echo "$glyph (M) [20] xshow" ;;
+      glyphshow)  echo "$glyph /M glyphshow" ;;
+      imagemask)  echo 'gsave 5 5 translate 30 30 scale 4 4 true [4 0 0 -4 0 4] <FFFFFFFF> imagemask grestore' ;;
+      image)      echo 'gsave 5 5 translate 30 30 scale 4 4 8 [4 0 0 -4 0 4] <00000000000000000000000000000000> image grestore' ;;
+      shfill)     echo 'gsave newpath 5 5 30 30 rectclip << /ShadingType 2 /ColorSpace /DeviceGray /Coords [5 5 35 35] /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [0] /N 1 >> >> shfill grestore' ;;
+    esac
+}
+nsilent=0
+for op in fill eofill stroke rectfill rectstroke \
+          show ashow widthshow xshow glyphshow imagemask \
+          image shfill; do
+    body=$(none_case "$op")
+    case $op in
+        image|shfill) want=marks ;;
+        *)            want=silent ;;
+    esac
+    got=$(run "$nonefam
+               $body")
+    ctl=$(run "0 setgray
+               $body")
+    case $ctl in
+        ink\ 0|ink\ )
+            echo "FAIL: the $op control laid no ink in an ordinary colour, so"
+            echo "      this cannot report on what the None colorant does to it"
+            fail=1
+            continue ;;
+        ink\ *) ;;
+        *)  echo "FAIL: the $op control answered '$ctl' rather than ink"
+            fail=1
+            continue ;;
+    esac
+    case $got in
+        ink\ 0) verdict=silent ;;
+        ink\ *) verdict=marks ;;
+        *)      verdict=$got ;;
+    esac
+    if [ "$verdict" != "$want" ]; then
+        echo "FAIL: under a Separation named None, $op $verdict where it must"
+        echo "      be $want. PLRM 4.8.5 gives that colorant no visible"
+        echo "      output; image in its operand form and shfill are the two"
+        echo "      that do not paint in the current space and must still mark."
+        fail=1
+    else
+        nsilent=$((nsilent + 1))
+    fi
+done
+
 sort -u "$work/got.diverge" -o "$work/got.diverge"
 
 guard_held=0
