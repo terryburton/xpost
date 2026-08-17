@@ -101,6 +101,17 @@ awk "
     }
 " "$src/meson.build" | LC_ALL=C sort -u > "$work/pairs"
 
+# The build description is not the only place the pairing lives. Eight runners
+# here name their suite INSIDE the script rather than taking it as an argument,
+# which the pass above cannot see, so the runners are read as well and both
+# sets of pairs are held.
+for r in "$src"/tests/run-*.sh; do
+    rb=$(basename "$r")
+    grep -o 'tests/[A-Za-z0-9_]*\.ps' "$r" 2>/dev/null | LC_ALL=C sort -u | \
+        while read -r sp; do printf '%s %s\n' "$rb" "$sp"; done
+done >> "$work/pairs"
+LC_ALL=C sort -u -o "$work/pairs" "$work/pairs"
+
 : > "$work/unprepared"
 while read -r runner suite; do
     [ -f "$src/$suite" ] || continue
