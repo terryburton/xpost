@@ -16,6 +16,55 @@
 % dictionaries producers write
 currentglobal true setglobal
 .xpostsys begin
+% The position is the caller's, so this opens no dictionary of its own:
+% a local one would take the /bp definitions with it and the stream
+% would be read from the same place for ever.
+/.mrdbits { % nbits . v  (accumulated in a real, most significant first)
+    dup 8 mod 0 eq bp 8 mod 0 eq and {
+        8 idiv 0.0 exch {
+            256 mul ds bp 8 idiv get add
+            /bp bp 8 add def
+        } repeat
+    }{
+        0.0 exch {
+            2 mul
+            ds bp 8 idiv get 7 bp 8 mod sub neg bitshift 1 and
+            add
+            /bp bp 1 add def
+        } repeat
+    } ifelse
+} def
+% The widths PLRM 3.10.1 allows a sample to be. A sampled function's
+% DataSource is a continuous bit stream with no padding at a byte
+% boundary, so these are read by counting bits, the way a mesh stream is.
+/.fnsamplebits << 1 true 2 true 4 true 8 true 12 true 16 true 24 true 32 true >> def
+
+% -  .fnsampled  -
+% What a sampled function needs, defined in the CALLER's dictionary from
+% the f it holds: the sample width, the range and how many components
+% that makes, and the source the samples come out of. It opens no
+% dictionary of its own, because what it defines is what the caller
+% reads -- and both evaluators read the same things.
+/.fnsampled {
+    /bps f /BitsPerSample get def
+    //.fnsamplebits bps known not { /shfill cvx /rangecheck signalerror } if
+    /rng f /Range get def
+    /nc rng length 2 idiv def
+    /ds f /DataSource get def
+    /litds false def
+    /max 2 bps exp 1 sub def
+} def
+
+% index  .fnsample  value
+% The sample at that index, as it stands in the stream. The samples are
+% adjacent with nothing between them, so an index names a bit position
+% and not a byte one. What scales it to its range is left to the caller,
+% which interpolates between two samples first and divides once.
+/.fnsample {
+    bps mul /bp exch def
+    bps //.mrdbits exec
+} def
+
 /.fneval {
     10 dict begin
     /f exch def
@@ -52,27 +101,16 @@ currentglobal true setglobal
         % sampled with one input: linear interpolation between the
         % bracketing samples
         /size f /Size get 0 get def
-        /bps f /BitsPerSample get def
-        bps 8 eq bps 16 eq or not { /shfill cvx /rangecheck signalerror } if
-        /rng f /Range get def
-        /nc rng length 2 idiv def
-        /ds f /DataSource get def
+        //.fnsampled exec
         /x t d0 sub d1 d0 sub dup 0 eq { pop 1 } if div
            size 1 sub mul def
         /i0 x floor cvi def
         i0 size 1 sub ge { /i0 size 2 sub def } if
         i0 0 lt { /i0 0 def } if
         /fr x i0 sub def
-        /max bps 8 eq { 255 }{ 65535 } ifelse def
         0 1 nc 1 sub { /c exch def
-            /sa i0 nc mul c add def
-            /sb i0 1 add nc mul c add def
-            bps 8 eq {
-                ds sa get ds sb get
-            }{
-                ds sa 2 mul get 8 bitshift ds sa 2 mul 1 add get or
-                ds sb 2 mul get 8 bitshift ds sb 2 mul 1 add get or
-            } ifelse
+            i0 nc mul c add //.fnsample exec
+            i0 1 add nc mul c add //.fnsample exec
             1 index sub fr mul add max div
             rng c 2 mul 1 add get rng c 2 mul get sub mul
             rng c 2 mul get add
@@ -107,12 +145,7 @@ currentglobal true setglobal
         yy d 2 get 2 copy lt { exch } if pop d 3 get 2 copy gt { exch } if pop /yy exch def
         /sx f /Size get 0 get def
         /sy f /Size get 1 get def
-        /bps f /BitsPerSample get def
-        bps 8 eq bps 16 eq or not { /shfill cvx /rangecheck signalerror } if
-        /rng f /Range get def
-        /nc rng length 2 idiv def
-        /ds f /DataSource get def
-        /mx bps 8 eq { 255.0 }{ 65535.0 } ifelse def
+        //.fnsampled exec
         /enc f /Encode 2 copy known { get }{ pop pop
             [ 0 sx 1 sub 0 sy 1 sub ] } ifelse def
         /ex xx d 0 get sub d 1 get d 0 get sub dup 0 eq { pop 1 } if div
@@ -130,15 +163,7 @@ currentglobal true setglobal
         /fx ex i0 sub def
         /fy ey j0 sub def
         /samp { % i j c . v  (sample scaled to 0..1)
-            3 dict begin
-            /c exch def
-            sx mul add nc mul c add /si exch def
-            bps 8 eq {
-                ds si get
-            }{
-                ds si 2 mul get 8 bitshift ds si 2 mul 1 add get or
-            } ifelse mx div
-            end
+            3 1 roll sx mul add nc mul add //.fnsample exec max div
         } def
         0 1 nc 1 sub { /c exch def
             i0 j0 c samp 1 fx sub mul i1 j0 c samp fx mul add
@@ -344,24 +369,6 @@ currentglobal true setglobal
 /.mrdcoordbits << 1 true 2 true 4 true 8 true 12 true 16 true 24 true 32 true >> def
 /.mrdcompbits << 1 true 2 true 4 true 8 true 12 true 16 true >> def
 /.mrdflagbits << 2 true 4 true 8 true >> def
-% The position is the caller's, so this opens no dictionary of its own:
-% a local one would take the /bp definitions with it and the stream
-% would be read from the same place for ever.
-/.mrdbits { % nbits . v  (accumulated in a real, most significant first)
-    dup 8 mod 0 eq bp 8 mod 0 eq and {
-        8 idiv 0.0 exch {
-            256 mul ds bp 8 idiv get add
-            /bp bp 8 add def
-        } repeat
-    }{
-        0.0 exch {
-            2 mul
-            ds bp 8 idiv get 7 bp 8 mod sub neg bitshift 1 and
-            add
-            /bp bp 1 add def
-        } repeat
-    } ifelse
-} def
 % - .mrdalign -
 % Step over the padding at the end of a vertex or a patch: what follows
 % begins on a byte boundary whatever the fields before it came to.
