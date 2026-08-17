@@ -55,7 +55,7 @@ guard_require_file "$register" "the register of font facts"
 guard_require_file "$src/data/font.ps" "the font machinery"
 
 fail=0
-sed 's/[[:blank:]]*#.*//' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
 awk '$1 == "type"  { print $2 " " $3 }'            "$work/reg" | sort -n > "$work/reg.type"
 awk '$1 == "route" { print $2 " " $3 " " $4 }'     "$work/reg" | sort   > "$work/reg.route"
 awk 'NF >= 3 && $2 ~ /^(settled|thorn|heading)$/ { print $1 }' "$work/reg" \

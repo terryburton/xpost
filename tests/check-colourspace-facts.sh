@@ -59,7 +59,7 @@ guard_require_file "$register" "the register of colour space facts"
 guard_require_file "$src/data/color.ps" "the colour machinery"
 
 fail=0
-sed 's/[[:blank:]]*#.*//' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
 awk 'NF >= 5 && $2 ~ /^(device|cie|indexed|tint|pattern)$/ { print $1 " " $2 " " $3 " " $4 }' \
     "$work/reg" | sort > "$work/reg.fam"
 awk '$1 == "table" { print $2 " " $3 " " $4 }' "$work/reg" | sort > "$work/reg.table"

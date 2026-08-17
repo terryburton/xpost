@@ -57,7 +57,7 @@ guard_require_file "$register" "the register of pattern facts"
 guard_require_file "$src/data/pattern.ps" "the pattern machinery"
 
 fail=0
-sed 's/[[:blank:]]*#.*//' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
 awk '$1 ~ /^-?[0-9]+$/ && $2 == "accepted" { print $1 }' "$work/reg" | sort -n > "$work/reg.type"
 awk '$1 == "badtype" { print $2 " " $3 }' "$work/reg" | sort > "$work/reg.bad"
 awk '$1 == "entry"   { print $2 " " $3 " " $4 " " $5 }' "$work/reg" | sort > "$work/reg.entry"

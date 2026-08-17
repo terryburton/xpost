@@ -57,7 +57,7 @@ guard_require_file "$register" "the register of image facts"
 guard_require_file "$src/data/paint.ps" "the image machinery"
 
 fail=0
-sed 's/[[:blank:]]*#.*//' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
 awk '$1 ~ /^-?[0-9]+$/ && $2 == "accepted" { print $1 }' "$work/reg" | sort -n > "$work/reg.type"
 awk '$1 == "width"    { print $2 " " $3 }'            "$work/reg" | sort -n > "$work/reg.width"
 awk '$1 == "entry"    { print $2 " " $3 }'            "$work/reg" | sort   > "$work/reg.entry"

@@ -46,7 +46,7 @@ guard_require_file "$register" "the register of function facts"
 guard_require_file "$src/data/shade.ps" "the function machinery"
 
 fail=0
-sed 's/[[:blank:]]*#.*//' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
 awk '$1 ~ /^[0-9]+$/ { print $1 " " $2 }' "$work/reg" | sort -n > "$work/reg.type"
 awk '$1 == "width" { print $2 " " $3 " " $4 }' "$work/reg" | sort > "$work/reg.width"
 awk 'NF >= 3 && $2 ~ /^(settled|thorn|heading)$/ { print $1 }' "$work/reg" \

@@ -102,7 +102,7 @@ fi
 awk '{ print $1 }' "$work/source" | LC_ALL=C sort > "$work/source-names"
 
 # ---- what the register says
-sed 's/#.*//' "$src/tests/filter-facts" | awk 'NF >= 4 && $1 != "entries"' \
+grep -v '^[[:space:]]*#' "$src/tests/filter-facts" | awk 'NF >= 4 && $1 != "entries"' \
     > "$work/reg"
 awk '{ print $1 }' "$work/reg" | LC_ALL=C sort > "$work/reg-names"
 

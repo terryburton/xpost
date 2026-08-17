@@ -238,7 +238,7 @@ awk '{ print $1 }' "$work/carry" | sort -u > "$work/keys.seen"
 
 # ---------------------------------------------------------------------
 # What the register says
-sed 's/[[:blank:]]*#.*//' "$register" > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" > "$work/reg"
 
 awk '
     /^[ \t]/ { if (last != "") prose[last] = prose[last] + 1; next }

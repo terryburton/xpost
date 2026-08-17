@@ -108,7 +108,7 @@ fi
 
 # ---------------------------------------------------------------------
 # What the register says
-sed 's/[[:blank:]]*#.*//' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
+grep -v '^[[:space:]]*#' "$register" | grep -v '^[[:space:]]*$' > "$work/reg"
 
 awk '$1 ~ /^[0-9]+$/ { print $1 " " $3 }' "$work/reg" | sort -n > "$work/reg.type"
 awk '$1 ~ /^[0-9]+$/ { print $1 " " $2 " " $4 " " $5 }' "$work/reg" | sort -n \

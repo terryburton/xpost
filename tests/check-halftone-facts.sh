@@ -46,13 +46,13 @@ trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
 # ---- what the register says
-sed 's/#.*//' "$src/tests/halftone-facts" \
+grep -v '^[[:space:]]*#' "$src/tests/halftone-facts" \
     | awk 'NF >= 6 && $1 ~ /^[0-9]+$/' > "$work/reg"
 awk '{ print $1 }' "$work/reg" | LC_ALL=C sort > "$work/reg-types"
 awk '$2 == "screens" { print $1 }' "$work/reg" | LC_ALL=C sort > "$work/reg-screens"
 
 # the divergence section: a name, a disposition, and a reason
-sed 's/#.*//' "$src/tests/halftone-facts" \
+grep -v '^[[:space:]]*#' "$src/tests/halftone-facts" \
     | awk 'NF >= 3 && $1 !~ /^[0-9]+$/ && $1 != "entries" && $1 != "divergences" \
            && $1 != "entry" && $1 != "entries-reached"' \
     > "$work/div"
@@ -409,7 +409,7 @@ esac
 # is held to what the register says the name is. This is the check that
 # was missing when a rule meant to refuse an empty cell began refusing
 # an answer the operator writes.
-sed 's/#.*//' "$src/tests/halftone-facts" | awk '$1 == "entry" && NF >= 3' \
+grep -v '^[[:space:]]*#' "$src/tests/halftone-facts" | awk '$1 == "entry" && NF >= 3' \
     > "$work/reach"
 nreach=$(grep -c . "$work/reach" || true)
 
