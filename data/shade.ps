@@ -361,6 +361,49 @@ currentglobal true setglobal
     [ //.mrdpt exec aload pop //.mrdcolor exec aload pop ]
 } def
 
+% sh flagrequired  .mrdinit  -
+% Set the reader up for a shading whose shape arrives as a DataSource.
+% What it defines -- the shading, its Function, the source and the
+% position in it, and for a packed source the Decode array, the field
+% widths and the component count -- is defined in the CALLER's
+% dictionary, because the caller is what reads them. So this opens none
+% of its own.
+%
+% flagrequired says whether every type this painter takes carries a
+% per-vertex edge flag. A lattice mesh carries none, and its BitsPerFlag
+% may be absent; a patch mesh must state one.
+/.mrdinit {
+    /flagreq exch def
+    /sh exch def
+    /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
+    /ds sh /DataSource get def
+    /dp 0 def
+    /litds ds type /arraytype eq def
+    litds {
+        % an array DataSource: flag, coordinates and colours are literal
+        % numbers, one parametric value per vertex under a Function or
+        % one per colour-space component otherwise (BitsPer* and Decode
+        % ignored, PLRM)
+        /ncomp shfn null eq { //.ncomponents exec }{ 1 } ifelse def
+    }{
+        /dec sh /Decode get def
+        /bpc sh /BitsPerCoordinate get def
+        /bpcm sh /BitsPerComponent get def
+        /bpf flagreq
+            { sh /BitsPerFlag get }
+            { sh /BitsPerFlag 2 copy known { get }{ pop pop 8 } ifelse }
+            ifelse def
+        /ncomp dec length 4 sub 2 idiv def
+        % the fields are walked a byte at a time, so a width that is not
+        % a whole number of bytes cannot be read, and neither can one the
+        % scaling above has no divisor for
+        bpc 16 eq bpc 32 eq or
+        bpcm 8 eq bpcm 16 eq or and not {
+            /shfill cvx /rangecheck signalerror
+        } if
+    } ifelse
+} def
+
 % [c0..cn-1]  .gsetcolor  -
 % set a mesh colour: components directly, or -- when the shading
 % carries a Function -- a single parametric value through it. The
@@ -419,30 +462,10 @@ currentglobal true setglobal
 % free-form (type 4) and lattice-form (type 5) triangle meshes with
 % per-vertex colours
 /.meshsh {
-    20 dict begin
-    /sh exch def
-    /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
-    /ds sh /DataSource get def
-    /dp 0 def
-    /litds ds type /arraytype eq def
-    litds {
-        % array DataSource: flag, coordinates and colours are literal numbers,
-        % with one parametric value per vertex under a Function or one value per
-        % colour-space component otherwise (BitsPer* and Decode ignored, PLRM)
-        /ncomp shfn null eq { //.ncomponents exec }{ 1 } ifelse def
-    }{
-        /dec sh /Decode get def
-        /bpc sh /BitsPerCoordinate get def
-        /bpcm sh /BitsPerComponent get def
-        % lattice (type 5) meshes carry no per-vertex flag, so BitsPerFlag is
-        % absent there; it is consulted only by the free-form (type 4) reader
-        /bpf sh /BitsPerFlag 2 copy known { get }{ pop pop 8 } ifelse def
-        /ncomp dec length 4 sub 2 idiv def
-        bpc 16 eq bpc 32 eq or
-        bpcm 8 eq bpcm 16 eq or and not {
-            /shfill cvx /rangecheck signalerror
-        } if
-    } ifelse
+    24 dict begin
+    % a lattice (type 5) mesh carries no per-vertex flag, so BitsPerFlag
+    % may be absent from one of the two types this paints
+    false //.mrdinit exec
     % subdivision depth from the mesh's device scale: two levels
     % within a few pixels, four when triangles are large
     /dpt 4 def
@@ -582,25 +605,10 @@ currentglobal true setglobal
 % so one surface serves both
 /.patchsh {
     30 dict begin
-    /sh exch def
-    /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
-    /ds sh /DataSource get def
-    /dp 0 def
+    % both patch types carry a flag on every patch, so BitsPerFlag is
+    % required of them
+    true //.mrdinit exec
     /tensor sh /ShadingType get 7 eq def
-    /litds ds type /arraytype eq def
-    litds {
-        /ncomp shfn null eq { //.ncomponents exec }{ 1 } ifelse def
-    }{
-        /dec sh /Decode get def
-        /bpc sh /BitsPerCoordinate get def
-        /bpcm sh /BitsPerComponent get def
-        /bpf sh /BitsPerFlag get def
-        /ncomp dec length 4 sub 2 idiv def
-        bpc 16 eq bpc 32 eq or
-        bpcm 8 eq bpcm 16 eq or and not {
-            /shfill cvx /rangecheck signalerror
-        } if
-    } ifelse
     % pts: p1..p16 as [x y] in data order; cols: c1..c4; g: the grid
     /pts 16 array def
     /cols 4 array def
