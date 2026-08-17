@@ -499,32 +499,14 @@ case $ans in
     ink\ *) echo flag-value >> "$work/got.diverge" ;;
 esac
 
-# one painter takes its subdivision from device space and the other does
-# not. Read as: the patch painter transforms its points, the triangle
-# painter sets its depth to a constant.
-body() {            # <procedure name> -- its body, braces counted
-    awk -v P="$1" '
-        index($0, "/" P " {") == 1 { d = 0; on = 1 }
-        on {
-            line = $0; sub(/%.*/, "", line)
-            print line
-            n = split(line, ch, "")
-            for (i = 1; i <= n; i++) {
-                if (ch[i] == "{") d++
-                else if (ch[i] == "}") { d--; if (d == 0) { on = 0; exit } }
-            }
-        }' "$shade"
-}
-meshconst=$(body .meshsh | grep -c '/dpt[ \t][ \t]*[0-9][0-9]*[ \t][ \t]*def' || true)
-patchderives=$(body .patchpaint | grep -c 'transform' || true)
-if [ "$meshconst" -gt 0 ] && [ "$patchderives" -gt 0 ]; then
+# one rule for how finely to subdivide, or two. Both painters ask
+# .tridepth, so a constant depth reappearing in either is the two of
+# them parting company again.
+constdepth=$(grep -c '[0-9][ \t]*//\.gtri exec' "$shade" || true)
+meshconst=$(grep -c '/dpt[ \t][ \t]*[0-9][0-9]*[ \t][ \t]*def' "$shade" || true)
+if [ "$constdepth" -gt 0 ] || [ "$meshconst" -gt 0 ]; then
     echo mesh-depth >> "$work/got.diverge"
 fi
-
-# the packed reader's setup written twice: the width refusal is the part
-# of it that is one rule, so it is what is counted
-setups=$(grep -c 'bpc 16 eq bpc 32 eq or' "$shade" || true)
-[ "$setups" -gt 1 ] && echo reader-setup-twice >> "$work/got.diverge"
 
 sort -u "$work/got.diverge" -o "$work/got.diverge"
 

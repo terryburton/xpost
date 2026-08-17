@@ -484,6 +484,44 @@ currentglobal true setglobal
     } for ]
     end
 } def
+% va vb vc  .tridepth  depth
+% How finely to subdivide a Gouraud triangle, from the size the triangle
+% comes to on the device. Each level halves an edge, so a triangle L
+% device units across needs log2(L/k) levels to bring its flat fills
+% down to k across, and a triangle already smaller than k needs none.
+%
+% k is half a device unit. The fills are flat, so what they approximate
+% is a colour that varies across every pixel, and a fill smaller than a
+% pixel is what lets each pixel take a colour of its own. MEASURED
+% against a mesh of small triangles carrying a full colour range: at one
+% unit the page is further from a per-pixel rendering than the constant
+% depth this replaced, and at half a unit it is the same page. At two
+% units it is worse and cheaper, at a quarter better and four times
+% dearer.
+%
+% The cap is a cost bound and nothing else: 4^7 fills is the most one
+% triangle may ask for. MEASURED on a triangle covering a 384-unit page,
+% where the depth this asks for is exactly 7: the page stops changing
+% there -- 8 gives the same bytes -- because the flatness test below
+% takes over. Both painters ask this, so a patch's grid cells and a
+% mesh's triangles are subdivided by one rule.
+/.tridepthcap 7 def
+/.tridepth {
+    8 dict begin
+    /vc exch def /vb exch def /va exch def
+    /mnx 9e99 def /mny 9e99 def /mxx -9e99 def /mxy -9e99 def
+    [ va vb vc ] {
+        dup 0 get exch 1 get transform
+        dup mxy gt { dup /mxy exch def } if dup mny lt { dup /mny exch def } if pop
+        dup mxx gt { dup /mxx exch def } if dup mnx lt { dup /mnx exch def } if pop
+    } forall
+    /ext mxx mnx sub mxy mny sub 2 copy lt { exch } if pop def
+    ext 0.5 div dup 1 le
+        { pop 0 }
+        { log 2 log div ceiling cvi } ifelse
+    dup //.tridepthcap gt { pop //.tridepthcap } if
+    end
+} def
 /.gtri {
     6 dict begin
     /dpt exch def /vc exch def /vb exch def /va exch def
@@ -522,9 +560,6 @@ currentglobal true setglobal
     % a lattice (type 5) mesh carries no per-vertex flag, so BitsPerFlag
     % may be absent from one of the two types this paints
     false 2 //.mrdinit exec
-    % subdivision depth from the mesh's device scale: two levels
-    % within a few pixels, four when triangles are large
-    /dpt 4 def
     sh /ShadingType get 5 eq {
         /vpr sh /VerticesPerRow get def
         /prev null def
@@ -533,8 +568,10 @@ currentglobal true setglobal
             /row [ vpr { //.mrdvertex exec } repeat ] def
             prev null ne {
                 0 1 vpr 2 sub { /i exch def
-                    prev i get prev i 1 add get row i get dpt //.gtri exec
-                    prev i 1 add get row i get row i 1 add get dpt //.gtri exec
+                    prev i get prev i 1 add get row i get
+                    3 copy //.tridepth exec //.gtri exec
+                    prev i 1 add get row i get row i 1 add get
+                    3 copy //.tridepth exec //.gtri exec
                 } for
             } if
             /prev row def
@@ -559,7 +596,7 @@ currentglobal true setglobal
                 } ifelse
                 /vc //.mrdvertex exec def
             } ifelse
-            va vb vc dpt //.gtri exec
+            va vb vc 3 copy //.tridepth exec //.gtri exec
         } loop
     } ifelse
     end
@@ -645,11 +682,11 @@ currentglobal true setglobal
             verts iu get iv get
             verts iu 1 add get iv get
             verts iu get iv 1 add get
-            3 //.gtri exec
+            3 copy //.tridepth exec //.gtri exec
             verts iu 1 add get iv get
             verts iu 1 add get iv 1 add get
             verts iu get iv 1 add get
-            3 //.gtri exec
+            3 copy //.tridepth exec //.gtri exec
         } for
     } for
     end

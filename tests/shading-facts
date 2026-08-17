@@ -133,6 +133,5 @@ flagmaxes 2
 # heading  being changed now
 
 missing-required  settled  PLRM gives shfill the errors rangecheck and undefinedresult, and a shading dictionary missing an entry its type requires raises undefined here instead, because the entry is fetched and the fetch is what fails. ADJUDICATED against both implementations: a type 2 without its Function raises undefined in both of them as well. The letter of the error list is followed by nobody, and changing it would make this the odd one out rather than the conforming one
-mesh-depth  thorn  The two stream painters decide how finely to subdivide in different ways. The patch painter transforms its boundary points into device space and takes a step count from how large they are, clamped between 3 and 12. The triangle painter uses the constant 4, under a comment saying the depth comes from the mesh's device scale. So a triangle mesh is subdivided the same amount whether it covers four pixels or the whole page, and the comment says otherwise
 
-divergences 2
+divergences 1
