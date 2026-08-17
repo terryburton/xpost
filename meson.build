@@ -4841,6 +4841,18 @@ test('check-image-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# The font family has no dispatch: the type is re-read at thirteen places
+# in data/font.ps and two in data/cid.ps, and between them they ask only
+# three questions. A site asking half of what it needs looks reasonable on
+# its own, so this asks behaviourally instead and holds the whole cross
+# product of text operator against font type. glyphshow taking a
+# composite font was found that way, sitting beside kshow refusing one
+# where PLRM 8.2 says the same of both.
+test('check-font-facts',
+  find_program('tests/check-font-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,

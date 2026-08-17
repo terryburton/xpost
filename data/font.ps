@@ -957,9 +957,11 @@ setglobal
 /kshow [ /proctype /stringtype ] {
     /kshow //.xpostsys /.needfont get exec
     /kshow //.xpostsys /.needpoint get exec
-    % kshow steps the string one byte at a time, which a composite font
-    % cannot decode; the reference rejects it with invalidfont rather than
-    % the rangecheck the byte-wise decode would otherwise raise
+    % PLRM 8.2, of kshow: "if the current font is a composite font, an
+    % invalidfont error occurs". The reason it is stated separately from
+    % the byte-wise walk below is that the walk would reach its own
+    % failure first -- a composite font cannot be decoded one byte at a
+    % time and would report a range error about the string instead.
     graphicsdict /currgstate get /currfont get /FontType get 0 eq {
         /kshow cvx /invalidfont signalerror
     } if

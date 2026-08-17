@@ -1,0 +1,118 @@
+# What each font type is, which operators will paint with it, and where
+# this interpreter and the specification differ.
+#
+# PLRM Table 5.1 lists the font types. Five are base fonts -- 1, 2, 3, 14
+# and 42 -- one is the composite font, 0, and four more (9, 10, 11, 32)
+# are not fonts at all: they are values definefont stamps into a CIDFont
+# dictionary to say which kind it is, and PLRM 5.9 is explicit that "a
+# CIDFont is not a base font".
+#
+# This family has no dispatch. The type is re-read at thirteen places in
+# data/font.ps and two in data/cid.ps, and those places ask only three
+# questions between them: is this a composite, is this a Type 3, and does
+# this dictionary carry a face. A site asking only half of what it needs
+# is not visible in the source -- every one of them looks reasonable
+# alone -- so the register asks the question behaviourally instead, by
+# crossing every text operator with every font type it can be handed.
+# A site that asks half the question shows up as one cell.
+#
+#   type <code>  <accepted|refused>  <reason>
+#
+# accepted  definefont takes a dictionary stating this type
+#
+# PROBED with a dictionary that carries a working face, copied from one
+# the host resolved, since a face is what the arm taking most types
+# actually tests for. What the probe shows is which types are validated
+# for what their own kind needs, and the answer is three of them: the
+# composite is asked for its mapping and its descendants, the procedural
+# one for a way to build a glyph, and the TrueType one for the font data
+# a TrueType glyph comes out of. Everything else is taken on the face
+# alone, so a code the specification does not define is taken too.
+
+type 0   accepted  the composite font, PLRM 5.9. Validated: definefont asks for the mapping type and the descendant vector, and refuses a dictionary lacking either
+type 1   accepted  charstrings in the Type 1 format, PLRM Table 5.1. Not validated beyond the face
+type 2   accepted  charstrings in the compact format, which is what a name from the host most often resolves to here. Not validated beyond the face
+type 3   accepted  glyphs described by a procedure, PLRM 5.7. Validated: definefont asks for a way to build a glyph
+type 14  accepted  PLRM Table 5.1 names it Chameleon and nothing here implements one. Accepted because the arm that takes it asks only for a face
+type 42  refused   glyphs in the TrueType format, PLRM 5.8. Validated, and the only type whose validation refuses this probe: a dictionary claiming to be TrueType without the font data a TrueType glyph is read from is not one. A font of this type obtained from the host is a different matter and paints -- see the routes below
+type 99  accepted  not a font type at all. It is here as the control for the two thorns below: a code the specification never defined is accepted on the same face test that accepts 14, which is what makes "the arm asks for a face rather than a type" a measurement rather than a reading
+
+types 7
+
+# Which text operator will paint with which font type.
+#
+# This is the cross product, and it is the register's centre. PLRM 8.2
+# says of kshow that "if the current font is a composite font, an
+# invalidfont error occurs", and says the same of glyphshow in the same
+# words. Two sentences of the same shape, and the two operators are not
+# obliged to agree by anything in the code: each reads the type itself.
+#
+#   route <operator> <fonttype>  <ok|errorname>
+#
+# A composite font here is mapped by bytes, so it is handed a string of
+# as many bytes as its mapping consumes; handing it one byte exhausts the
+# selector and reports a range error that belongs to the string rather
+# than to the operator.
+#
+# Font type 42 is absent from this axis, and deliberately: the type row
+# above records that a dictionary merely CLAIMING to be TrueType is
+# refused, so the font crossed here is one the host resolved, which is
+# what a program actually gets.
+
+route show        0   ok
+route show        1   ok
+route show        3   ok
+route show        42  ok
+route widthshow   0   ok
+route widthshow   1   ok
+route widthshow   3   ok
+route widthshow   42  ok
+route ashow       0   ok
+route ashow       1   ok
+route ashow       3   ok
+route ashow       42  ok
+route awidthshow  0   ok
+route awidthshow  1   ok
+route awidthshow  3   ok
+route awidthshow  42  ok
+route kshow       0   invalidfont
+route kshow       1   ok
+route kshow       3   ok
+route kshow       42  ok
+route glyphshow   0   ok
+route glyphshow   1   ok
+route glyphshow   3   ok
+route glyphshow   42  ok
+route xshow       0   ok
+route xshow       1   ok
+route xshow       3   ok
+route xshow       42  ok
+route stringwidth 0   ok
+route stringwidth 1   ok
+route stringwidth 3   ok
+route stringwidth 42  ok
+route charpath    0   ok
+route charpath    1   ok
+route charpath    3   ok
+route charpath    42  ok
+route cshow       0   ok
+route cshow       1   ok
+route cshow       3   ok
+route cshow       42  ok
+
+routes 40
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+
+glyphshow-takes-a-composite  thorn  PLRM 8.2 says of glyphshow that if the current font is a composite font an invalidfont error occurs, in the same words it uses of kshow. kshow refuses one and glyphshow does not: it asks only whether the font is a Type 3 and treats everything else alike. MEASURED, with a composite font carrying a face, glyphshow returns having painted. Both reference implementations consulted raise invalidfont. It has been unnoticed because the ordinary way to reach glyphshow is a font with no face beneath it, where the machinery below fails for its own reasons and looks like a refusal; give the composite a face and the guard evaporates. What removes it is the site asking the whole question rather than half of it, which is one line -- and the reason it is a thorn rather than done is that the same half-question is at six other sites and they should be changed together, through one place that answers it
+
+charpath-of-a-procedure-glyph  settled  A Type 3 glyph is described by a procedure, and charpath through one appends only the advance rather than the outline the procedure would paint. MEASURED as a degenerate box. This is not a deviation to correct: BOTH reference implementations consulted return the same degenerate box for the same font, to the digit. A glyph built by running a procedure has no outline until it is run, and running it would paint rather than append; PLRM 5.7 acknowledges as much where it excuses glyphs described by images. Changing it would put this interpreter alone among the three
+
+unknown-type-accepted  thorn  definefont takes a dictionary stating any font type at all, including 14 which nothing here implements and codes the specification does not define, because the arm that accepts it tests whether the dictionary carries a face rather than what type it claims. A program asking for a type this interpreter cannot render is told so only later, by whichever operator reaches the absent machinery. What removes it is the same single place the first thorn wants: a route question that names the three kinds it can paint and refuses the rest. The cost of doing it alone is that the type would then be checked at definefont while the face is checked where the face is used, so a dictionary could pass one and fail the other -- which is why it waits for the route question rather than being bolted on
+
+cidfont-type-never-stamped  thorn  PLRM Table 5.11 requires definefont and defineresource to stamp a CIDFont dictionary with a FontType saying which kind of CIDFont it is -- 9, 10, 11 or 32 by its CIDFontType -- and for a CIDFontType 2 to REPLACE the 42 the dictionary states with 11. None of the four values is ever written here, so the four rows of PLRM's table that this register would otherwise carry do not exist as anything a program can observe. What removes it is stamping at both operators; the cost is that nothing here reads the value yet, so the stamp would be written for the specification's sake and for a program that asks, with no machinery depending on it -- which is worth doing but is not the same job as making the routes agree
+
+divergences 4
