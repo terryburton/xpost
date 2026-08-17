@@ -5464,8 +5464,20 @@ pkgmod.generate(
     variables: 'pkgincludedir=' + '-' + v_maj,
 )
 
+# What actually backs a memory file, which is not the same question as
+# whether this host has mmap. Windows never reaches the POSIX arms: it
+# reserves the range a file can address and commits more of it as the file
+# fills, which is a mapping it owns and can give back, and reporting that
+# as the allocator would send a reader looking for a weakness that is not
+# there.
+if host_os == 'windows'
+  backing_desc = 'mapped (reserve/commit)'
+else
+  backing_desc = have_mmap.to_string('mapped (mmap/mremap)', 'allocator')
+endif
+
 summary({'OS': host_os,
-         'memory backing': have_mmap.to_string('mapped (mmap/mremap)', 'allocator'),
+         'memory backing': backing_desc,
          'fontconfig': fontconfig_dep.found().to_string('yes', 'no'),
          'jpeg device': jpeg_dep.found().to_string('yes', 'no'),
          'png device': libpng_dep.found().to_string('yes', 'no'),
