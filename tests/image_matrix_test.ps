@@ -24,15 +24,31 @@
 } def
 % The tag is put away before the procedure runs: a procedure that fails
 % may leave anything at all on the stack.
+%
+% And anything at all in the graphics state. Every case here opens with
+% `place`, which saves the graphics state before concatenating its
+% transform, and closes with the matching grestore -- but a case that
+% raises never reaches its own close, so its transform stays in force for
+% every case after it. That is not hypothetical: the degenerate transform
+% below is refused, and it used to leave a singular matrix behind, after
+% which five later cases raised undefinedresult and were read as correct
+% refusals of the thing they were actually testing. One false pass in
+% this file was exactly that.
+%
+% So the unwind belongs here, where it runs whether the case returned or
+% raised, and it unwinds all the way rather than by one: a case may have
+% opened more states than it closed, and the next case is entitled to the
+% graphics state this file started with.
+/reset { clear grestoreall } bind def
 /works { % {proc} (what) (which)
     /i.b exch def /i.a exch def
     stopped { i.a i.b note } if
-    clear
+    reset
 } def
 /refuses { % {proc} (what) (which)
     /i.b exch def /i.a exch def
     stopped not { i.a i.b note } if
-    clear
+    reset
 } def
 
 /place { gsave 40 0 0 40 0 0 6 array astore concat } bind def
@@ -144,18 +160,38 @@
   4 4 8 [4 0 0 -4 0 4] bytes image grestore } stopped
   { (note: a degenerate image transform is refused\n) print }
   { (note: a degenerate image transform paints nothing\n) print } ifelse
-clear
+reset
 
-% ------------------------------------------------------- what is refused
-% A description that does not add up is refused rather than read past
-% the end of its data.
+% ------------------------------------------------- a source that runs out
+% Running out of data is NOT a bad description. PLRM 4.10.5: "If a data
+% source ends before all samples have been read, the remainder of the
+% image that would have been painted by the missing samples is left
+% unpainted", and an incomplete final row may be discarded. So every one
+% of these must be accepted, and refusing any of them would be the
+% deviation. Both implementations consulted accept all four.
+%
+% What is painted differs between them and this harness paints to the null
+% device, so what is held here is that the description is accepted and
+% read no further than its data; the samples themselves are held by the
+% rendered comparisons.
 
 { place 4 4 8 [4 0 0 -4 0 4] <0011> image grestore }
-    (too little data) (a bad description) refuses
+    (a string shorter than the samples) (a source that ends early) works
+{ place 4 4 8 [4 0 0 -4 0 4] <> image grestore }
+    (a string with no samples at all) (a source that ends early) works
+{ place 4 4 8 [4 0 0 -4 0 4] { <0011> } image grestore }
+    (a procedure that runs short) (a source that ends early) works
+{ place 4 4 8 [4 0 0 -4 0 4] { () } image grestore }
+    (a procedure that ends at once) (a source that ends early) works
+{ place 4 4 true [4 0 0 -4 0 4] <A0> imagemask grestore }
+    (a stencil shorter than its rows) (a source that ends early) works
+
+% ------------------------------------------------------- what is refused
+% A description that does not add up is refused.
 { place 0 4 8 [4 0 0 -4 0 4] bytes image grestore } stopped
   { (note: an image of zero width is refused\n) print }
   { (note: an image of zero width paints nothing\n) print } ifelse
-clear
+reset
 { place 4 4 3 [4 0 0 -4 0 4] bytes image grestore }
     (a sample depth the language does not define) (a bad description) refuses
 { place
