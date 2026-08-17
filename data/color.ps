@@ -458,11 +458,17 @@ setglobal
     /DeviceCMYK /setcmykcolor cvx
     /Pattern {
         % comp1..compn pattern (components only under an uncoloured
-        % pattern, in its underlying space)
+        % pattern, in its underlying space), or the null object that
+        % stands for an empty tiling pattern (PLRM 4.9.1). The null
+        % carries no PaintType and so is not an uncoloured pattern; it
+        % takes the coloured arm, whose stored state is what a Pattern
+        % space is entered holding.
         2 dict begin
         /pat exch def
         graphicsdict /currgstate get /patdict pat put
-        pat /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse {
+        pat type /nulltype eq { false }
+        { pat /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse }
+        ifelse {
             /bs graphicsdict /currgstate get /patbase get def
             /n bs //.xpostsys /.spacecomponents get exec def
             n array astore
@@ -693,9 +699,21 @@ currentglobal true setglobal
 setglobal
 % The component count follows the current colour space, so the operand
 % stated is the topmost one: a component, or the pattern of a pattern
-% space.
-/setcolor [ [ /numbertype ] [ /dicttype ] ] {
+% space, or the null object a pattern space holds before a pattern is
+% set.
+/setcolor [ [ /numbertype ] [ /dicttype ] [ /nulltype ] ] {
     currentcolorspace
+    % PLRM 4.9.1: the colour value in a Pattern space is a null object,
+    % treated as an empty tiling pattern, and a program may set that
+    % value itself. No other family gives null a meaning, so the operand
+    % statement admits it for all of them and it is narrowed here, in the
+    % operator that knows which space is current. Refusing it in the
+    % family's own arm instead would report the fault as a component of
+    % the wrong type, which is a different mistake.
+    1 index type /nulltype eq {
+        dup //.xpostsys /.spaceispattern get exec not
+            { /setcolor cvx /typecheck signalerror } if
+    } if
     dup //.xpostsys /.spacekind get exec /indexed eq {
         % [/Indexed base hival lookup] index setcolor: the index names a
         % palette entry, resolved and set in the base space. A real index
@@ -763,12 +781,13 @@ setglobal
     currentcolorspace
     dup //.xpostsys /.spacekind get exec
     dup /pattern eq {
+        % the null pattern, which is what currentcolor answers with
+        % until a pattern is set. Set through setcolor like every other
+        % family's entry colour, so the state a Pattern space is entered
+        % holding is written in one place and is by construction the
+        % state a program reaches by setting null itself
         pop pop
-        graphicsdict /currgstate get /patdict null put
-        graphicsdict /currgstate get /patcomps null put
-        % one component, the null pattern, which is what currentcolor
-        % answers with until a pattern is set
-        graphicsdict /currgstate get /tintcomps 1 array put
+        null //setcolor exec
     }{
     dup /indexed eq {
         pop pop 0 //setcolor exec

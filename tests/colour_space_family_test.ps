@@ -114,6 +114,41 @@
     nm (enters its space holding a colour) assert
 } eachmember
 
+% ---- only a pattern space takes null as a colour
+%
+% PLRM 4.9.1 gives the null object a meaning in a Pattern space and only
+% there: it is the colour the space is entered holding, it stands for an
+% empty tiling pattern, and a program may set it back with setcolor. No
+% other family gives it one, so setcolor's operand statement admits null
+% for every space and the operator narrows it to the one that has a
+% meaning for it.
+%
+% Asked of every member rather than of the pattern alone, because the
+% statement is about the whole family: the answer that would go wrong
+% quietly is another space starting to accept null and painting
+% something undefined with it.
+{
+    /sp exch def /nm exch def
+    { sp setcolorspace null setcolor } outcome
+    % which family this member is, asked of the space its constructor
+    % built rather than read off a second list this test would have to
+    % keep in step with the first
+    gsave sp setcolorspace currentcolorspace 0 get grestore
+    /Pattern eq { /ok }{ /typecheck } ifelse
+    eq
+    nm (answers for null exactly as its family should) assert
+} eachmember
+
+% and the pattern space's own null round-trips through currentcolor,
+% which is what makes the entered colour and a program-set one the same
+% value rather than two that merely both paint nothing
+{ [ /Pattern ] setcolorspace currentcolor } outcome /ok eq
+(Pattern) (reports the colour it was entered holding) assert
+[ /Pattern ] setcolorspace currentcolor type /nulltype eq
+(Pattern) (is entered holding the null object itself) assert
+{ [ /Pattern ] setcolorspace currentcolor setcolor } outcome /ok eq
+(Pattern) (takes that colour back through setcolor) assert
+
 % ---- a tint space's transform must be a procedure
 %
 % PLRM 4.8.5 gives Separation a tintTransform and DeviceN a

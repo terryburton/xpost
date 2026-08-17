@@ -311,8 +311,6 @@ count divergences "$(grep -c . "$work/reg.diverge")"
 
 # ---- the divergences, each found by its own probe
 : > "$work/got.diverge"
-[ "$(outcome "[ /Pattern ] setcolorspace null setcolor 5 5 30 30 rectfill")" != none ] \
-    && echo initial-colour-not-null >> "$work/got.diverge"
 # XUID accepted and never consulted: a pattern with one and a pattern
 # without behave the same, and nothing here reads the key
 if [ "$(outcome "[ /Pattern ] setcolorspace
