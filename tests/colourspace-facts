@@ -1,0 +1,107 @@
+# What each colour space family is, what a colour in it is made of, and
+# where this interpreter and the specification differ.
+#
+# PLRM 4.8 defines eleven colour space families. Three name a device's
+# own colorants, four are built on the CIE 1931 XYZ space, one indexes a
+# palette, two carry tints through a transform into another space, and
+# one paints with a pattern rather than a colour.
+#
+# This is the largest family here, and the one where a member has twice
+# been reached by whichever code its author thought of. The component
+# count was written twice and the second copy knew the indexed and tint
+# families and not the CIE ones. The cross product that should have
+# caught that listed six bases and no CIE family. The characterisation
+# test listed nine members of eleven, so the two pre-extensions were
+# asked nothing. Each of those was one list not held to another.
+#
+# Membership is DERIVED from the roster in data/color.ps, which
+# tests/check-colour-spaces.sh already holds against the two pricing
+# tables. So a family added there and given no line here fails, and a
+# line here for a family the roster drops fails too.
+#
+#   <family>  <kind>  <components>  <paints|mute>  <reason>
+#
+# components  how many operands setcolor takes, MEASURED from the count
+#             the space is entered holding
+# paints      a region filled in this space puts ink on the page,
+#             COUNTED. Acceptance is not the question: a space that is
+#             set without complaint and marks nothing is what a
+#             half-wired conversion looks like
+
+DeviceGray    device   1  paints  the device's own grey, one component
+DeviceRGB     device   3  paints  the device's own red, green and blue
+DeviceCMYK    device   4  paints  the device's own cyan, magenta, yellow and black
+CIEBasedA     cie      1  paints  one component through a decode and a matrix to CIE XYZ, PLRM 4.8.3
+CIEBasedABC   cie      3  paints  three components, the family the other CIE spaces reduce to
+CIEBasedDEF   cie      3  paints  three components pre-extended through a three-dimensional lookup table, PLRM 4.8.3
+CIEBasedDEFG  cie      4  paints  four components pre-extended through a four-dimensional lookup table, whose entries are one array level deeper than a DEF table's
+Indexed       indexed  1  paints  one index into a palette, resolved in the base space
+Separation    tint     1  paints  one tint through a transform into an alternative space
+DeviceN       tint     2  paints  one tint per named colorant, so the count is the length of the names array rather than a property of the family
+Pattern       pattern  1  paints  a pattern rather than a colour, and the one component is the pattern itself
+
+families 11
+
+# The lookup-table widths and shapes a CIE pre-extension accepts.
+#
+# PLRM 4.8.3 gives a DEF space a Table of [ NH NI NJ table ] where table
+# is an array of NH strings of 3 x NI x NJ bytes, and a DEFG space a
+# Table of [ NH NI NJ NK table ] where table is an array of NH arrays,
+# each of NI strings of 3 x NJ x NK bytes. The extra array level is the
+# whole difference between the two families, and it is the thing a reader
+# written for one and used for the other gets wrong.
+#
+# PROBED, one space per case.
+#
+#   table <family> <case> <takes|refuses>
+
+table CIEBasedDEF   well-formed   takes
+table CIEBasedDEF   short-strings refuses
+table CIEBasedDEF   short-array   refuses
+table CIEBasedDEFG  well-formed   takes
+table CIEBasedDEFG  flat-array    refuses
+table CIEBasedDEFG  short-strings refuses
+
+tables 6
+
+# An uncoloured pattern paints its cells in the space underneath it, so
+# every family above is also a base a pattern can be laid over. That
+# crossing is where this family's two live defects were found, one at a
+# time, and both times the list that should have caught them was a list
+# of bases somebody wrote out.
+#
+# So it is PROBED here as a product: an uncoloured pattern over each
+# base, ink counted. Pattern itself is not a base -- PLRM 4.9.1 gives a
+# pattern space an optional underlying space and a pattern is not one.
+#
+#   base <family>  <paints|mute>
+
+base DeviceGray    paints
+base DeviceRGB     paints
+base DeviceCMYK    paints
+base CIEBasedA     paints
+base CIEBasedABC   paints
+base CIEBasedDEF   paints
+base CIEBasedDEFG  paints
+base Indexed       paints
+base Separation    paints
+base DeviceN       paints
+
+bases 10
+
+# Where this interpreter and the specification differ, and what is to
+# become of each difference. A difference the guard can find and this
+# list does not name is a failure; so is a line here naming a difference
+# the guard can no longer find.
+#
+#   <what>  <settled|thorn|heading>  <reason>
+
+missing-required  settled  A space whose family requires a parameter and does not carry it raises undefined when it is set, because the parameter is fetched and the fetch is what fails. The same is true of a halftone, a shading, a form and a function, so it is one behaviour across five families rather than this one being odd, and it would be changed in all five or none. It is recorded in each of their registers
+
+space-array-rebuilt  settled  currentcolorspace does not hand back the object the program supplied. A family named by a bare name comes back as a one-element array, and a one-element array comes back as a different one-element array; the multi-element forms come back as the same object. PLRM 8.2 requires currentcolorspace to answer an array describing the current space and does not make it the program's array, so a program cannot rely on identity either way. What it can rely on is that what comes back can be handed straight back to setcolorspace, which the family test asserts for every member
+
+special-names-in-devicen  settled  PLRM 4.8.5 says the special colorant names All and None are not allowed in a DeviceN names array, and one there is accepted and painted through the transform like any other name. Both reference implementations consulted accept it too, so refusing it would turn pages that render everywhere today into errors for a rule nothing enforces. The names are meaningful only to a Separation, where they are honoured
+
+none-colorant-marks  thorn  PLRM 4.8.5: the special colorant name None "will never produce any visible output", and painting in a Separation space named None has no effect on the current page. Here it paints, MEASURED as a full region of ink at full tint, because the name is not consulted and the tint goes through the transform into the alternative space like any other. Both reference implementations consulted leave the page blank. What removes it is a way for the current colour to mean "make no marks", consulted once where marks reach the device; the cost is that no such place exists -- the null pattern, which is the one colour that already paints nothing, is handled inside the pattern tiling walk rather than anywhere general, so the point would have to be introduced and every painting operator routed through it
+
+divergences 4

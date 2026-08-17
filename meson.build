@@ -4807,6 +4807,17 @@ test('check-function-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# PLRM 4.8 defines eleven colour space families, and this is the family
+# where a member has twice been reached by whichever code its author
+# happened to write. Membership is derived from the roster in
+# data/color.ps and every family is asked whether it PAINTS, counted in
+# ink, because a space that is set without complaint and marks nothing
+# satisfies any check that only asks whether an error was raised.
+test('check-colourspace-facts',
+  find_program('tests/check-colourspace-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,
