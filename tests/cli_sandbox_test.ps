@@ -1,3 +1,4 @@
+%!testlib
 %!
 % What the command line confines a program to, run by
 % run-cli-sandbox-test.sh with no --no-sandbox: prints SUCCESS iff every
@@ -14,21 +15,12 @@
 % OUTSIDE names a file the run was not given, in a directory that is
 % neither the current one nor the temporary one nor the program's own.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } bind def
 
 % What a procedure raised, with whatever it left behind taken off the
 % stack. The depth remembered is the one below the procedure: the count
 % at this point includes both the procedure and the name just pushed for
 % it, and `stopped` consumes the procedure, so a case that leaves nothing
 % would otherwise be asked to pop a negative number of operands.
-/errof { % proc . errorname
-    /ef.d count 2 sub def
-    stopped
-    { count ef.d sub { pop } repeat $error /errorname get }
-    { count ef.d sub { pop } repeat /noerror } ifelse
-} bind def
 
 % The operators that configure the confinement are gone by the time a
 % program runs. Enforcement does not rest on their absence -- the checks
@@ -44,23 +36,23 @@ systemdict /.resourcefileopen known not
     (.resourcefileopen is not in systemdict) assert
 
 % and naming one is undefined rather than reaching something else
-{ (/) .permitfileread } errof /undefined eq
+{ (/) .permitfileread } outcome /undefined eq
     (naming .permitfileread is undefined) assert
 
 % the working directory is the program's to read and to write
-{ (cli_sandbox_probe.txt) (w) file dup (data) writestring closefile } errof
-    /noerror eq (a file in the current directory is written) assert
-{ (cli_sandbox_probe.txt) (r) file dup closefile } errof
-    /noerror eq (a file in the current directory is read) assert
-{ (cli_sandbox_probe.txt) deletefile } errof
-    /noerror eq (a file in the current directory is deleted) assert
+{ (cli_sandbox_probe.txt) (w) file dup (data) writestring closefile } outcome
+    /ok eq (a file in the current directory is written) assert
+{ (cli_sandbox_probe.txt) (r) file dup closefile } outcome
+    /ok eq (a file in the current directory is read) assert
+{ (cli_sandbox_probe.txt) deletefile } outcome
+    /ok eq (a file in the current directory is deleted) assert
 
 % and what it was not given is refused, whichever way it is asked for
-{ OUTSIDE (r) file } errof /invalidfileaccess eq
+{ OUTSIDE (r) file } outcome /invalidfileaccess eq
     (a file outside is not read) assert
-{ OUTSIDE (w) file } errof /invalidfileaccess eq
+{ OUTSIDE (w) file } outcome /invalidfileaccess eq
     (a file outside is not written) assert
-{ OUTSIDE deletefile } errof /invalidfileaccess eq
+{ OUTSIDE deletefile } outcome /invalidfileaccess eq
     (a file outside is not deleted) assert
 OUTSIDE status not
     (a file outside does not answer status) assert
@@ -73,11 +65,11 @@ OUTSIDE status not
 % in it that the harness made, so a pass here is the refusal and not the
 % file being absent -- which is why the read is checked as well as the
 % write.
-{ SCRATCH (r) file } errof /invalidfileaccess eq
+{ SCRATCH (r) file } outcome /invalidfileaccess eq
     (a file in the temporary directory is not read) assert
-{ SCRATCH (w) file } errof /invalidfileaccess eq
+{ SCRATCH (w) file } outcome /invalidfileaccess eq
     (a file in the temporary directory is not written) assert
-{ TMPNEW (w) file } errof /invalidfileaccess eq
+{ TMPNEW (w) file } outcome /invalidfileaccess eq
     (a new file in the temporary directory is not created) assert
 
 % Naming an output file grants that file, not the directory holding it.
@@ -86,13 +78,13 @@ OUTSIDE status not
 % would cover everything and this would prove nothing. A name carrying a
 % %d is the exception and still takes the directory, because which pages
 % there will be is not known until the program has run.
-{ OUTSIB (r) file } errof /invalidfileaccess eq
+{ OUTSIB (r) file } outcome /invalidfileaccess eq
     (a file beside the output is not read) assert
-{ OUTSIB (w) file } errof /invalidfileaccess eq
+{ OUTSIB (w) file } outcome /invalidfileaccess eq
     (a file beside the output is not written) assert
-{ OUTNEW (w) file } errof /invalidfileaccess eq
+{ OUTNEW (w) file } outcome /invalidfileaccess eq
     (a new file beside the output is not created) assert
 
 0 0 moveto 10 10 lineto stroke showpage
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

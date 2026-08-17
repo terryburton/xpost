@@ -1,3 +1,4 @@
+%!testlib
 %!
 % What a refused file operation is called. Run by
 % run-file-refusal-test.sh, which hands it a directory it may search and
@@ -15,21 +16,12 @@
 % readable, so this is not a missing name and not an unopenable file.
 % It is the operation being refused.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } bind def
 
 % What a procedure raised, with whatever it left behind taken off the
 % stack. The depth remembered is the one below the procedure: the count
 % at this point includes both the procedure and the name just pushed for
 % it, and `stopped` consumes the procedure, so a case that leaves nothing
 % would otherwise be asked to pop a negative number of operands.
-/errof { % proc . errorname
-    /ef.d count 2 sub def
-    stopped
-    { count ef.d sub { pop } repeat $error /errorname get }
-    { count ef.d sub { pop } repeat /noerror } ifelse
-} bind def
 
 % and the control for it, because getting that depth wrong does not give
 % a wrong answer -- it kills the run somewhere unrelated, or quietly
@@ -40,18 +32,18 @@
 % rather than counted and adjusted, so that this control cannot be wrong
 % in the same way as the thing it controls.
 count /ef.d0 exch def
-{ } errof /noerror eq
+{ } outcome /ok eq
     (a procedure that leaves nothing behind returns) assert
 count ef.d0 eq
-    (errof pops nothing after a procedure that left nothing) assert
-{ 1 2 3 } errof /noerror eq
+    (outcome pops nothing after a procedure that left nothing) assert
+{ 1 2 3 } outcome /ok eq
     (a procedure that leaves three operands returns) assert
 count ef.d0 eq
-    (errof pops all three) assert
-{ (/nonexistent-directory-xpost/f) deletefile } errof /undefinedfilename eq
+    (outcome pops all three) assert
+{ (/nonexistent-directory-xpost/f) deletefile } outcome /undefinedfilename eq
     (a procedure that raises leaving one operand reports the error) assert
 count ef.d0 eq
-    (errof pops the one operand a raising procedure left) assert
+    (outcome pops the one operand a raising procedure left) assert
 
 % RODIR names the directory; the paths inside it are built with the
 % operators the language has, since concatstrings is not one of them.
@@ -66,16 +58,16 @@ count ef.d0 eq
 /g (g) under def
 
 % the file is readable: what follows is about the operation, not the file
-{ f (r) file dup closefile } errof /noerror eq
+{ f (r) file dup closefile } outcome /ok eq
     (the file inside the read-only directory opens for reading) assert
 
-{ f deletefile } errof /invalidfileaccess eq
+{ f deletefile } outcome /invalidfileaccess eq
     (deletefile names a refused removal invalidfileaccess) assert
-{ f g renamefile } errof /invalidfileaccess eq
+{ f g renamefile } outcome /invalidfileaccess eq
     (renamefile names a refused rename invalidfileaccess) assert
 
 % and a name that is not there is still told apart from a refusal
-{ (nope) under deletefile } errof /undefinedfilename eq
+{ (nope) under deletefile } outcome /undefinedfilename eq
     (deletefile still names a missing file undefinedfilename) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

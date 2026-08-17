@@ -73,7 +73,6 @@ own    blit_range_test.ps                     3
 own    build_personality_test.ps              1
 own    cacheparams_range_test.ps              1
 own    callback_reentry_test.ps               4
-own    cli_sandbox_test.ps                    1
 own    clip_region_test.ps                    2
 own    colorspace_matrix_test.ps              1
 own    colour_range_test.ps                   3
@@ -96,8 +95,7 @@ own    entity_limit_test.ps                   6
 own    error_dict_test.ps                     3
 own    error_unwind_test.ps                   79
 own    execform_cache_test.ps                 2
-own    file_lifetime_test.ps                  5
-own    file_refusal_test.ps                   1
+own    file_lifetime_test.ps                  4
 own    filenameforall_large_test.ps           3
 own    fill_span_test.ps                      1
 own    fillpoly_arity_test.ps                 3
@@ -111,7 +109,6 @@ own    font_cache_bound_test.ps               1
 own    font_face_release_test.ps              1
 own    font_leak_test.ps                      6
 own    font_name_steer_probe.ps               1
-own    font_name_steer_test.ps                1
 own    font_private_test.ps                   2
 own    font_type1_noaccess_test.ps            1
 own    forall_large_test.ps                   2
@@ -191,5 +188,5 @@ own    wrapped_save_test.ps                   1
 
 cannot startup_surface_test.ps                6  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
 
-owns 124
+owns 121
 cannots 1

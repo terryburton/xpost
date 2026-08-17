@@ -42,7 +42,13 @@ prog="$src/tests/font_name_steer_test.ps"
 [ -r "$prog" ] || { echo "FAILURES: not readable: $prog"; exit 1; }
 
 work=$(mktemp -d) || { echo "FAILURES: no scratch directory"; exit 1; }
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work" "$libwork"' EXIT
+
+# The combined program goes in a directory of its own: these runners set up a
+# scratch tree the suite itself looks at.
+libwork=$(mktemp -d) || libwork=$work
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$prog" "$libwork"
 
 marker=XPOSTSTEERMARKER
 staged="$work/not-a-font.dat"
@@ -69,7 +75,7 @@ out=$(XPOST_DATA_DIR="$src/data" "$xpost" -q -d null -o /dev/null --no-sandbox \
       "-DSTAGED=($staged)" \
       "-DPATTERN=(Foo:file=$staged)" \
       "-DFAMPAT=(Helvetica:file=$staged)" \
-      "$prog" </dev/null 2>&1)
+      "$testlib_run" </dev/null 2>&1)
 st=$?
 verdict_ok "$out" "the font-name steering test" ||
     { printf '%s\n' "$out" | sed 's/^/      /'; exit 1; }

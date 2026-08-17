@@ -1,3 +1,4 @@
+%!testlib
 %!
 % A font name does not name a file. Run by run-font-name-steer-test.sh,
 % which stages the file this tries to reach: prints SUCCESS iff every
@@ -33,16 +34,7 @@
 % STAGED names a file that is not a font and is in no font directory.
 % Its first bytes are a marker.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } bind def
 
-/errof { % proc . errorname
-    /ef.d count 2 sub def
-    stopped
-    { count ef.d sub { pop } repeat $error /errorname get }
-    { count ef.d sub { pop } repeat /noerror } ifelse
-} bind def
 
 % `search` (PLRM 8.2) is the substring primitive: on a hit it leaves the
 % three pieces, on a miss the string it was given.
@@ -94,7 +86,7 @@ ctl holds
 /try { % (name) (what) .
     /tr.what exch def
     /tr.name exch def
-    { tr.name findfont } errof /noerror eq {
+    { tr.name findfont } outcome /ok eq {
         tr.name findfont carries not tr.what assert
     }{
         (  ) print tr.what print ( : no font matched, nothing published\n) print
@@ -124,4 +116,4 @@ sawcs {
         (a published charstring is not readable by the program) assert
 } if
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

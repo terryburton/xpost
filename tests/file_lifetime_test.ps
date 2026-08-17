@@ -91,12 +91,6 @@ nm deletefile
 % at this point includes both the procedure and the name just pushed for
 % it, and `stopped` consumes the procedure, so a case that leaves nothing
 % would otherwise be asked to pop a negative number of operands.
-/errof { % proc . errorname
-    /ef.d count 2 sub def
-    stopped
-    { count ef.d sub { pop } repeat $error /errorname get }
-    { count ef.d sub { pop } repeat /noerror } ifelse
-} bind def
 
 % and the control for it: a case leaving nothing and a case leaving more
 % than one, since every case below leaves exactly one and a helper off by
@@ -104,18 +98,18 @@ nm deletefile
 % it is pushed, rather than counted and adjusted, so that this control
 % cannot be wrong in the same way as the thing it controls.
 count /ef.d0 exch def
-{ } errof /noerror eq
+{ } outcome /ok eq
     (a procedure that leaves nothing behind returns) assert
 count ef.d0 eq
-    (errof pops nothing after a procedure that left nothing) assert
-{ 1 2 3 } errof /noerror eq
+    (outcome pops nothing after a procedure that left nothing) assert
+{ 1 2 3 } outcome /ok eq
     (a procedure that leaves three operands returns) assert
 count ef.d0 eq
-    (errof pops all three) assert
+    (outcome pops all three) assert
 
-{ (/nonexistent-directory-xpost/f) deletefile } errof /undefinedfilename eq
+{ (/nonexistent-directory-xpost/f) deletefile } outcome /undefinedfilename eq
     (deletefile names a missing file undefinedfilename) assert
-{ (/nonexistent-directory-xpost/a) (/nonexistent-directory-xpost/b) renamefile } errof
+{ (/nonexistent-directory-xpost/a) (/nonexistent-directory-xpost/b) renamefile } outcome
     /undefinedfilename eq
     (renamefile names a missing file undefinedfilename) assert
 

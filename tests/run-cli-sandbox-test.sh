@@ -40,10 +40,16 @@ prog="$src/tests/cli_sandbox_test.ps"
 [ -r "$prog" ] || { echo "FAILURES: not readable: $prog"; exit 1; }
 
 work=$(mktemp -d) || { echo "FAILURES: no scratch directory"; exit 1; }
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work" "$libwork"' EXIT
+
+# The combined program goes in a directory of its own: these runners set up a
+# scratch tree the suite itself looks at.
+libwork=$(mktemp -d) || libwork=$work
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$prog" "$libwork"
 
 mkdir "$work/run" || { echo "FAILURES: could not make the working directory"; exit 1; }
-cp "$prog" "$work/run/prog.ps" || { echo "FAILURES: could not place the program"; exit 1; }
+cp "$testlib_run" "$work/run/prog.ps" || { echo "FAILURES: could not place the program"; exit 1; }
 mkdir "$work/elsewhere" || { echo "FAILURES: could not make the other directory"; exit 1; }
 # Where the output goes, kept apart from where the run stands. In most
 # invocations they are the same place, and then the working-directory

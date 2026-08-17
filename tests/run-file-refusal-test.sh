@@ -40,7 +40,13 @@ prog="$src/tests/file_refusal_test.ps"
 work=$(mktemp -d) || { echo "FAILURES: no scratch directory"; exit 1; }
 # 500 is restored before the removal: a directory with no write bit
 # cannot have its contents unlinked, including by the trap.
-trap 'chmod 700 "$work/ro" 2>/dev/null; rm -rf "$work"' EXIT
+trap 'chmod 700 "$work/ro" 2>/dev/null; rm -rf "$work" "$libwork"' EXIT
+
+# The combined program goes in a directory of its own: these runners set up a
+# scratch tree the suite itself looks at.
+libwork=$(mktemp -d) || libwork=$work
+. "$(dirname "$0")/testlib-prepend.sh"
+testlib_prepend "$prog" "$libwork"
 
 mkdir "$work/ro" || { echo "FAILURES: could not make the directory"; exit 1; }
 echo content > "$work/ro/f" || { echo "FAILURES: could not write the file"; exit 1; }
@@ -58,7 +64,7 @@ fi
 # Both halves: what the run said, and how it ended. A run that printed
 # its verdict and then died on the way out has not passed.
 out=$(XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null \
-      -o /dev/null "-DRODIR=($work/ro)" "$prog" </dev/null 2>&1)
+      -o /dev/null "-DRODIR=($work/ro)" "$testlib_run" </dev/null 2>&1)
 st=$?
 verdict_ok "$out" "the refusal test" || { printf '%s\n' "$out" | sed 's/^/      /'; exit 1; }
 if [ "$st" -ne 0 ]; then
