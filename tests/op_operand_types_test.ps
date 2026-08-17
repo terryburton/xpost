@@ -1,3 +1,4 @@
+%!testlib
 % Operators handed operands of a type they cannot want, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -11,29 +12,8 @@
 % Every case here was adjudicated against Adobe Distiller, which answers
 % typecheck to all of them.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store } def
 
-/refuses { % {proc} /errname (what)
-    /t.w exch def /t.e exch def /t.p exch def
-    clear /t.p load stopped {
-        $error /errorname get dup t.e ne {
-            (FAIL: ) print t.w print ( raised ) print ==
-            /bad bad 1 add store
-        }{ pop } ifelse
-    }{ t.w (was not refused) note } ifelse
-    clear
-} def
-/works { % {proc} (what)
-    /t.w exch def /t.p exch def
-    clear /t.p load stopped { t.w (was refused) note } if
-    clear
-} def
 
 % ------------------------------------------------------- access questions
 % rcheck and wcheck ask after an access, and only the composite types
@@ -48,22 +28,22 @@
 (str) readonly wcheck not (a readonly string is not writeable) assert
 (str) noaccess rcheck not (a noaccess string is not readable) assert
 
-{ null rcheck } /typecheck (rcheck a null) refuses
-{ 42 rcheck } /typecheck (rcheck an integer) refuses
-{ /nm rcheck } /typecheck (rcheck a name) refuses
-{ true rcheck } /typecheck (rcheck a boolean) refuses
-{ null wcheck } /typecheck (wcheck a null) refuses
-{ 42 wcheck } /typecheck (wcheck an integer) refuses
-{ true wcheck } /typecheck (wcheck a boolean) refuses
+{ null rcheck } /typecheck (rcheck a null) raises
+{ 42 rcheck } /typecheck (rcheck an integer) raises
+{ /nm rcheck } /typecheck (rcheck a name) raises
+{ true rcheck } /typecheck (rcheck a boolean) raises
+{ null wcheck } /typecheck (wcheck a null) raises
+{ 42 wcheck } /typecheck (wcheck an integer) raises
+{ true wcheck } /typecheck (wcheck a boolean) raises
 
 % ----------------------------------------------------------- the null key
 % A key may be any object except null. Stored quietly, a null key
 % discarded the value: nothing could ever ask for it again, since null
 % is what an empty slot holds.
 
-{ null 42 def } /typecheck (def with a null key) refuses
-{ 3 dict null 42 put } /typecheck (put with a null key) refuses
-{ 3 dict begin null 42 def end } /typecheck (def in a dictionary) refuses
+{ null 42 def } /typecheck (def with a null key) raises
+{ 3 dict null 42 put } /typecheck (put with a null key) raises
+{ 3 dict begin null 42 def end } /typecheck (def in a dictionary) raises
 
 % and every other key type still works
 { /nm 42 def } (def with a name key) works
@@ -79,16 +59,16 @@
 { false setoverprint } (setoverprint a boolean) works
 { { } settransfer } (settransfer a procedure) works
 
-{ null setstrokeadjust } /typecheck (setstrokeadjust a null) refuses
-{ 1 setstrokeadjust } /typecheck (setstrokeadjust an integer) refuses
-{ (yes) setstrokeadjust } /typecheck (setstrokeadjust a string) refuses
-{ null setoverprint } /typecheck (setoverprint a null) refuses
-{ 0 setoverprint } /typecheck (setoverprint an integer) refuses
-{ null settransfer } /typecheck (settransfer a null) refuses
-{ 42 settransfer } /typecheck (settransfer a number) refuses
+{ null setstrokeadjust } /typecheck (setstrokeadjust a null) raises
+{ 1 setstrokeadjust } /typecheck (setstrokeadjust an integer) raises
+{ (yes) setstrokeadjust } /typecheck (setstrokeadjust a string) raises
+{ null setoverprint } /typecheck (setoverprint a null) raises
+{ 0 setoverprint } /typecheck (setoverprint an integer) raises
+{ null settransfer } /typecheck (settransfer a null) raises
+{ 42 settransfer } /typecheck (settransfer a number) raises
 % a literal array is not a procedure: settransfer is given something to
 % execute, and an array that is not executable cannot be
-{ [1 2] settransfer } /typecheck (settransfer a literal array) refuses
+{ [1 2] settransfer } /typecheck (settransfer a literal array) raises
 
 % ------------------------------------------- the rest of the state setters
 % Each of these stored or discarded whatever it was handed. The two that
@@ -103,29 +83,29 @@
 { 100 setcachelimit } (setcachelimit an integer) works
 { 1000 setvmthreshold } (setvmthreshold an integer) works
 
-{ null setblackgeneration } /typecheck (setblackgeneration a null) refuses
-{ 42 setblackgeneration } /typecheck (setblackgeneration a number) refuses
-{ [1 2] setblackgeneration } /typecheck (setblackgeneration a literal array) refuses
-{ null setundercolorremoval } /typecheck (setundercolorremoval a null) refuses
-{ 42 setundercolorremoval } /typecheck (setundercolorremoval a number) refuses
-{ null setcolorrendering } /typecheck (setcolorrendering a null) refuses
-{ 42 setcolorrendering } /typecheck (setcolorrendering a number) refuses
-{ (x) setsmoothness } /typecheck (setsmoothness a string) refuses
-{ null setsmoothness } /typecheck (setsmoothness a null) refuses
+{ null setblackgeneration } /typecheck (setblackgeneration a null) raises
+{ 42 setblackgeneration } /typecheck (setblackgeneration a number) raises
+{ [1 2] setblackgeneration } /typecheck (setblackgeneration a literal array) raises
+{ null setundercolorremoval } /typecheck (setundercolorremoval a null) raises
+{ 42 setundercolorremoval } /typecheck (setundercolorremoval a number) raises
+{ null setcolorrendering } /typecheck (setcolorrendering a null) raises
+{ 42 setcolorrendering } /typecheck (setcolorrendering a number) raises
+{ (x) setsmoothness } /typecheck (setsmoothness a string) raises
+{ null setsmoothness } /typecheck (setsmoothness a null) raises
 % the operand is an integer, so a real is refused rather than converted
-{ 1.5 setcachelimit } /typecheck (setcachelimit a real) refuses
-{ (100) setcachelimit } /typecheck (setcachelimit a string) refuses
-{ null setvmthreshold } /typecheck (setvmthreshold a null) refuses
-{ 1.5 setvmthreshold } /typecheck (setvmthreshold a real) refuses
+{ 1.5 setcachelimit } /typecheck (setcachelimit a real) raises
+{ (100) setcachelimit } /typecheck (setcachelimit a string) raises
+{ null setvmthreshold } /typecheck (setvmthreshold a null) raises
+{ 1.5 setvmthreshold } /typecheck (setvmthreshold a real) raises
 
 % ------------------------------------------------ the operand before the work
 % setgstate fetched the current graphics state before looking at what it
 % was given, so an empty stack was reported as a type error about an
 % object the program never supplied.
 
-{ setgstate } /stackunderflow (setgstate with an empty stack) refuses
-{ 42 setgstate } /typecheck (setgstate an integer) refuses
-{ null setgstate } /typecheck (setgstate a null) refuses
+{ setgstate } /stackunderflow (setgstate with an empty stack) raises
+{ 42 setgstate } /typecheck (setgstate an integer) raises
+{ null setgstate } /typecheck (setgstate a null) raises
 { gstate setgstate } (setgstate a gstate) works
 
 % ------------------------------------------------------------- findfont
@@ -140,14 +120,14 @@
     (an unknown name still yields a dictionary) assert
 
 % a key may be any object except null, so only null is refused outright
-{ null findfont } /typecheck (findfont a null key) refuses
+{ null findfont } /typecheck (findfont a null key) raises
 
 % ------------------------------------------------------------ conversions
 % cvn converts a string. A name is not a string.
 
 { (str) cvn pop } (cvn a string) works
-{ /nm cvn } /typecheck (cvn a name) refuses
-{ 42 cvn } /typecheck (cvn a number) refuses
+{ /nm cvn } /typecheck (cvn a name) raises
+{ 42 cvn } /typecheck (cvn a number) raises
 (abc) cvn /abc eq (cvn yields the name of its string) assert
 
 % ------------------------------------------------------------- dictionaries
@@ -155,13 +135,13 @@
 
 { /pop where pop pop } (where a name) works
 { (pop) where pop pop } (where a string) works
-{ null where } /typecheck (where a null) refuses
+{ null where } /typecheck (where a null) raises
 
 % ------------------------------------------------------- matrices and state
 
 { matrix setmatrix } (setmatrix six numbers) works
-{ [1 2] setmatrix } /rangecheck (setmatrix a short array) refuses
-{ [1 2 3 4 5 6 7] setmatrix } /rangecheck (setmatrix a long array) refuses
+{ [1 2] setmatrix } /rangecheck (setmatrix a short array) raises
+{ [1 2 3 4 5 6 7] setmatrix } /rangecheck (setmatrix a long array) raises
 
 { /Helvetica findfont 12 scalefont setfont } (setfont a font) works
 
@@ -169,26 +149,26 @@
 % statement of their operands is the only thing between them and an
 % operand they cannot use
 { { pop 0.5 } settransfer } (settransfer a procedure) works
-{ 42 settransfer } /typecheck (settransfer a number) refuses
-{ (x) settransfer } /typecheck (settransfer a string) refuses
+{ 42 settransfer } /typecheck (settransfer a number) raises
+{ (x) settransfer } /typecheck (settransfer a string) raises
 { newpath 10 10 moveto (A) [ 9 ] xshow } (xshow a string and an array) works
-{ newpath 10 10 moveto 42 [ 9 ] xshow } /typecheck (xshow a number) refuses
-{ newpath 10 10 moveto (A) 9 xshow } /typecheck (xshow a number for the array) refuses
-{ newpath 10 10 moveto (A) 9 yshow } /typecheck (yshow a number for the array) refuses
-{ newpath 10 10 moveto (A) 9 xyshow } /typecheck (xyshow a number for the array) refuses
-{ 3 dict setfont } /invalidfont (setfont a plain dictionary) refuses
-{ 42 setfont } /typecheck (setfont a number) refuses
+{ newpath 10 10 moveto 42 [ 9 ] xshow } /typecheck (xshow a number) raises
+{ newpath 10 10 moveto (A) 9 xshow } /typecheck (xshow a number for the array) raises
+{ newpath 10 10 moveto (A) 9 yshow } /typecheck (yshow a number for the array) raises
+{ newpath 10 10 moveto (A) 9 xyshow } /typecheck (xyshow a number for the array) raises
+{ 3 dict setfont } /invalidfont (setfont a plain dictionary) raises
+{ 42 setfont } /typecheck (setfont a number) raises
 
 { 60 45 { pop pop 0 } setscreen } (setscreen a frequency, angle and spot) works
-{ 60 45 60 setscreen } /typecheck (setscreen a number for the spot) refuses
-{ (x) 45 { pop pop 0 } setscreen } /typecheck (setscreen a string frequency) refuses
-{ 60 (x) { pop pop 0 } setscreen } /typecheck (setscreen a string angle) refuses
+{ 60 45 60 setscreen } /typecheck (setscreen a number for the spot) raises
+{ (x) 45 { pop pop 0 } setscreen } /typecheck (setscreen a string frequency) raises
+{ 60 (x) { pop pop 0 } setscreen } /typecheck (setscreen a string angle) raises
 
 { << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 8 8]
      /XStep 8 /YStep 8 /PaintProc { pop } >> matrix makepattern setpattern
   0 setgray } (setpattern a pattern) works
-{ 3 dict setpattern } /typecheck (setpattern a plain dictionary) refuses
-{ 42 setpattern } /typecheck (setpattern a number) refuses
+{ 3 dict setpattern } /typecheck (setpattern a plain dictionary) raises
+{ 42 setpattern } /typecheck (setpattern a number) raises
 
 % ------------------------------------------------------------- user paths
 % A user path is numbers and user-path operators, each operator preceded
@@ -196,17 +176,17 @@
 
 { { 0 0 100 100 setbbox 10 10 moveto 50 50 lineto } uappend } (a user path) works
 { { 0 0 100 100 setbbox 10 10 moveto } ufill } (ufill a user path) works
-{ { 1 } uappend } /typecheck (numbers with no operator) refuses
-{ { 10 10 show } uappend } /typecheck (an operator that is not a path operator) refuses
-{ { 10 moveto } uappend } /typecheck (an operator short of an argument) refuses
-{ { 10 10 10 moveto } uappend } /typecheck (an operator with an argument too many) refuses
-{ 42 uappend } /typecheck (a number) refuses
-{ { 1 } ufill } /typecheck (ufill something that is not a user path) refuses
+{ { 1 } uappend } /typecheck (numbers with no operator) raises
+{ { 10 10 show } uappend } /typecheck (an operator that is not a path operator) raises
+{ { 10 moveto } uappend } /typecheck (an operator short of an argument) raises
+{ { 10 10 10 moveto } uappend } /typecheck (an operator with an argument too many) raises
+{ 42 uappend } /typecheck (a number) raises
+{ { 1 } ufill } /typecheck (ufill something that is not a user path) raises
 
 % the in-tests take a point or a user path, and nothing else
 { 10 10 moveto 20 20 lineto 15 15 infill pop } (infill a point) works
-{ { 1 } { 1 } infill } /typecheck (infill something that is not a point) refuses
-{ { 1 } { 1 } ineofill } /typecheck (ineofill something that is not a point) refuses
+{ { 1 } { 1 } infill } /typecheck (infill something that is not a point) raises
+{ { 1 } { 1 } ineofill } /typecheck (ineofill something that is not a point) raises
 
 % -------------------------------------------------------- graphics states
 % A gstate is a dictionary carrying the graphics state's own entries,
@@ -214,22 +194,22 @@
 
 { gstate setgstate } (setgstate a gstate) works
 { gstate currentgstate pop } (currentgstate a gstate) works
-{ 3 dict setgstate } /typecheck (setgstate a plain dictionary) refuses
-{ 3 dict currentgstate } /typecheck (currentgstate a plain dictionary) refuses
-{ 42 currentgstate } /typecheck (currentgstate a number) refuses
+{ 3 dict setgstate } /typecheck (setgstate a plain dictionary) raises
+{ 3 dict currentgstate } /typecheck (currentgstate a plain dictionary) raises
+{ 42 currentgstate } /typecheck (currentgstate a number) raises
 
 % ------------------------------------------------------------ resources
 % A rendering intent is a name or a string.
 
 { /RelativeColorimetric findcolorrendering pop pop } (a rendering intent by name) works
 { (RelativeColorimetric) findcolorrendering pop pop } (a rendering intent by string) works
-{ 42 findcolorrendering } /typecheck (a rendering intent that is a number) refuses
-{ null findcolorrendering } /typecheck (a rendering intent that is null) refuses
+{ 42 findcolorrendering } /typecheck (a rendering intent that is a number) raises
+{ null findcolorrendering } /typecheck (a rendering intent that is null) raises
 
 % composefont takes a key, a CMap named or given, and an array of fonts
-{ /F { 1 } [ ] composefont } /typecheck (a CMap that is a procedure) refuses
-{ /F 42 [ ] composefont } /typecheck (a CMap that is a number) refuses
-{ /F /Identity-H 42 composefont } /typecheck (a font list that is a number) refuses
+{ /F { 1 } [ ] composefont } /typecheck (a CMap that is a procedure) raises
+{ /F 42 [ ] composefont } /typecheck (a CMap that is a number) raises
+{ /F /Identity-H 42 composefont } /typecheck (a font list that is a number) raises
 
 % ---------------------------------------------------------------- arithmetic
 % A result that cannot be represented is not a result.
@@ -238,8 +218,8 @@
 { 2 0.5 exp pop } (exp a fractional power) works
 % the range of a real differs between the two object widths, so the
 % power here is one that overflows either
-{ 10 400 exp } /undefinedresult (exp a power that overflows) refuses
-{ 10 400 exp neg } /undefinedresult (exp a power overflowing downward) refuses
+{ 10 400 exp } /undefinedresult (exp a power that overflows) raises
+{ 10 400 exp neg } /undefinedresult (exp a power overflowing downward) raises
 
 % ------------------------------------------------------ transfer functions
 % A transfer function maps one number in [0,1] to one number, and is
@@ -258,14 +238,14 @@ count 0 eq (sampling leaves the operand stack as it found it) assert
 
 % a procedure that does not consume its argument leaves the stack
 % deeper each time it is sampled
-{ { 1 } settransfer } /typecheck (a transfer that pushes without popping) refuses
-{ { pop } settransfer } /typecheck (a transfer that leaves no result) refuses
-{ { pop (x) } settransfer } /typecheck (a transfer whose result is a string) refuses
+{ { 1 } settransfer } /typecheck (a transfer that pushes without popping) raises
+{ { pop } settransfer } /typecheck (a transfer that leaves no result) raises
+{ { pop (x) } settransfer } /typecheck (a transfer whose result is a string) raises
 % one that takes more than its argument reaches past the sample into the
 % caller's own stack, and refuses where it runs out of it
-{ { pop pop 0.5 } settransfer } /stackunderflow (a transfer that pops too much) refuses
-{ { 1 } setblackgeneration } /typecheck (a black generation that pushes) refuses
-{ { 1 } setundercolorremoval } /typecheck (an undercolour removal that pushes) refuses
+{ { pop pop 0.5 } settransfer } /stackunderflow (a transfer that pops too much) raises
+{ { 1 } setblackgeneration } /typecheck (a black generation that pushes) raises
+{ { 1 } setundercolorremoval } /typecheck (an undercolour removal that pushes) raises
 
 % the sampling runs against the caller's dictionaries, so a procedure
 % that keeps a count can keep one
@@ -279,34 +259,34 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 { [ 3 2 ] 0 setdash } (setdash an array and an offset) works
 { [ ] 0 setdash } (setdash an empty array) works
 { [ 3 2 ] 1.5 setdash } (setdash a real offset) works
-{ (x) 0 setdash } /typecheck (setdash a string for the pattern) refuses
-{ 42 0 setdash } /typecheck (setdash a number for the pattern) refuses
-{ [ 3 2 ] (x) setdash } /typecheck (setdash a string for the offset) refuses
-{ [ 3 2 ] setdash } /stackunderflow (setdash with no offset) refuses
-{ [ 3 -2 ] 0 setdash } /rangecheck (setdash a negative element) refuses
+{ (x) 0 setdash } /typecheck (setdash a string for the pattern) raises
+{ 42 0 setdash } /typecheck (setdash a number for the pattern) raises
+{ [ 3 2 ] (x) setdash } /typecheck (setdash a string for the offset) raises
+{ [ 3 2 ] setdash } /stackunderflow (setdash with no offset) raises
+{ [ 3 -2 ] 0 setdash } /rangecheck (setdash a negative element) raises
 
 { 1 setlinecap } (setlinecap a code) works
-{ (x) setlinecap } /typecheck (setlinecap a string) refuses
-{ 9 setlinecap } /rangecheck (setlinecap a code out of range) refuses
+{ (x) setlinecap } /typecheck (setlinecap a string) raises
+{ 9 setlinecap } /rangecheck (setlinecap a code out of range) raises
 { 1 setlinejoin } (setlinejoin a code) works
-{ (x) setlinejoin } /typecheck (setlinejoin a string) refuses
-{ 9 setlinejoin } /rangecheck (setlinejoin a code out of range) refuses
+{ (x) setlinejoin } /typecheck (setlinejoin a string) raises
+{ 9 setlinejoin } /rangecheck (setlinejoin a code out of range) raises
 { 4 setmiterlimit } (setmiterlimit a number) works
-{ (x) setmiterlimit } /typecheck (setmiterlimit a string) refuses
-{ 0.5 setmiterlimit } /rangecheck (setmiterlimit below one) refuses
+{ (x) setmiterlimit } /typecheck (setmiterlimit a string) raises
+{ 0.5 setmiterlimit } /rangecheck (setmiterlimit below one) raises
 
 % -------------------------------------------------------- rectangles and forms
 
 { newpath 10 10 30 30 rectclip } (rectclip four numbers) works
-{ newpath (x) 10 30 30 rectclip } /typecheck (rectclip a string) refuses
-{ 3 dict execform } /rangecheck (execform a dictionary that is not a form) refuses
-{ 42 execform } /typecheck (execform a number) refuses
+{ newpath (x) 10 30 30 rectclip } /typecheck (rectclip a string) raises
+{ 3 dict execform } /rangecheck (execform a dictionary that is not a form) raises
+{ 42 execform } /typecheck (execform a number) raises
 
 % ------------------------------------------------------------- user objects
 
 { 0 { 1 } defineuserobject } (defineuserobject an index and a value) works
-{ (x) { 1 } defineuserobject } /typecheck (defineuserobject a string index) refuses
-{ -1 { 1 } defineuserobject } /rangecheck (defineuserobject a negative index) refuses
+{ (x) { 1 } defineuserobject } /typecheck (defineuserobject a string index) raises
+{ -1 { 1 } defineuserobject } /rangecheck (defineuserobject a negative index) raises
 
 % ------------------------------------------------------ the transfer readers
 
@@ -318,11 +298,11 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 % the type is settled first, so a number is refused as a number rather
 % than as a dictionary missing an entry.
 
-{ 42 shfill } /typecheck (shfill a number) refuses
-{ (x) shfill } /typecheck (shfill a string) refuses
+{ 42 shfill } /typecheck (shfill a number) raises
+{ (x) shfill } /typecheck (shfill a string) raises
 
-{ 42 eexec } /typecheck (eexec a number) refuses
-{ (x) eexec } /typecheck (eexec a string) refuses
+{ 42 eexec } /typecheck (eexec a number) raises
+{ (x) eexec } /typecheck (eexec a string) raises
 
 % ------------------------------------------ operators that state their operands
 % These are wrapped with a statement of the operands they take, and the
@@ -331,20 +311,20 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 
 /Helvetica findfont 12 scalefont setfont
 { 0.5 setgray } (setgray a number) works
-{ (x) setgray } /typecheck (setgray a string) refuses
-{ setgray } /stackunderflow (setgray with nothing) refuses
+{ (x) setgray } /typecheck (setgray a string) raises
+{ setgray } /stackunderflow (setgray with nothing) raises
 { 1 0 0 setrgbcolor } (setrgbcolor three numbers) works
-{ 1 0 (x) setrgbcolor } /typecheck (setrgbcolor a string) refuses
+{ 1 0 (x) setrgbcolor } /typecheck (setrgbcolor a string) raises
 { 0 0 0 1 setcmykcolor } (setcmykcolor four numbers) works
-{ 0 0 0 (x) setcmykcolor } /typecheck (setcmykcolor a string) refuses
+{ 0 0 0 (x) setcmykcolor } /typecheck (setcmykcolor a string) raises
 { newpath 10 10 moveto (A) show } (show a string) works
-{ newpath 10 10 moveto 42 show } /typecheck (show a number) refuses
+{ newpath 10 10 moveto 42 show } /typecheck (show a number) raises
 { newpath 10 10 moveto /A glyphshow } (glyphshow a name) works
-{ newpath 10 10 moveto (A) glyphshow } /typecheck (glyphshow a string) refuses
+{ newpath 10 10 moveto (A) glyphshow } /typecheck (glyphshow a string) raises
 { (A) stringwidth pop pop } (stringwidth a string) works
-{ 42 stringwidth } /typecheck (stringwidth a number) refuses
+{ 42 stringwidth } /typecheck (stringwidth a number) raises
 { /Helvetica findfont 12 scalefont pop } (scalefont a font and a size) works
-{ /Helvetica findfont (x) scalefont } /typecheck (scalefont a string size) refuses
+{ /Helvetica findfont (x) scalefont } /typecheck (scalefont a string size) raises
 { /Helvetica findfont 12 scalefont setfont } (setfont a font) works
 
 % ------------------------------------------- what the statement already says
@@ -355,14 +335,12 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 % the count, and the type, for two operators whose bodies used to check
 % both for themselves.
 
-{ (a) cshow }        /stackunderflow (cshow given only a string) refuses
-{ { } cshow }        /stackunderflow (cshow given only a procedure) refuses
-{ (a) (b) cshow }    /typecheck (cshow a string where a procedure goes) refuses
-{ { } { } cshow }    /typecheck (cshow a procedure where a string goes) refuses
-{ setpagedevice }    /stackunderflow (setpagedevice given nothing) refuses
-{ 42 setpagedevice } /typecheck (setpagedevice a number) refuses
-{ [ ] setpagedevice } /typecheck (setpagedevice an array) refuses
+{ (a) cshow }        /stackunderflow (cshow given only a string) raises
+{ { } cshow }        /stackunderflow (cshow given only a procedure) raises
+{ (a) (b) cshow }    /typecheck (cshow a string where a procedure goes) raises
+{ { } { } cshow }    /typecheck (cshow a procedure where a string goes) raises
+{ setpagedevice }    /stackunderflow (setpagedevice given nothing) raises
+{ 42 setpagedevice } /typecheck (setpagedevice a number) raises
+{ [ ] setpagedevice } /typecheck (setpagedevice an array) raises
 
-bad 0 eq (every operator refuses what it cannot use) assert
-
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

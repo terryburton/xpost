@@ -1,3 +1,4 @@
+%!testlib
 % Every painting operator through whichever device is current, run by
 % run-device-features-test.sh once per device.
 %
@@ -12,20 +13,6 @@
 % So each operator is exercised here rather than a representative one,
 % and each reports for itself.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
-% The tag is put away before the procedure runs: a procedure that fails
-% may leave anything at all on the stack, and a report that reads its
-% own operands from there reports the leavings instead.
-/works { % {proc} (tag)  -  the operation completes
-    /w.tag exch def
-    stopped {
-        (FAIL: ) print w.tag print (\n) print
-        /failcount failcount 1 add store
-    } if
-    clear
-} def
 
 20 20 translate
 
@@ -132,4 +119,4 @@ slotsrun 6 ge (the device offered its marking slots to be called) assert
 % the page-emission banner ends without a newline, so start on a fresh
 % line rather than running into it
 (\n) print
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

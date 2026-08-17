@@ -96,10 +96,11 @@
 % an outer graphics state across its cases must therefore not use these.
 
 % -  .testlib.unwind  -
-% Put the world back, whatever the case left of it.
+% Put the operand and dictionary stacks back. Called after every case,
+% whether it returned or raised, because leftovers on either belong to the
+% case that made them and not to the next one.
 .testlib /unwind {
     clear
-    grestoreall
     countdictstack //.testlib /depth get sub
     dup 0 gt { { end } repeat }{ pop } ifelse
 } bind put
@@ -110,17 +111,48 @@
 % different questions, and a test that can only ask the first passes when
 % the interpreter starts raising something else.
 %
+% THE GRAPHICS STATE IS PUT BACK ONLY IF THE CASE RAISED. Both halves of
+% that matter.
+%
+% Restoring always is wrong. A suite may be a sequence rather than a set of
+% independent cases: one case selects a font and the next shows text with
+% it, and undoing the first because the framework tidies after every case
+% breaks the second. MEASURED on two suites, four and three cases failing.
+%
+% Not restoring at all is the defect this framework was written for. A case
+% that raises never reaches its own cleanup, so its half-finished graphics
+% state -- a transform, a clip, a colour -- becomes the environment every
+% later case runs in, and a case failing for that reason looks exactly like
+% a case failing for its own.
+%
+% A case that returned meant what it did; a case that raised did not. So the
+% state is captured before the case and put back only on the raising path.
+%
+% It is put back from the copy rather than by unwinding the graphics state
+% stack. grestoreall is the obvious tool and it is wrong: it unwinds to the
+% state saved by the most recent SAVE, and a job has one outstanding, so it
+% resets to the state the job began with -- discarding whatever the suite
+% set at its own top level. Restoring from a copy is also exact where a
+% single grestore is not, since a case that opened two states and closed
+% neither would be unwound only to its own inner one.
+%
+% What is not undone is the DEPTH: a case that leaks a gsave leaves the
+% stack one deeper, and nothing here can tell that from a state the suite
+% opened on purpose. The state the next case sees is right; the depth is
+% not, and no operator here can measure it.
+%
 % The answer is parked in the framework's dictionary before the unwind,
 % because the unwind clears the operand stack and the answer is on it.
 %
-% No mark is laid to find the case's leavings by, though that is the
-% obvious way to tidy an operand stack. A mark is visible to the case: a
-% body that reads `count`, or that lays and clears a mark of its own, gets
-% a different answer with one of ours underneath it -- and several suites
-% here have bodies that do exactly that. The unwind clears the stack
-% wholesale instead, which needs no mark to know where to stop.
+% No mark is laid to find the case's leavings by, though that is the obvious
+% way to tidy an operand stack. A mark is visible to the case: a body that
+% reads `count`, or that lays and clears a mark of its own, gets a different
+% answer with one of ours underneath it -- and suites here have bodies that
+% do exactly that.
 /outcome {                              % { body }  .  /ok | /errorname
-    stopped { $error /errorname get }{ /ok } ifelse
+    //.testlib /gs get currentgstate pop
+    stopped
+    { //.testlib /gs get setgstate $error /errorname get }{ /ok } ifelse
     //.testlib exch /answer exch put
     //.testlib /unwind get exec
     //.testlib /answer get
@@ -137,17 +169,6 @@
 /note {                                 % (what) (subject)  .  -
     exch false 3 1 roll assert2
 } bind def
-
-% ---- the runners
-%
-% Each comes in two shapes, named as assert and assert2 are: the plain one
-% takes a single message, and the numbered one takes a subject and a
-% question and prints them together, which is what makes a failure in a
-% table of a hundred cells readable. Both shapes were already in use here,
-% in files that had written their own; carrying both is what lets those
-% files move over without their call sites being rewritten in the same
-% step, which is the difference between a move that can be checked by
-% diffing the output and one that cannot.
 
 % { body } (what)  works  -
 % { body } (what) (subject)  works2  -
@@ -205,3 +226,8 @@
 % framework's own definitions so the framework is never counted as
 % something a case leaked.
 .testlib /depth countdictstack put
+
+% One gstate object, reused by every case rather than allocated per case:
+% the framework runs inside the suite's virtual memory and a suite that
+% counts what it allocated should not be counting this.
+.testlib /gs gstate put
