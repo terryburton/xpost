@@ -842,6 +842,10 @@ static int _codec_defers_rows(const void *p)
     return ((const PrivateData *)p)->interlaced != PNG_INTERLACE_NONE;
 }
 
+/* How this device answers for the shape of its own instance, so that
+   the emitting itself is written once (xpost_dev_page_emit_call). */
+XPOST_DEV_PAGE_ACCESSORS(PrivateData)
+
 static const Xpost_Dev_Page_Codec _codec = {
     _page_begin,
     _stream_drop,
@@ -849,39 +853,24 @@ static const Xpost_Dev_Page_Codec _codec = {
     _write_rows,
     _stream_finish,
     _codec_defers_rows,
-    _reclaim
+    _reclaim,
+    _raster_of,
+    _band_of,
+    _file_of,
+    _height_of,
+    _disown,
+    _prime_of,
+    _clear_of
 };
 
 static
 int _emit(Xpost_Context *ctx,
           Xpost_Object devdic)
 {
-    Xpost_Object privatestr;
     PrivateData private;
-    int ret, handed;
 
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    /* a released instance has no raster to write */
-    if (!private.buf)
-        return 0;
-
-    ret = xpost_dev_page_emit(ctx, devdic, &private, &private.band,
-                              &private.file, private.height,
-                              (unsigned char *)private.buf->data,
-                              &_codec, &handed);
-    if (handed)
-        private.bufowned = 0;
-
-    /* what the writing came to is recorded whether the page was written
-       or refused: a page that could not be written is one this device
-       must not go on writing */
-    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
-
-    return ret;
+    return xpost_dev_page_emit_call(ctx, devdic, namePrivate,
+                                    &private, sizeof(private), &_codec);
 }
 
 /* Move the raster onto another run of the page's rows.
@@ -905,33 +894,11 @@ int _moveband(Xpost_Context *ctx,
               Xpost_Object rows,
               Xpost_Object devdic)
 {
-    Xpost_Object privatestr;
     PrivateData private;
 
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    if (!private.buf)
-        return 0;
-
-    xpost_dev_band_move(ctx, devdic, &private.band, private.height,
-                        xpost_dev_num_to_int(top),
-                        xpost_dev_num_to_int(rows));
-    /* rows put in front of a device whose page is finished are the next
-       page's: this is where a job's second page begins */
-    if (private.band.done && private.band.rows > 0)
-        _page_begin(&private);
-    /* and where a device holding every row of the page lays the ground
-       over the rows no run of them is going to reach */
-    if (private.band.whole && private.band.rows > 0 && !private.band.primed)
-        _prime(ctx, devdic, &private);
-    _clear(&private, private.band.top - private.band.origin,
-           private.band.top - private.band.origin + private.band.rows - 1);
-
-    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
-    return 0;
+    return xpost_dev_page_moveband_call(ctx, devdic, namePrivate,
+                                        &private, sizeof(private),
+                                        top, rows, &_codec);
 }
 
 /* -  .rowcost  elements bytes

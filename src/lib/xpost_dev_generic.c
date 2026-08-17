@@ -2432,6 +2432,81 @@ void xpost_dev_page_retire(void *priv, Xpost_Dev_Band *band, int has_raster,
     codec->reclaim(priv);
 }
 
+/* A MoveBand method entire. Which rows the raster next stands for is
+   the band machinery's; what a device adds is beginning a page, laying
+   the ground and clearing the run, and the order of those three is the
+   part that must not be written twice. */
+int
+xpost_dev_page_moveband_call(Xpost_Context *ctx, Xpost_Object devdic,
+                             Xpost_Object nameprivate,
+                             void *priv, size_t privsz,
+                             Xpost_Object top, Xpost_Object rows,
+                             const Xpost_Dev_Page_Codec *codec)
+{
+    Xpost_Object privatestr;
+    Xpost_Dev_Band *band;
+
+    if (!xpost_dev_private_get(ctx, devdic, nameprivate,
+                               &privatestr, priv, privsz))
+        return undefined;
+    if (!codec->raster(priv))
+        return 0;
+
+    band = codec->band(priv);
+    xpost_dev_band_move(ctx, devdic, band, codec->height(priv),
+                        xpost_dev_num_to_int(top),
+                        xpost_dev_num_to_int(rows));
+    /* rows put in front of a device whose page is finished are the next
+       page's: this is where a job's second page begins */
+    if (band->done && band->rows > 0)
+        codec->page_begin(priv);
+    /* and where a device holding every row of the page lays the ground
+       over the rows no run of them is going to reach */
+    if (band->whole && band->rows > 0 && !band->primed)
+        codec->prime(ctx, devdic, priv);
+    codec->clear(priv, band->top - band->origin,
+                 band->top - band->origin + band->rows - 1);
+
+    if (!xpost_dev_private_put(ctx, privatestr, priv, privsz))
+        return VMerror;
+    return 0;
+}
+
+/* An Emit method entire. The order of these steps is the part that
+   must not be written twice: a device that stood down before recording
+   the instance would go on writing a page it had already refused, and
+   one that recorded before emitting would lose the hand-off. */
+int
+xpost_dev_page_emit_call(Xpost_Context *ctx, Xpost_Object devdic,
+                         Xpost_Object nameprivate,
+                         void *priv, size_t privsz,
+                         const Xpost_Dev_Page_Codec *codec)
+{
+    Xpost_Object privatestr;
+    unsigned char *raster;
+    int ret, handed = 0;
+
+    if (!xpost_dev_private_get(ctx, devdic, nameprivate,
+                               &privatestr, priv, privsz))
+        return undefined;
+
+    /* a released instance has no raster to put out */
+    raster = codec->raster(priv);
+    if (!raster)
+        return 0;
+
+    ret = xpost_dev_page_emit(ctx, devdic, priv, codec->band(priv),
+                              codec->file(priv), codec->height(priv),
+                              raster, codec, &handed);
+    if (handed)
+        codec->disown(priv);
+
+    if (!xpost_dev_private_put(ctx, privatestr, priv, privsz))
+        return VMerror;
+
+    return ret;
+}
+
 int xpost_dev_page_emit(Xpost_Context *ctx, Xpost_Object devdic,
                         void *priv, Xpost_Dev_Band *band, FILE **file,
                         int height, unsigned char *raster,

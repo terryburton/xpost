@@ -104,6 +104,8 @@ xpost_dev_fillpoly_run
 xpost_dev_ht_cell
 xpost_dev_jpeg_options_set
 xpost_dev_page_emit
+xpost_dev_page_emit_call
+xpost_dev_page_moveband_call
 xpost_dev_page_retire
 xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num

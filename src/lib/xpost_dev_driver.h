@@ -493,6 +493,36 @@ typedef struct
     int (*defers_rows)(const void *priv);
     /** Give up what the instance holds: the stream, the file, the raster. */
     void (*reclaim)(void *priv);
+
+    /*
+     * Where the page state a device keeps lives inside the instance.
+     *
+     * The five below are how a device answers for the shape of its own
+     * structure, which is the one thing about emitting a page that
+     * cannot be written once: the fields are the same fields, and they
+     * sit at different offsets behind different types. Everything done
+     * WITH them -- fetching the instance, standing down where the
+     * raster was released, emitting, noting the hand-off, and recording
+     * the outcome whether the page was written or refused -- is
+     * xpost_dev_page_emit_call and is written once.
+     *
+     * A device that does not use that entry point may leave them null.
+     */
+
+    /** The instance's raster, or null where it has been released. */
+    unsigned char *(*raster)(void *priv);
+    /** The band state the page is being written across. */
+    Xpost_Dev_Band *(*band)(void *priv);
+    /** Where the file this page is being written to is kept. */
+    FILE **(*file)(void *priv);
+    /** The page's height in rows. */
+    int (*height)(const void *priv);
+    /** Note the raster as handed on and no longer the instance's. */
+    void (*disown)(void *priv);
+    /** Lay the ground over the rows no run of them is going to reach. */
+    void (*prime)(Xpost_Context *ctx, Xpost_Object devdic, void *priv);
+    /** Leave a run of rows as a raster fresh from Create would be. */
+    void (*clear)(void *priv, int from, int to);
 } Xpost_Dev_Page_Codec;
 
 /**
@@ -555,6 +585,93 @@ int xpost_dev_page_emit(Xpost_Context *ctx, Xpost_Object devdic,
                         int height, unsigned char *raster,
                         const Xpost_Dev_Page_Codec *codec,
                         int *handed_off);
+
+/**
+ * @brief An Emit method entire, for a device whose codec answers for
+ *        the shape of its instance.
+ *
+ * Fetches the instance, stands down where the raster has been released,
+ * emits what this call can of the page, notes a raster handed on, and
+ * records the instance again -- whether the page was written or
+ * refused, since a page that could not be written is one the device
+ * must not go on writing.
+ *
+ * @param[in] nameprivate the name the instance is kept under
+ * @param[in] priv storage for the instance, the device's own shape
+ * @param[in] privsz its size
+ * @param[in] codec what the device does that this does not, including
+ *                  the five accessors that reach the page state
+ */
+int xpost_dev_page_emit_call(Xpost_Context *ctx, Xpost_Object devdic,
+                             Xpost_Object nameprivate,
+                             void *priv, size_t privsz,
+                             const Xpost_Dev_Page_Codec *codec);
+
+/**
+ * @brief A MoveBand method entire, for such a device.
+ *
+ * Moves the raster onto another run of the page's rows: where a page
+ * has finished, the run in front of it is the next page's and begins
+ * one; where the device holds every row, the ground is laid over the
+ * rows no run will reach; and either way the run about to take marks is
+ * left as a raster fresh from Create would be, since a row still
+ * carrying the run before's ink would show it wherever this run paints
+ * nothing.
+ */
+int xpost_dev_page_moveband_call(Xpost_Context *ctx, Xpost_Object devdic,
+                                 Xpost_Object nameprivate,
+                                 void *priv, size_t privsz,
+                                 Xpost_Object top, Xpost_Object rows,
+                                 const Xpost_Dev_Page_Codec *codec);
+
+/**
+ * @brief Define the five accessors a device's codec answers with.
+ *
+ * @param P the device's own instance type
+ *
+ * They are one line each and the same line in every device, differing
+ * only in the type behind them, so they are written here rather than
+ * once per device -- which is what they were, and what made a device
+ * carrying them cost more text than the body they were introduced to
+ * share.
+ *
+ * A device using this holds its raster in @c buf (null once released,
+ * with the pixels at @c buf->data), the band state in @c band, the file
+ * in @c file, the page's height in @c height, and whether the raster is
+ * still its own in @c bufowned. A device whose instance is not that
+ * shape writes its own five and does not use this.
+ */
+#define XPOST_DEV_PAGE_ACCESSORS(P)                                     \
+    static unsigned char *_raster_of(void *p)                           \
+    {                                                                   \
+        P *d = p;                                                       \
+                                                                        \
+        return d->buf ? (unsigned char *)d->buf->data : NULL;           \
+    }                                                                   \
+    static Xpost_Dev_Band *_band_of(void *p)                            \
+    {                                                                   \
+        return &((P *)p)->band;                                         \
+    }                                                                   \
+    static FILE **_file_of(void *p)                                     \
+    {                                                                   \
+        return &((P *)p)->file;                                         \
+    }                                                                   \
+    static int _height_of(const void *p)                                \
+    {                                                                   \
+        return ((const P *)p)->height;                                  \
+    }                                                                   \
+    static void _disown(void *p)                                        \
+    {                                                                   \
+        ((P *)p)->bufowned = 0;                                         \
+    }                                                                   \
+    static void _prime_of(Xpost_Context *c, Xpost_Object d, void *p)    \
+    {                                                                   \
+        _prime(c, d, (P *)p);                                           \
+    }                                                                   \
+    static void _clear_of(void *p, int from, int to)                    \
+    {                                                                   \
+        _clear((P *)p, from, to);                                       \
+    }
 
 
 /*
