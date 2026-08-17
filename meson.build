@@ -3297,11 +3297,13 @@ test('filter-proc',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# No repeatable operation may spend global memory each time it runs: global
-# memory is never collected, so such an allocation is spent for the life of
-# the context. The workload carries its own positive control, so a
-# measurement that has gone blind fails rather than reporting everything
-# clean.
+# No repeatable operation may spend global memory each time it runs. Not
+# because global memory cannot be collected -- marking covers both banks --
+# but because an operation that goes on NAMING what it allocated is holding
+# it, which no collection can help with, and global memory is exempt from
+# the save and restore that would otherwise end its life with the job's.
+# The workload carries its own positive control, so a measurement that has
+# gone blind fails rather than reporting everything clean.
 test('global-vm-invariant',
   find_program('tests/run-global-vm-invariant-test.sh'),
   args: [ xpost_exe, files('tests/global_vm_invariant_test.ps') ],

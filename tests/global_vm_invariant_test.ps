@@ -20,6 +20,21 @@
 %
 % An exercise that fails to run is reported as such rather than as clean: an
 % operation that errors allocates nothing and would otherwise read as a pass.
+%
+% WHAT THIS DOES NOT COUNT. globalvmstatus weighs virtual memory, and several
+% things a run holds are deliberately outside it: the recording device's
+% captured marks, the vector writers' output buffers, and the glyph, form and
+% face caches. They are held outside virtual memory precisely so that a
+% restore does not reach them, which is the same reason they cannot appear
+% here. A clean report from this test is not a statement about them. What
+% weighs the record is `.recordcost`; the caches answer to cachestatus and to
+% tests/counters.golden, which holds the counters their keys are minted from.
+%
+% Nor is global memory beyond the collector's reach: marking covers both
+% banks in one pass. What this test asserts is not that an allocation here
+% can never be reclaimed, but that a repeated operation does not go on
+% NAMING what it allocates -- which no collection can help with, because
+% something still refers to it.
 
 % COLLECTION: measured insensitive to collection frequency -- the run
 % reports the same result with no collection at all and with one every
