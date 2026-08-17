@@ -251,6 +251,19 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
     unsigned int tstk;
     int ret;
 
+    /* LOCAL IS SEARCHED FIRST, AND THE ORDER IS LOAD-BEARING.
+       The same characters can be interned in both banks: a name is
+       interned into whichever bank is current when its token is first
+       scanned, while xpost_name_cons_global always interns into the
+       global one, for the reason given where it is defined. A name in
+       both banks is two objects, not one -- hash() folds the bank flag
+       into the type bits so that keys equal under
+       xpost_dict_compare_objects hash together, which makes the two
+       different dictionary keys. Everything a program reaches comes
+       through here, so searching local first is what keeps one program
+       using one of them throughout. Searching global first hands back
+       the other object for those names and the interpreter does not
+       finish starting up. */
     tstk = xpost_memory_name_tree_adr(ctx->lo);
     u = tstsearch(ctx->lo, tstk, s, n);
     if (!u) {
