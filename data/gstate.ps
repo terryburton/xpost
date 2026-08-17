@@ -1268,6 +1268,18 @@ setglobal
             }{ pop } ifelse
         } forall
     }{
+        % Types 9 and 100 reach here, and they are not omissions. A
+        % proprietary halftone dictionary (PLRM 7.4.7) carries no screen
+        % at all: a type 9 holds only HalftoneType and perhaps
+        % HalftoneName, and a type 100's further entries are private to
+        % one product, with no way for a program to learn what they
+        % control. The screen such a dictionary asks for lives in a
+        % device that has the technique built into it, described by its
+        % manufacturer rather than by the language. No device here has
+        % one, so there is no screen for the dictionary to name, and the
+        % refusal is a statement about this fleet rather than about the
+        % language. A device that did have such a technique would accept
+        % the type without anything in the language layer changing.
         /sethalftone cvx /rangecheck signalerror
     } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse
     end
