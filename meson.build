@@ -3308,6 +3308,19 @@ test('global-vm-invariant',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The same question of the other bank. Local memory is what save and restore
+# reach, so a job that restores has said none of what it allocated is to
+# survive and the memory must be there for the job after it. It cannot be
+# read as a difference -- the used figure never falls -- so it is read as
+# reuse, with a collection each time round. The workload carries a control
+# that keeps a container of a known size, so a measurement that has gone
+# blind fails rather than reporting everything clean.
+test('local-vm-invariant',
+  find_program('tests/run-local-vm-invariant-test.sh'),
+  args: [ xpost_exe, files('tests/local_vm_invariant_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Global memory is never collected, so a writer that builds its across-page
 # bookkeeping per document spends it for good; one document per job must cost
 # a bounded amount.

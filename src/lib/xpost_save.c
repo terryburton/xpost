@@ -117,11 +117,15 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
     {
         /* reuse the record stack a previous restore parked. It is a single
            segment (only those are pooled) and already unreferenced; empty
-           it before handing it out. */
+           it before handing it out. The pool is a chain through each parked
+           stack's own prevseg, which for a parked stack otherwise names
+           itself, so the last one in the chain is the one pointing at
+           itself. */
         Xpost_Stack *s;
         v.save_.stk = mem->free_substack;
-        mem->free_substack = 0;
         s = xpost_stack_at(mem, v.save_.stk);
+        mem->free_substack =
+            (s->prevseg == v.save_.stk) ? 0 : s->prevseg;
         s->top = 0;
         s->prevseg = v.save_.stk;
     }
@@ -371,17 +375,25 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
 
     /* The record stack is now empty and, with its save object popped, wholly
        unreferenced. It is a raw file allocation the collector does not
-       reclaim, so a save/restore-heavy job would leak one per save level.
-       Park a single one for the next save to reuse. Only single-segment
-       stacks are pooled
-       -- the overwhelming common case, and it keeps reuse a plain top reset;
-       a stack that grew across segments is left as it was. */
+       reclaim, so one has to be parked for a later save to take rather than
+       left where nothing can reach it.
+       The pool holds as many as the program has had save levels open at
+       once, chained through each parked stack's prevseg -- which a parked
+       stack does not otherwise use, and whose value in the last of the
+       chain is the stack's own address. Pooling one only would serve a
+       program that nests no saves and lose one per level to every program
+       that does, because the inner restore fills the single place before
+       the outer restore reaches it.
+       Only single-segment stacks are pooled -- the overwhelming common
+       case, and it keeps reuse a plain top reset; a stack that grew across
+       segments is left as it was. */
     {
         Xpost_Stack *sub = xpost_stack_at(mem, sav.save_.stk);
-        if (mem->free_substack == 0 && sub->nextseg == 0)
+        if (sub->nextseg == 0)
         {
             sub->top = 0;
-            sub->prevseg = sav.save_.stk;
+            sub->prevseg =
+                mem->free_substack ? mem->free_substack : sav.save_.stk;
             mem->free_substack = sav.save_.stk;
         }
     }

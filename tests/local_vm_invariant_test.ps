@@ -1,0 +1,167 @@
+% A job's work must leave local memory where it found it.
+%
+% Local memory is what save and restore reach (PLRM 3.7.3). A job that wraps
+% save around its work and restores at the end has said that none of what it
+% allocated is to survive, so the memory it took must be available again to
+% the job after it. Where it is not, a context that serves one job per
+% request -- an embedder's worker -- grows by that amount for every request,
+% and it grows in the bank a restore was supposed to have emptied.
+%
+% HOW THIS IS MEASURED, and it cannot be measured the obvious way. The used
+% figure vmstatus reports is a high-water mark: it does not fall when memory
+% is handed back, so a before-and-after difference counts what was allocated
+% and says nothing about what was returned. A run that gives everything back
+% and a run that gives nothing back report the same difference.
+%
+% Reclamation shows as REUSE instead. Each exercise below is run with a
+% collection after it, so that whatever the previous iteration gave back is
+% available to the next one, and what is measured is whether the next
+% iteration had to be given anything NEW. Nothing means the last iteration's
+% memory came back and was handed out again. Full price means it did not.
+%
+% This is the same reading tests/subinterval_retention_test.ps takes of a
+% single object, applied to a whole operation and repeated.
+%
+% WHAT THIS DOES NOT COUNT. vmstatus weighs virtual memory, and three things
+% a run holds are deliberately outside it: the recording device's captured
+% marks, the vector writers' output buffers, and the glyph, form and face
+% caches. They are held outside virtual memory precisely so that a restore
+% does not reach them, which is the same reason they cannot appear here. A
+% clean report from this test is not a statement about them. What weighs the
+% record is `.recordcost`; the caches answer to cachestatus and to
+% tests/counters.golden.
+%
+% The verdict is the wrapper's: this program reports one line per exercise
+% and keeps no total, because an exercise wrapping save around its work
+% reverts local memory and would take a total kept here with it.
+%
+% An exercise that fails to run is reported as such rather than as clean: an
+% operation that errors allocates nothing and would otherwise read as a pass.
+
+% COLLECTION: a collection is asked for inside every iteration, which is
+% what makes reuse visible at all, so this reading does not merely survive
+% collection -- it is built on it. Measured the same with VMThreshold at its
+% default and set far below the containers the exercises allocate.
+
+/warm 10 def
+/runs 60 def
+/bound 512 def          % bytes per iteration.
+                        %
+                        % The run count is what separates a cost paid once
+                        % from one paid every time, and it does so without a
+                        % tolerance anyone has to argue about: a fixed cost
+                        % divided by more iterations reads smaller, while a
+                        % retention reads the same number however many times
+                        % it is measured. Installing a page device inside a
+                        % save costs a constant near 5000 bytes, which reads
+                        % 251 over twenty iterations and 83 over sixty; a
+                        % retained container of the size the control uses
+                        % reads 8000 either way. Sixty puts every constant
+                        % this workload provokes below the bound and leaves
+                        % a real retention an order of magnitude above it.
+
+/used { vmstatus pop exch pop } bind def
+
+% proc  .  ran cost    run an exercise and report what a repeat of it costs
+/gauge {
+    /.ex exch def
+    /.ran true def
+    0 1 warm 1 sub {
+        pop mark { .ex } stopped { /.ran false def } if cleartomark 1 vmreclaim
+    } for
+    /.u0 used def
+    0 1 runs 1 sub {
+        pop mark { .ex } stopped { /.ran false def } if cleartomark 1 vmreclaim
+    } for
+    used .u0 sub runs idiv
+    .ran exch
+} bind def
+
+% name proc  .  -
+/measure {
+    gauge /.per exch def /.ran exch def
+    (  ) print
+    .ran not
+        { (DIDNOTRUN ) print }
+        { .per bound ge { (OVER ) print }{ (ok ) print } ifelse } ifelse
+    print (: ) print .per 20 string cvs print ( B/iteration\n) print
+} bind def
+
+% ---------------------------------------------------------------- exercises
+%
+% Each wraps its work in the save and restore a job wraps around its own, so
+% what is asked is whether that bracket gives local memory back.
+
+(save/restore empty) { save restore } measure
+
+(composites) { save 64 dict pop 64 array pop 64 string pop restore } measure
+
+(large composites) { save 4096 string pop 1000 array pop restore } measure
+
+(nested save) { save save 64 dict pop restore 64 array pop restore } measure
+
+(name lookup) { save /Helvetica type pop restore } measure
+
+(dict begin/end) { save 8 dict begin currentdict pop end restore } measure
+
+(gsave/grestore) { save gsave 2 setlinewidth grestore restore } measure
+
+(gstate alloc/copy) { save gsave gstate currentgstate pop grestore restore } measure
+
+(path build/clear) {
+    save newpath 0 0 moveto 10 10 lineto 20 0 lineto closepath newpath restore
+} measure
+
+(setgray/setrgb) { save 0.5 setgray 0.1 0.2 0.3 setrgbcolor restore } measure
+
+(device: null) { save << /OutputDevice /null >> setpagedevice restore } measure
+
+(device: bbox) {
+    save
+    << /OutputDevice /bbox /HWResolution [72 72] >> setpagedevice
+    0 0 moveto 20 0 rlineto 0 20 rlineto closepath fill
+    restore
+} measure
+
+(filter: ASCIIHexDecode) {
+    save (48656c6c6f>) /ASCIIHexDecode filter
+    dup 32 string readstring pop pop closefile restore
+} measure
+
+(filter: FlateDecode) {
+    save (789cf348cdc9c9d75128cf2fca4901001bd40469>) /ASCIIHexDecode filter /FlateDecode filter
+    dup 32 string readstring pop pop closefile restore
+} measure
+
+(resource define/undef) {
+    save
+    /Xpost.Local 3 dict /ProcSet defineresource pop
+    /Xpost.Local /ProcSet undefineresource
+    restore
+} measure
+
+(image) {
+    save gsave 8 8 scale
+    << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+       /Decode [0 1] /ImageMatrix [2 0 0 -2 0 2]
+       /DataSource <00ff00ff> >> image
+    grestore restore
+} measure
+
+(stopped/error) { save mark { 1 0 div } stopped pop cleartomark restore } measure
+
+% ----------------------------------------------------------------- control
+%
+% The measurement must be able to see local memory that is kept, or a blind
+% instrument would report every exercise above as clean.
+%
+% This one keeps what it allocates, and does not wrap itself in a save,
+% because a restore would undo the very reference that holds it -- which is
+% the whole point of the exercises above and would defeat a control. It
+% retains one array of a known length per iteration, so the number it
+% reports is not merely large but the size of what it kept: 1000 elements,
+% which the wrapper holds it to.
+
+/.hold 400 array def
+/.at 0 def
+(CONTROL) { .hold .at 1000 array put /.at .at 1 add def } measure
