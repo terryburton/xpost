@@ -148,8 +148,7 @@ int Axcheck(Xpost_Context *ctx,
    reopen the dictionary underneath every other holder, the one that
    sealed it included. Since the widening cannot happen either way, the
    dictionary is answered unchanged rather than refused. That is the
-   reading the specification leaves open and another implementation
-   consulted on it takes the same way; it also keeps the request off
+   reading the specification leaves open; it also keeps the request off
    virtual memory, since setting a dictionary's access writes its value,
    which a standing save level must back up first and can be refused room
    for.

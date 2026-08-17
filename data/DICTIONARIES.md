@@ -58,8 +58,8 @@ VM, so a job's changes are isolated; global VM is *not* reverted, so a mutable
 global dictionary leaks one job's changes into the next.
 
 One exception matters. `restore` resets composite objects in local VM **except
-strings** (PLRM 3.7.3) — a string's contents are never rolled back, in xpost as
-in Ghostscript. So local VM does *not* isolate a mutable **string**: shared
+strings** (PLRM 3.7.3) — a string's contents are never rolled back. So local VM
+does *not* isolate a mutable **string**: shared
 static string data (an encoding vector) must instead be made *read-only*, and a
 transient scratch string such as the one behind `=string` (overwritten on every
 `cvs`) carries no state between jobs and needs neither treatment. Dictionaries

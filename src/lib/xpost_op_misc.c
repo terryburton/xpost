@@ -85,9 +85,10 @@ Xpost_Object bind(Xpost_Context *ctx,
     /* a plain read-only procedure -- one made read-only after creation
        rather than by the packing machinery -- is left exactly as it is:
        bind neither rewrites its names nor descends into it. bind does
-       rewrite a packed array (it carries the packed flag), matching the
-       reference implementations, which bind packed arrays but not
-       ordinary read-only arrays. */
+       rewrite a packed array (it carries the packed flag). PLRM 8.2:
+       bind "will ignore a read-only array; that is, it will neither bind
+       elements of the array nor examine nested procedures", and "will
+       operate on a packed array ... disregarding its access attribute". */
     if (!xpost_object_is_packed(p)
      && xpost_object_get_access(ctx, p) < XPOST_OBJECT_TAG_ACCESS_UNLIMITED)
         return p;

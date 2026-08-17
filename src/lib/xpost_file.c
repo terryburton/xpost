@@ -3975,8 +3975,8 @@ a85enc_putch(Xpost_A85EncFile *ff, int c)
 {
     if (xpost_file_putc(ff->base.target, c) == EOF)
         return EOF;
-    /* Adobe Distiller breaks its output at this column, and matching
-       it makes the streams comparable byte for byte */
+    /* PLRM 3.13.3: ASCII85Encode "inserts a newline in the encoded
+       output at least once every 80 characters", which this satisfies */
     if (++ff->col == 64)
     {
         ff->col = 0;
@@ -4574,8 +4574,8 @@ static const Xpost_Enc_Coding lzwenc_coding =
 /* CCITTFaxEncode: rows buffer until complete, become changing-element
    lists, and leave through the coding schemes the decoder reads.
    Positive K codes at least every Kth row one-dimensionally; without
-   end-of-line markers the mixed rows carry no tag bits, a form Adobe
-   Distiller's coder also emits and neither decoder reads back */
+   end-of-line markers the mixed rows carry no tag bits, a form no
+   decoder reads back */
 typedef struct
 {
     Xpost_BitEncBase base;
@@ -5025,7 +5025,7 @@ Xpost_Object xpost_file_cons_filter_enc_dct(Xpost_Memory_File *mem,
     jpeg_set_defaults(&ff->cinfo);
     /* three components transform to YCbCr unless the dictionary said
        otherwise; four stay untransformed unless it asked for YCCK.
-       The Adobe marker carries the choice to the decoder */
+       The APP14 marker carries the choice to the decoder */
     if (colors == 3 && !colortransform)
         jpeg_set_colorspace(&ff->cinfo, JCS_RGB);
     if (colors == 4 && colortransform)
