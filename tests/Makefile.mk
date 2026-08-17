@@ -31,6 +31,7 @@ tests/check-clip-writer.sh \
 tests/check-device-destroy.sh \
 tests/check-library-lifetime.sh \
 tests/check-counter-register.sh \
+tests/check-vm-growth.sh \
 tests/check-device-roster.sh \
 tests/check-device-facts.sh \
 tests/device-facts \
@@ -146,6 +147,7 @@ tests/device_contract_test.ps \
 tests/device_destroy.golden \
 tests/library_statics.golden \
 tests/counters.golden \
+tests/vm_growth.golden \
 tests/shared_helpers.exempt \
 tests/direct_comm.exempt \
 tests/device_destroy_test.ps \

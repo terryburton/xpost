@@ -1,0 +1,260 @@
+# What a second run of each workload costs, and which of them are held to
+# costing nothing.
+#
+# tests/check-vm-growth.sh runs every workload in this directory twice in one
+# interpreter and asks what the second run cost. A price paid once -- a name
+# interned for the first time, a face opened, a table sized on demand -- is
+# paid by the first run and not the second. Anything the second run pays for
+# again is paid by every job after it too, which is the shape of the only
+# leak neither the sanitizers nor the collector can see: memory that is
+# allocated, still named, and named forever.
+#
+# The classes here are MEASURED, not chosen, and the guard re-derives every
+# one of them on every run:
+#
+#   zero          Runs cleanly twice and the second run costs nothing. Held
+#                 to that exactly -- no tolerance, and no assumption about
+#                 how wide an object is, which is what makes it hold on
+#                 every build.
+#
+#   costs <why>   Runs cleanly twice and the second run costs something.
+#                 Reported if it becomes free, so it can be promoted.
+#
+#   once <why>    Does not survive being run twice in one interpreter: it
+#                 makes something inaccessible, leaves a device installed,
+#                 or otherwise depends on being the first thing to run. A
+#                 workload that fails to run allocates nothing and would
+#                 read as the cleanest of all, so this class is refused a
+#                 measurement rather than credited with a good one.
+#                 Reported if it starts surviving, so it can be promoted.
+#
+# WHAT `unexplained` MEANS, and it is not a shrug. The class is a
+# measurement and is true. The CAUSE, for a workload marked unexplained, has
+# not been established -- it is an open worklist, and the guard prints how
+# many are left so it stays visible rather than settling in. Nothing here is
+# a guess dressed as a reason: where a cause is written down it was measured.
+#
+#   <workload>  <class>  <why, for costs and once>
+access_test.ps                             once   unexplained
+array_swap_range_test.ps                   once   unexplained
+band_budget_test.ps                        once   unexplained
+band_campaign_test.ps                      once   unexplained
+band_device_test.ps                        once   unexplained
+band_format_test.ps                        once   unexplained
+band_loop_test.ps                          costs  unexplained
+band_replay_cost_test.ps                   zero
+band_report_test.ps                        once   unexplained
+band_sparse_test.ps                        once   unexplained
+band_writer_test.ps                        once   unexplained
+bbox_test.ps                               once   unexplained
+binary_token_test.ps                       once   unexplained
+bind_packed_test.ps                        once   unexplained
+blit_access_test.ps                        once   unexplained
+blit_range_test.ps                         once   unexplained
+build_personality_test.ps                  zero
+cacheparams_range_test.ps                  once   unexplained
+callback_reentry_test.ps                   once   unexplained
+cid_show_test.ps                           once   unexplained
+cli_sandbox_test.ps                        once   unexplained
+clip_region_test.ps                        once   unexplained
+colorspace_matrix_test.ps                  once   unexplained
+colour_range_test.ps                       zero
+colour_sampling_test.ps                    once   unexplained
+colour_space_family_test.ps                once   unexplained
+composite_limit_test.ps                    once   unexplained
+counttomark_test.ps                        once   unexplained
+dct_truncated_test.ps                      once   unexplained
+dev_gray_row_test.ps                       once   unexplained
+device_completion_test.ps                  once   unexplained
+device_contract_test.ps                    costs  unexplained
+device_destroy_test.ps                     once   unexplained
+device_dictstack_test.ps                   once   unexplained
+device_features_test.ps                    costs  unexplained
+device_getpix_destroyed_test.ps            once   unexplained
+device_ground_test.ps                      zero
+device_private_test.ps                     once   unexplained
+device_restore_retired_test.ps             costs  unexplained
+device_retire_restored_test.ps             once   unexplained
+empty_clip_test.ps                         once   unexplained
+entity_limit_test.ps                       once   unexplained
+error_dict_test.ps                         zero
+error_unwind_test.ps                       once   unexplained
+execform_cache_test.ps                     once   unexplained
+file_lifetime_test.ps                      costs  unexplained
+file_refusal_test.ps                       once   unexplained
+filenameforall_large_test.ps               once   unexplained
+fill_span_test.ps                          once   unexplained
+fillpoly_arity_test.ps                     once   unexplained
+filter_abandon_test.ps                     costs  unexplained
+filter_close_eod_test.ps                   once   unexplained
+filter_conformance_test.ps                 zero
+filter_encode_pad_test.ps                  zero
+filter_eod_test.ps                         costs  unexplained
+filter_family_test.ps                      zero
+filter_leak_test.ps                        costs  unexplained
+filter_matrix_test.ps                      zero
+filter_predictor_test.ps                   zero
+filter_proc_test.ps                        once   unexplained
+filter_source_life_test.ps                 zero
+font_bigbuf_test.ps                        costs  unexplained
+font_cache_bound_test.ps                   costs  unexplained
+font_directory_test.ps                     zero
+font_face_release_test.ps                  costs  unexplained
+font_glyph_colour_test.ps                  costs  unexplained
+font_glyph_identity_test.ps                costs  unexplained
+font_glyphkey_test.ps                      costs  unexplained
+font_leak_test.ps                          costs  unexplained
+font_name_steer_probe.ps                   zero
+font_name_steer_test.ps                    once   unexplained
+font_private_test.ps                       once   unexplained
+font_serial_test.ps                        once   unexplained
+font_type1_noaccess_test.ps                once   unexplained
+font_type1_sparse_subrs_test.ps            zero
+forall_large_test.ps                       once   unexplained
+form_band_test.ps                          once   unexplained
+form_nest_test.ps                          once   unexplained
+form_serial_restore_test.ps                once   unexplained
+free_scan_test.ps                          costs  unexplained
+function_matrix_test.ps                    costs  unexplained
+fused_equivalence_test.ps                  costs  unexplained
+gc_clip_region_test.ps                     once   unexplained
+gc_deep_chain_test.ps                      once   unexplained
+gc_diagnostics_test.ps                     zero
+gc_large_dict_pressure_test.ps             once   unexplained
+gc_large_dict_test.ps                      once   unexplained
+global_vm_invariant_test.ps                costs  unexplained
+golden_page.ps                             costs  unexplained
+golden_pages.ps                            costs  unexplained
+graphics_regression_test.ps                once   unexplained
+gstate_matrix_test.ps                      costs  unexplained
+gstate_object_test.ps                      costs  unexplained
+halftone_cell_test.ps                      once   unexplained
+halftone_matrix_test.ps                    once   unexplained
+image_matrix_test.ps                       zero
+imaging_bbox_test.ps                       once   unexplained
+internal_debug_ops_test.ps                 zero
+interrupt_test.ps                          once   unexplained
+isolation_test.ps                          once   unexplained
+large_object_test.ps                       zero
+local_vm_invariant_test.ps                 costs  unexplained
+loop_exit_test.ps                          costs  unexplained
+mask_cache_range_test.ps                   once   unexplained
+namespace_test.ps                          zero
+nographics_test.ps                         once   unexplained
+numstring_decode_test.ps                   once   unexplained
+op_bind_test.ps                            once   unexplained
+op_bytesavailable_test.ps                  zero
+op_closed_read_test.ps                     zero
+op_compare_test.ps                         once   unexplained
+op_context_test.ps                         once   unexplained
+op_control_test.ps                         once   unexplained
+op_cvi_test.ps                             zero
+op_cvn_test.ps                             once   unexplained
+op_cvs_test.ps                             costs  unexplained
+op_dict_capacity_test.ps                   costs  unexplained
+op_dictstack_test.ps                       once   unexplained
+op_dispatch_typecheck_test.ps              zero
+op_env_test.ps                             costs  unexplained
+op_error_restore_test.ps                   once   unexplained
+op_file_access_test.ps                     zero
+op_file_edges_test.ps                      once   unexplained
+op_file_limit_test.ps                      once   unexplained
+op_filenameforall_test.ps                  zero
+op_fontcache_test.ps                       once   unexplained
+op_glyphcontext_test.ps                    costs  unexplained
+op_gstate_types_test.ps                    zero
+op_hexstring_test.ps                       costs  unexplained
+op_index_type_test.ps                      zero
+op_initgraphics_test.ps                    costs  unexplained
+op_intoverflow_test.ps                     zero
+op_literal_test.ps                         zero
+op_loop_depth_test.ps                      zero
+op_math_test.ps                            zero
+op_matrix_gstate_test.ps                   zero
+op_operand_shapes_test.ps                  once   unexplained
+op_operand_types_test.ps                   costs  unexplained
+op_packing_test.ps                         once   unexplained
+op_path_test.ps                            zero
+op_printdepth_test.ps                      costs  unexplained
+op_proc_filter_test.ps                     zero
+op_radix_test.ps                           zero
+op_readline_test.ps                        zero
+op_readstring_test.ps                      zero
+op_rect_test.ps                            zero
+op_reference_test.ps                       costs  unexplained
+op_resource_test.ps                        zero
+op_showstate_test.ps                       once   unexplained
+op_status_test.ps                          zero
+op_string_filter_test.ps                   zero
+op_subfiledecode_test.ps                   zero
+op_time_test.ps                            zero
+op_userparams_test.ps                      zero
+op_vm_param_test.ps                        once   unexplained
+op_vmreclaim_test.ps                       zero
+op_wrapsig_test.ps                         once   unexplained
+operator_dictstack_test.ps                 once   unexplained
+outline_font_test.ps                       once   unexplained
+oversize_page_test.ps                      zero
+page_cover_test.ps                         once   unexplained
+page_extent_test.ps                        once   unexplained
+page_handlers_test.ps                      once   unexplained
+page_lifetime_test.ps                      costs  unexplained
+path_bounds_test.ps                        once   unexplained
+path_recycle_test.ps                       costs  unexplained
+path_walk_cost_test.ps                     zero
+pattern_phase_test.ps                      costs  unexplained
+pattern_space_test.ps                      costs  unexplained
+pdf_append_fail_test.ps                    once   unexplained
+pdf_bigfill_test.ps                        zero
+pdf_global_vm_test.ps                      zero
+pdf_pipe_test.ps                           zero
+privatedict_install_test.ps                once   unexplained
+quit_run_test.ps                           once   unexplained
+raster_class_test.ps                       once   unexplained
+raster_row_test.ps                         costs  unexplained
+record_excess_test.ps                      once   unexplained
+record_glyph_test.ps                       zero
+record_image_test.ps                       costs  unexplained
+record_replay_test.ps                      zero
+record_screen_test.ps                      costs  unexplained
+record_short_test.ps                       once   unexplained
+record_span_test.ps                        once   unexplained
+record_spill_test.ps                       zero
+refusal_report_test.ps                     once   unexplained
+region_replay_test.ps                      costs  unexplained
+reloc_fused_test.ps                        costs  unexplained
+reloc_stress_test.ps                       costs  unexplained
+render_classes_test.ps                     once   unexplained
+resource_matrix_test.ps                    once   unexplained
+roll_test.ps                               once   unexplained
+save_restore_ctm_test.ps                   zero
+save_restore_matrix_test.ps                once   unexplained
+save_restore_sweep_cost_test.ps            once   unexplained
+save_restore_test.ps                       once   unexplained
+scanner_eof_test.ps                        zero
+semantics_test.ps                          once   unexplained
+setpagedevice_failure_test.ps              once   unexplained
+show_clip_test.ps                          once   unexplained
+show_pattern_test.ps                       once   unexplained
+showop_matrix_test.ps                      costs  unexplained
+sparse_rows_test.ps                        once   unexplained
+startup_surface_test.ps                    once   unexplained
+stencil_mask_size_test.ps                  zero
+stream_exec_test.ps                        zero
+subinterval_retention_test.ps              zero
+svg_append_fail_test.ps                    once   unexplained
+tamper_dispatch_test.ps                    costs  unexplained
+testlib.ps                                 zero
+testlib_contract_test.ps                   zero
+thin_stroke_test.ps                        zero
+token_sign_test.ps                         zero
+trapping_test.ps                           once   unexplained
+type42_charstrings_test.ps                 once   unexplained
+vecout_gc_test.ps                          costs  unexplained
+vm_test.ps                                 once   unexplained
+vm_threshold_test.ps                       once   unexplained
+window_device_test.ps                      once   unexplained
+window_getpix_test.ps                      once   unexplained
+wrapped_bind_test.ps                       zero
+wrapped_save_test.ps                       once   unexplained
+wrapsave_bank_test.ps                      once   unexplained

@@ -4745,6 +4745,24 @@ test('check-counter-register',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# The third kind of leak, and the only instrument that finds it. The
+# sanitizers see memory that was allocated and never freed; the collector
+# takes what nothing names any more. Neither can see memory that is
+# allocated, still named, and named forever -- which is the one that grows a
+# long-running context once per job. Repetition finds it: run a workload
+# twice in one interpreter and a one-off price is paid by the first run
+# only, while anything the second run pays for again is paid by every job
+# after it. Sixty-odd of these workloads cost exactly nothing on a second
+# run and are held to that, which needs no tolerance and no assumption about
+# how wide an object is; the rest are registered with what is known about
+# them, and the register is held in both directions so the population making
+# the assertion can only grow.
+test('check-vm-growth',
+  find_program('tests/check-vm-growth.sh'),
+  suite: cost_slow,
+  args: [ meson.current_source_dir(), xpost_exe ],
+  timeout: 900)
+
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table
 # and the .devicemakers dictionary name the same devices -- and the test
