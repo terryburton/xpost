@@ -132,13 +132,117 @@ int xpost_op_string_mode_file (Xpost_Context *ctx,
     return 0;
 }
 
+/* The defaults a filter asked for by name alone is built with.  A
+   parameter dictionary overrides them elsewhere; here they stand for
+   "the program said nothing about this". */
+#define XPOST_FILTER_LZW_EARLY   1
+#define XPOST_FILTER_FAX_COLUMNS 1728
+
+static Xpost_Object _cons_lzw_default (Xpost_Memory_File *mem, Xpost_Object src)
+{
+    return xpost_file_cons_filter_lzw(mem, src, XPOST_FILTER_LZW_EARLY);
+}
+
+static Xpost_Object _cons_fax_default (Xpost_Memory_File *mem, Xpost_Object src)
+{
+    return xpost_file_cons_filter_ccitt(mem, src, 0, XPOST_FILTER_FAX_COLUMNS,
+                                        0, 0, 0, 0, 1);
+}
+
+static Xpost_Object _cons_enc_rle_default (Xpost_Memory_File *mem, Xpost_Object tgt)
+{
+    return xpost_file_cons_filter_enc_rle(mem, tgt, 0);
+}
+
+static Xpost_Object _cons_enc_lzw_default (Xpost_Memory_File *mem, Xpost_Object tgt)
+{
+    return xpost_file_cons_filter_enc_lzw(mem, tgt, XPOST_FILTER_LZW_EARLY);
+}
+
+static Xpost_Object _cons_enc_fax_default (Xpost_Memory_File *mem, Xpost_Object tgt)
+{
+    return xpost_file_cons_filter_enc_ccitt(mem, tgt, 0, XPOST_FILTER_FAX_COLUMNS,
+                                            0, 0, 0, 0, 1);
+}
+
+/* Every filter this interpreter answers to by name: which way it works,
+   whether it can be built from the name alone, and what builds it.
+
+   The name is looked up here before anything else is asked, and that
+   order is what a program can see.  An unknown name is unknown whatever
+   it was handed, so one mistake gets one answer; were the access of the
+   data source checked first, the same unknown name would be answered
+   invalidaccess when the source was a file open for writing and
+   undefined when it was a string, and the difference would lie in
+   something the program had not got wrong.  The access check therefore
+   applies to a direction this table states, rather than to one inferred
+   from a name ending in Encode.
+
+   The list is also the only list -- the constructor is a column of it,
+   so a filter cannot be added to the dispatch without a direction, or
+   given a direction and left unbuildable. */
+typedef Xpost_Object (*Xpost_Filter_Cons)(Xpost_Memory_File *mem, Xpost_Object f);
+
+typedef struct
+{
+    const char       *name;
+    int               encodes;      /* writes to its target, rather than reading */
+    Xpost_Filter_Cons cons;         /* NULL: cannot be built from the name alone */
+} Xpost_Filter_Spec;
+
+static const Xpost_Filter_Spec _filter_specs[] =
+{
+    { "ASCII85Decode",        0, xpost_file_cons_filter_a85 },
+    { "ASCIIHexDecode",       0, xpost_file_cons_filter_hex },
+    { "RunLengthDecode",      0, xpost_file_cons_filter_rle },
+    { "ReusableStreamDecode", 0, xpost_file_cons_filter_rsd },
+    { "LZWDecode",            0, _cons_lzw_default },
+    { "CCITTFaxDecode",       0, _cons_fax_default },
+#ifdef HAVE_ZLIB
+    { "FlateDecode",          0, xpost_file_cons_filter_flate },
+#endif
+#ifdef HAVE_LIBJPEG
+    { "DCTDecode",            0, xpost_file_cons_filter_dct },
+#endif
+    /* told what ends the subfile it reads, and there is no default for
+       that: a subfile of no stated extent is not a subfile */
+    { "SubFileDecode",        0, NULL },
+    { "ASCIIHexEncode",       1, xpost_file_cons_filter_enc_hex },
+    { "ASCII85Encode",        1, xpost_file_cons_filter_enc_a85 },
+    { "NullEncode",           1, xpost_file_cons_filter_enc_null },
+    { "RunLengthEncode",      1, _cons_enc_rle_default },
+    { "LZWEncode",            1, _cons_enc_lzw_default },
+    { "CCITTFaxEncode",       1, _cons_enc_fax_default },
+#ifdef HAVE_ZLIB
+    { "FlateEncode",          1, xpost_file_cons_filter_enc_flate },
+#endif
+#ifdef HAVE_LIBJPEG
+    /* told the geometry of the image it compresses, which nothing here
+       could guess from the bytes.  Conditional for the same reason
+       DCTDecode is: a build without the library does not have the filter,
+       and saying its parameters are missing would claim it does */
+    { "DCTEncode",            1, NULL }
+#endif
+};
+
+static const Xpost_Filter_Spec *_filter_spec (const char *name)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof _filter_specs / sizeof *_filter_specs; i++)
+        if (strcmp(_filter_specs[i].name, name) == 0)
+            return &_filter_specs[i];
+    return NULL;
+}
+
 /* file /FilterName  filter  file'
-   layer a decoding filter over a readable file */
+   layer a filter over a file, in the direction the filter works in */
 static
 int xpost_op_file_filter (Xpost_Context *ctx,
                           Xpost_Object F,
                           Xpost_Object name)
 {
+    const Xpost_Filter_Spec *spec;
     Xpost_Object namestr;
     char *cname;
     Xpost_Object f;
@@ -147,100 +251,41 @@ int xpost_op_file_filter (Xpost_Context *ctx,
     cname = xpost_string_allocate_cstring(ctx, namestr);
     if (!cname)
         return VMerror;
-    /* Two filters exist and cannot be built from a name alone: one is told
-       what ends the subfile it reads, the other the geometry of the image
-       it compresses, and neither has a default this could pick.  Asked for
-       by name they used to fall to the same answer a name this interpreter
-       has never heard of gets, so a program that named a real filter and
-       forgot its parameters was told the filter does not exist.
-
-       They are answered here, before the data source is examined, because
-       what the program got wrong is the operand it wrote and the answer
-       must not depend on the source it happened to supply.  The type error
-       says the operands were the wrong shape, which is what happened. */
-    if (strcmp(cname, "SubFileDecode") == 0 ||
-        strcmp(cname, "DCTEncode") == 0)
+    spec = _filter_spec(cname);
+    /* the name first, and nothing about the source before it: a name this
+       interpreter does not know is not known whatever it was handed */
+    if (!spec)
     {
-        free(cname);
-        return typecheck;
-    }
-    {
-        size_t len = strlen(cname);
-
-        if (len > 6 && strcmp(cname + len - 6, "Encode") == 0)
-        {
-            if (!xpost_object_is_writeable(ctx, F))
-            {
-                free(cname);
-                return invalidaccess;
-            }
-            if (strcmp(cname, "ASCIIHexEncode") == 0)
-                f = xpost_file_cons_filter_enc_hex(ctx->lo, F);
-            else if (strcmp(cname, "ASCII85Encode") == 0)
-                f = xpost_file_cons_filter_enc_a85(ctx->lo, F);
-            else if (strcmp(cname, "NullEncode") == 0)
-                f = xpost_file_cons_filter_enc_null(ctx->lo, F);
-            else if (strcmp(cname, "RunLengthEncode") == 0)
-                f = xpost_file_cons_filter_enc_rle(ctx->lo, F, 0);
-            else if (strcmp(cname, "LZWEncode") == 0)
-                f = xpost_file_cons_filter_enc_lzw(ctx->lo, F, 1);
-            else if (strcmp(cname, "CCITTFaxEncode") == 0)
-                f = xpost_file_cons_filter_enc_ccitt(ctx->lo, F, 0, 1728, 0, 0, 0, 0, 1);
-#ifdef HAVE_ZLIB
-            else if (strcmp(cname, "FlateEncode") == 0)
-                f = xpost_file_cons_filter_enc_flate(ctx->lo, F);
-#endif
-            else
-            {
-                XPOST_LOG_ERR("unsupported filter %s", cname);
-                free(cname);
-                return undefined;
-            }
-            free(cname);
-            if (xpost_object_get_type(f) == invalidtype)
-                return ioerror;
-            f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-            f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
-            xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
-            return 0;
-        }
-    }
-    if (!xpost_object_is_readable(ctx, F))
-    {
-        free(cname);
-        return invalidaccess;
-    }
-    if (strcmp(cname, "ASCII85Decode") == 0)
-        f = xpost_file_cons_filter_a85(ctx->lo, F);
-    else if (strcmp(cname, "ASCIIHexDecode") == 0)
-        f = xpost_file_cons_filter_hex(ctx->lo, F);
-    else if (strcmp(cname, "RunLengthDecode") == 0)
-        f = xpost_file_cons_filter_rle(ctx->lo, F);
-    else if (strcmp(cname, "ReusableStreamDecode") == 0)
-        f = xpost_file_cons_filter_rsd(ctx->lo, F);
-    else if (strcmp(cname, "LZWDecode") == 0)
-        f = xpost_file_cons_filter_lzw(ctx->lo, F, 1);
-    else if (strcmp(cname, "CCITTFaxDecode") == 0)
-        f = xpost_file_cons_filter_ccitt(ctx->lo, F, 0, 1728, 0, 0, 0, 0, 1);
-#ifdef HAVE_ZLIB
-    else if (strcmp(cname, "FlateDecode") == 0)
-        f = xpost_file_cons_filter_flate(ctx->lo, F);
-#endif
-#ifdef HAVE_LIBJPEG
-    else if (strcmp(cname, "DCTDecode") == 0)
-        f = xpost_file_cons_filter_dct(ctx->lo, F);
-#endif
-    else
-    {
-        XPOST_LOG_ERR("unsupported filter %s", cname);
+        /* an ordinary program error, reported by the error machinery like
+           any other.  A diagnostic here would also go to a channel the
+           program cannot see or silence, once per occurrence */
         free(cname);
         return undefined;
     }
     free(cname);
+    /* a filter that cannot be built from its name alone was asked for
+       without the parameters it needs, so the operands were the wrong
+       shape -- which is what the program got wrong, and is not a
+       statement about the source either */
+    if (!spec->cons)
+        return typecheck;
+    if (spec->encodes)
+    {
+        if (!xpost_object_is_writeable(ctx, F))
+            return invalidaccess;
+    }
+    else
+    {
+        if (!xpost_object_is_readable(ctx, F))
+            return invalidaccess;
+    }
+    f = spec->cons(ctx->lo, F);
     if (xpost_object_get_type(f) == invalidtype)
         return ioerror;
     f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-    f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    f.tag |= ((spec->encodes ? XPOST_OBJECT_TAG_ACCESS_FILE_WRITE
+                             : XPOST_OBJECT_TAG_ACCESS_FILE_READ)
+              << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
     return 0;
 }
@@ -633,8 +678,6 @@ int xpost_op_file_filter_subfile (Xpost_Context *ctx,
     if (!cname)
         return VMerror;
     match = strcmp(cname, "SubFileDecode") == 0;
-    if (!match)
-        XPOST_LOG_ERR("unsupported filter %s with count and string", cname);
     free(cname);
     if (!match)
         return undefined;

@@ -44,14 +44,24 @@ guard_workdir
 trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
-# ---- membership, and the build each name needs, read from the source
+# ---- membership, and what each name is, read from the source
 #
-# The conditional a name sits inside is tracked as the file is scanned,
-# so a name is reported with the innermost HAVE_ symbol enclosing it and
-# with "always" where there is none. Only HAVE_ conditionals count: the
-# file has others, and they are not statements about which library the
-# build found.
+# The filter operator states its family as a table: one row per name,
+# carrying the direction the filter works in and the constructor that
+# builds it, or NULL where it cannot be built from the name alone. That
+# table is the only list, so it is what this reads -- and reading a table
+# rather than a chain of comparisons means the three facts come out
+# together and can each be held to the register.
+#
+# The conditional a row sits inside is tracked as the file is scanned, so
+# a name is reported with the innermost HAVE_ symbol enclosing it and with
+# "always" where there is none. Only HAVE_ conditionals count: the file
+# has others, and they are not statements about which library the build
+# found.
 tr -d "$cr" < "$src/src/lib/xpost_op_file.c" | awk '
+    /_filter_specs\[\][ \t]*=/ { intable = 1; next }
+    !intable { next }
+    /^[ \t]*\};/ { intable = 0; next }
     /^[ \t]*#[ \t]*ifdef[ \t]+HAVE_[A-Z0-9_]+/ {
         for (i = 1; i <= NF; i++)
             if ($i ~ /^HAVE_/) { depth++; sym[depth] = $i }
@@ -63,42 +73,28 @@ tr -d "$cr" < "$src/src/lib/xpost_op_file.c" | awk '
         else if (depth > 0) depth--
         next
     }
-    # A name is reported with the condition on the comparison that goes
-    # on to BUILD it, not on every comparison that mentions it. The
-    # parameter-taking paths compare the same names again and hand the
-    # work back to the plain dispatch, so the condition there is not the
-    # one that decides whether the build has the filter at all.
-    /xpost_file_cons_filter_/ {
-        if (pending != "") { seen[pending] = pendwhere; pending = "" }
-    }
-    {
+    /^[ \t]*\{[ \t]*"[A-Za-z0-9]+"[ \t]*,/ {
         line = $0
-        while (match(line, /strcmp\(cname, "[A-Za-z0-9]+(Encode|Decode)"\)/)) {
-            piece = substr(line, RSTART, RLENGTH)
-            line = substr(line, RSTART + RLENGTH)
-            if (match(piece, /"[A-Za-z0-9]+"/)) {
-                nm = substr(piece, RSTART + 1, RLENGTH - 2)
-                mentioned[nm] = 1
-                pending = nm
-                pendwhere = (depth > 0) ? sym[depth] : "always"
-            }
-        }
+        match(line, /"[A-Za-z0-9]+"/)
+        nm = substr(line, RSTART + 1, RLENGTH - 2)
+        rest = substr(line, RSTART + RLENGTH)
+        n = split(rest, fld, ",")
+        dir = fld[2];  gsub(/[ \t]/, "", dir)
+        cons = fld[3]; gsub(/[ \t}]/, "", cons)
+        print nm, (depth > 0) ? sym[depth] : "always", \
+              (dir == "1") ? "encode" : "decode", \
+              (cons == "NULL") ? "needsdict" : "plain"
     }
-    END {
-        # a name mentioned and never seen building is still a member --
-        # it is a name the operator answers to -- and it is reported
-        # unconditional, since nothing guarded a construction of it
-        for (n in mentioned)
-            print n, (n in seen) ? seen[n] : "always"
-    }
-' | LC_ALL=C sort > "$work/source"
+' | LC_ALL=C sort > "$work/source-spec"
 
-if [ ! -s "$work/source" ]; then
-    echo "FAILURES: no filter names were read from src/lib/xpost_op_file.c;"
-    echo "      the operator was rewritten in a way this cannot follow, and"
-    echo "      a check that finds no members proves nothing about them"
+if [ ! -s "$work/source-spec" ]; then
+    echo "FAILURES: no filter rows were read from the table in"
+    echo "      src/lib/xpost_op_file.c; the operator was rewritten in a way"
+    echo "      this cannot follow, and a check that finds no members proves"
+    echo "      nothing about them"
     exit 1
 fi
+awk '{ print $1, $2 }' "$work/source-spec" | LC_ALL=C sort > "$work/source"
 awk '{ print $1 }' "$work/source" | LC_ALL=C sort > "$work/source-names"
 
 # ---- what the register says
@@ -142,6 +138,33 @@ while read -r name where; do
         fail=1
     fi
 done < "$work/source"
+
+# ---- whether it can be built from a name alone, held to the table
+#
+# The register's kind column and the table's constructor column state the
+# same fact -- a filter with no constructor is one that cannot be built
+# from its name -- so they are held to each other. Before the table this
+# could only be probed, and a probe sees what the interpreter did rather
+# than what it meant to do: a filter accidentally answering as though it
+# needed parameters looked exactly like one that does.
+while read -r name where dir kind; do
+    said=$(awk -v n="$name" '$1 == n { print $2; exit }' "$work/reg")
+    [ -n "$said" ] || continue          # already reported as unclassified
+    if [ "$said" != "$kind" ]; then
+        echo "FAIL: tests/filter-facts calls $name $said and the table in"
+        echo "      the filter operator makes it $kind. A filter that cannot"
+        echo "      be built from its name alone carries no constructor"
+        echo "      there, and the register is where the reason is written."
+        fail=1
+    fi
+    case $dir in
+        encode|decode) ;;
+        *)  echo "FAIL: the table gives $name the direction '$dir', which is"
+            echo "      neither encode nor decode, so the access check it"
+            echo "      selects cannot be trusted"
+            fail=1 ;;
+    esac
+done < "$work/source-spec"
 
 # ---- and what the interpreter answers when asked
 #
@@ -355,10 +378,36 @@ done
 [ "$any" = yes ] && [ "$allundef" = yes ] \
     && echo parameterised-filter-reported-undefined >> "$work/got-diverge"
 
-# One unknown name, two data sources, two answers
-onstr=$(run "(abc) /XpostNoSuchFilter filter pop")
-onfile=$(run "($work/fx-c) (w) file /XpostNoSuchFilter filter closefile")
-[ -n "$onstr" ] && [ -n "$onfile" ] && [ "$onstr" != "$onfile" ] \
+# One unknown name, every kind of data source: the answer must not depend
+# on what the name was handed, because the name is what the program got
+# wrong. Three sources, not two -- a string, a file open for writing and a
+# file open for reading -- because the direction used to be inferred from
+# the name's ending, so which access was demanded of the source depended on
+# a suffix an unknown name may or may not have. The name is asked with and
+# without that suffix for the same reason.
+allsame=yes
+first=
+for probe in \
+    "(abc) /XpostNoSuchFilter filter pop" \
+    "($work/fx-c) (w) file /XpostNoSuchFilter filter closefile" \
+    "($work/fx-c) (w) file dup (x) writestring closefile
+     ($work/fx-c) (r) file /XpostNoSuchFilter filter closefile" \
+    "(abc) /XpostNoSuchEncode filter pop" \
+    "($work/fx-c) (w) file /XpostNoSuchEncode filter closefile"
+do
+    got=$(run "$probe")
+    if [ -z "$got" ]; then
+        echo "FAIL: an unknown filter name left no error name to read, so"
+        echo "      this cannot report on whether the answer is uniform"
+        fail=1
+        allsame=no
+        break
+    fi
+    if [ -z "$first" ]; then first=$got
+    elif [ "$got" != "$first" ]; then allsame=no
+    fi
+done
+[ "$allsame" = no ] \
     && echo unknown-name-error-depends-on-the-source >> "$work/got-diverge"
 
 LC_ALL=C sort -u "$work/got-diverge" -o "$work/got-diverge"
