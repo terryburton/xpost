@@ -21,21 +21,21 @@
 # accepted  definefont takes a dictionary stating this type
 #
 # PROBED with a dictionary that carries a working face, copied from one
-# the host resolved, since a face is what the arm taking most types
-# actually tests for. What the probe shows is which types are validated
-# for what their own kind needs, and the answer is three of them: the
-# composite is asked for its mapping and its descendants, the procedural
-# one for a way to build a glyph, and the TrueType one for the font data
-# a TrueType glyph comes out of. Everything else is taken on the face
-# alone, so a code the specification does not define is taken too.
+# the host resolved. Each accepted type is validated for what its own kind
+# needs: the composite for its mapping and its descendants, the procedural
+# one for a way to build a glyph, the TrueType one for the font data a
+# TrueType glyph comes out of, and the two charstring formats for the face
+# their glyphs come out of. A code that is none of those is refused,
+# whether the specification named it and this interpreter does not
+# implement it, or the specification never named it at all.
 
 type 0   accepted  the composite font, PLRM 5.9. Validated: definefont asks for the mapping type and the descendant vector, and refuses a dictionary lacking either
 type 1   accepted  charstrings in the Type 1 format, PLRM Table 5.1. Not validated beyond the face
 type 2   accepted  charstrings in the compact format, which is what a name from the host most often resolves to here. Not validated beyond the face
 type 3   accepted  glyphs described by a procedure, PLRM 5.7. Validated: definefont asks for a way to build a glyph
-type 14  accepted  PLRM Table 5.1 names it Chameleon and nothing here implements one. Accepted because the arm that takes it asks only for a face
+type 14  refused   PLRM Table 5.1 names it Chameleon and nothing here implements one, so definefont refuses it. A program asking for machinery that is not here is told at the operator it named rather than later by whichever one reached the absence
 type 42  refused   glyphs in the TrueType format, PLRM 5.8. Validated, and the only type whose validation refuses this probe: a dictionary claiming to be TrueType without the font data a TrueType glyph is read from is not one. A font of this type obtained from the host is a different matter and paints -- see the routes below
-type 99  accepted  not a font type at all. It is here as the control for the two thorns below: a code the specification never defined is accepted on the same face test that accepts 14, which is what makes "the arm asks for a face rather than a type" a measurement rather than a reading
+type 99  refused   not a font type at all, and here as the control: a code the specification never defined is refused by the same rule that refuses 14, so the rule is a statement about what this interpreter can paint rather than a list of codes somebody remembered
 
 types 7
 
@@ -111,8 +111,6 @@ glyphshow-takes-a-composite  thorn  PLRM 8.2 says of glyphshow that if the curre
 
 charpath-of-a-procedure-glyph  settled  A Type 3 glyph is described by a procedure, and charpath through one appends only the advance rather than the outline the procedure would paint. MEASURED as a degenerate box. This is not a deviation to correct: BOTH reference implementations consulted return the same degenerate box for the same font, to the digit. A glyph built by running a procedure has no outline until it is run, and running it would paint rather than append; PLRM 5.7 acknowledges as much where it excuses glyphs described by images. Changing it would put this interpreter alone among the three
 
-unknown-type-accepted  thorn  definefont takes a dictionary stating any font type at all, including 14 which nothing here implements and codes the specification does not define, because the arm that accepts it tests whether the dictionary carries a face rather than what type it claims. A program asking for a type this interpreter cannot render is told so only later, by whichever operator reaches the absent machinery. What removes it is the same single place the first thorn wants: a route question that names the three kinds it can paint and refuses the rest. The cost of doing it alone is that the type would then be checked at definefont while the face is checked where the face is used, so a dictionary could pass one and fail the other -- which is why it waits for the route question rather than being bolted on
-
 cidfont-type-never-stamped  thorn  PLRM Table 5.11 requires definefont and defineresource to stamp a CIDFont dictionary with a FontType saying which kind of CIDFont it is -- 9, 10, 11 or 32 by its CIDFontType -- and for a CIDFontType 2 to REPLACE the 42 the dictionary states with 11. None of the four values is ever written here, so the four rows of PLRM's table that this register would otherwise carry do not exist as anything a program can observe. What removes it is stamping at both operators; the cost is that nothing here reads the value yet, so the stamp would be written for the specification's sake and for a program that asks, with no machinery depending on it -- which is worth doing but is not the same job as making the routes agree
 
-divergences 4
+divergences 3

@@ -123,9 +123,24 @@ setglobal
                 } put
             } if
         }{
-            % other FontTypes carry no program to load here: accept when
-            % the dictionary already holds a working face (a re-encoded
-            % copy of a findfont dictionary shares its /Private face)
+            % What is left is a font whose glyphs come out of a face: the
+            % charstring formats, PLRM Table 5.1 types 1 and 2. They carry
+            % no program to load here, so the dictionary must already hold
+            % a working face -- a re-encoded copy of a findfont dictionary
+            % shares its /Private face.
+            %
+            % Any other code is refused. The specification names types this
+            % interpreter does not implement, and a program may write one
+            % it never named at all; accepting either on the strength of a
+            % face means a program asking for machinery that is not here is
+            % told so later, by whichever operator reaches the absence, and
+            % about that operator rather than about the font. The four codes
+            % PLRM reserves for a CIDFont are refused here too, because a
+            % CIDFont is not a base font and does not arrive this way.
+            dup /FontType 2 copy known { get }{ pop pop -1 } ifelse
+            dup 1 eq exch 2 eq or not {
+                /definefont cvx /invalidfont signalerror
+            } if
             dup /Private known not {
                 /definefont cvx /invalidfont signalerror
             } if
