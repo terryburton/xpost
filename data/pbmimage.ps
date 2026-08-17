@@ -67,13 +67,7 @@
 % as well, so the page is read on the terms it was written on.
 .xpost_PBMIMAGE /.screenpix { % c1 x y  .  c1' x y
     currentdict /.htcell known {
-        2 copy                                      % c x y x y
-        .hth mod dup 0 lt { .hth add } if .htw mul  % c x y x (y%h)*w
-        exch .htw mod dup 0 lt { .htw add } if add  % c x y idx
-        .htcell exch get                            % c x y thr
-        4 -1 roll .unitclamp 256 mul 0.5 add cvi
-        exch ge { 1 }{ 0 } ifelse                   % x y white?
-        3 1 roll                                    % c' x y
+        currentdict //.internaldict /.screenink get exec
     } if
 } put
 

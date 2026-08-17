@@ -1589,11 +1589,7 @@ int _fillrectgray(Xpost_Context *ctx,
 
     /* value -> byte, matching PGMIMAGE PutPix "255 mul cvi put" */
     b = (unsigned char)(int)_channel(val, 255.0);
-    /* the halftone comparison runs on a 0..256 scale: a pixel is
-       white when the level reaches its threshold, so a threshold of
-       255 whitens just before solid white and solid black stays
-       solid */
-    bht = (int)(_channel(val, 256.0) + 0.5);
+    bht = xpost_dev_ht_level(xpost_dev_num_to_component(val));
 
     xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
                              xpost_object_number(w), xpost_object_number(h),
@@ -1616,11 +1612,10 @@ int _fillrectgray(Xpost_Context *ctx,
 
         if (cell)
         {
-            const unsigned char *crow = cell + (iy % hh) * hw;
             int ix;
 
             for (ix = cx0; ix <= cx1; ix++)
-                p[ix] = bht >= crow[ix % hw] ? 255 : 0;
+                p[ix] = xpost_dev_ht_ink(bht, cell, hw, hh, ix, iy);
         }
         else
             memset(p + cx0, b, (size_t)(cx1 - cx0 + 1));
@@ -1967,6 +1962,39 @@ int _emit_write(Xpost_Context *ctx, Xpost_File *f,
    carry, so it is written where that extent is known (.writehead,
    data/image.ps). A page put out at once and a page put out a band at
    a time then reach the same bytes through this one walk. */
+/* A screening device's own method, so that the ground row and a read
+   of a pixel the device holds no storage for meet the cell by the very
+   comparison a mark meets it by. That comparison used to be written out
+   again in PostScript beside these two compiled writers; all three call
+   xpost_dev_ht_ink now.
+
+   Takes the grey, the pixel and the device, and answers 1 where the
+   page is white there and 0 where it is inked, leaving the pixel behind
+   it so the caller reads back what it passed in. */
+static
+int _screenink(Xpost_Context *ctx,
+               Xpost_Object c,
+               Xpost_Object x,
+               Xpost_Object y,
+               Xpost_Object devdic)
+{
+    const unsigned char *cell;
+    int w = 0, h = 0;
+
+    cell = xpost_dev_ht_cell(ctx, devdic, &w, &h);
+    if (!cell)
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons(xpost_dev_ht_ink(
+                         xpost_dev_ht_level(xpost_dev_num_to_component(c)),
+                         cell, w, h,
+                         (int)xpost_object_number(x),
+                         (int)xpost_object_number(y)) ? 1 : 0));
+    xpost_stack_push(ctx->lo, ctx->os, x);
+    xpost_stack_push(ctx->lo, ctx->os, y);
+    return 0;
+}
+
 static
 int _writebitrows(Xpost_Context *ctx,
                   Xpost_Object imgdata,
@@ -2317,9 +2345,8 @@ _blit_out_span(struct _blit_out *o, int dy, int dx0, int dx1,
             o->rowp[2][dx] = (unsigned char)b;
         }
         else if (o->htc)
-            o->rowp[0][dx] = (256 * gray + 127) / 255
-                             >= o->htc[(dy % o->hth) * o->htw + dx % o->htw]
-                           ? 255 : 0;
+            o->rowp[0][dx] = xpost_dev_ht_ink(xpost_dev_ht_level(gray / 255.0),
+                                              o->htc, o->htw, o->hth, dx, dy);
         else
             o->rowp[0][dx] = (unsigned char)gray;
     }
@@ -3919,6 +3946,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                              arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 2,
                              arraytype, filetype); INSTALL;
+    op = xpost_operator_cons(ctx, ".screenink", (Xpost_Op_Func)_screenink, 4,
+                             numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".flatecompress", (Xpost_Op_Func)_flatecompress, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdffillpoly", (Xpost_Op_Func)_pdffillpoly, 2,
             arraytype, dicttype); INSTALL;

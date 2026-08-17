@@ -4787,6 +4787,18 @@ test('check-halftone-transfer',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# A bilevel device compares a grey against the threshold under its pixel
+# in three places -- the device's own method, the compiled rectangle
+# fill, and the compiled blit an image goes through -- and the two
+# compiled ones form the level by different arithmetic. They agree for
+# every byte value, but by nothing either line says. This paints the
+# same grey both ways under a cell holding all 256 thresholds and
+# requires the same page out.
+test('check-screen-paths',
+  find_program('tests/check-screen-paths.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A Type 42 font dictionary owes the glyph complement PLRM Table 5.7
 # states, whether or not the TrueType file behind it names its glyphs,
 # and what it publishes has to be what the face can be asked to paint.

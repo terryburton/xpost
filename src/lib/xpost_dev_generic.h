@@ -253,6 +253,67 @@ const unsigned char *xpost_dev_ht_cell(Xpost_Context *ctx,
                                        Xpost_Object devdic, int *w, int *h);
 
 /**
+ * @brief the level a grey is screened at, on the cell's own scale
+ *
+ * @param v the grey, 0 for black and 1 for white, clamped here
+ * @return 0 to 256
+ *
+ * The comparison runs on a 0..256 scale rather than 0..255 so that a
+ * threshold of 255 whitens just before solid white and solid black
+ * stays solid.
+ *
+ * A caller holding a stored byte rather than a value passes g / 255.0
+ * and gets the same answer as the integer form (256 * g + 127) / 255
+ * for every one of the 256 bytes -- the two round differently only for
+ * a fractional part in [0.5, 0.50196), which no byte over 255 produces.
+ * That is why there is one of these and not one per caller.
+ */
+static inline int
+xpost_dev_ht_level(double v)
+{
+    if (v < 0.0)
+        v = 0.0;
+    if (v > 1.0)
+        v = 1.0;
+    return (int)(v * 256.0 + 0.5);
+}
+
+/**
+ * @brief what a screening device writes for one pixel
+ *
+ * @param level the grey's level from xpost_dev_ht_level
+ * @param cell the threshold cell, @p w by @p h
+ * @param x @p y the pixel, in the device's own coordinates
+ * @return 255 where the level reaches the threshold under the pixel,
+ *         0 where it does not
+ *
+ * THE one place a grey meets a threshold. It was three: this
+ * comparison, its cell addressing and its 255-or-0 were written out
+ * again in the rectangle fill, in the blit an image goes through, and
+ * in the device's own method in PostScript. Anything that screens a
+ * pixel calls this, and tests/check-screen-paths.sh paints the same
+ * grey by more than one route and requires the same page, so a fourth
+ * copy shows up as a disagreement rather than as a second opinion.
+ *
+ * The cell tiles from the origin in both directions, so a pixel left of
+ * or below it takes the threshold its position folds onto rather than
+ * one off the end.
+ */
+static inline unsigned char
+xpost_dev_ht_ink(int level, const unsigned char *cell,
+                 int w, int h, int x, int y)
+{
+    int cx = x % w;
+    int cy = y % h;
+
+    if (cx < 0)
+        cx += w;
+    if (cy < 0)
+        cy += h;
+    return level >= cell[cy * w + cx] ? 255 : 0;
+}
+
+/**
  * @brief a number that dictionary carries under @p key, or @p dflt
  *
  * The blit dictionary's operands are numbers, and a number reaches a
