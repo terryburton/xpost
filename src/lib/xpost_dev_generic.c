@@ -2432,6 +2432,37 @@ void xpost_dev_page_retire(void *priv, Xpost_Dev_Band *band, int has_raster,
     codec->reclaim(priv);
 }
 
+/* An Emit method entire, for a device that lends its raster rather than
+   writing it. The instance is recorded again ONLY where the offer was
+   taken: an offer refused leaves everything as it was, and there is
+   nothing to say about it. */
+int
+xpost_dev_buffer_emit_call(Xpost_Context *ctx, Xpost_Object devdic,
+                           Xpost_Object nameprivate,
+                           void *priv, size_t privsz,
+                           unsigned char *(*raster)(void *),
+                           void (*disown)(void *))
+{
+    Xpost_Object privatestr;
+    unsigned char *page;
+
+    if (!xpost_dev_private_get(ctx, devdic, nameprivate,
+                               &privatestr, priv, privsz))
+        return undefined;
+
+    page = raster(priv);
+    if (!page)
+        return 0;
+
+    if (xpost_dev_output_buffer_handoff(ctx, page))
+    {
+        disown(priv);
+        if (!xpost_dev_private_put(ctx, privatestr, priv, privsz))
+            return VMerror;
+    }
+    return 0;
+}
+
 /* Where a page begins, for the band state. Four flags and no device in
    them; the one that matters is primed, since a page that began without
    clearing it would never have its ground laid again. */

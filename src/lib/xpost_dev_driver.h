@@ -633,6 +633,49 @@ int xpost_dev_page_moveband_call(Xpost_Context *ctx, Xpost_Object devdic,
  * and would show the page before's wherever the new one paints nothing.
  * There is nothing device-specific here, which is why it is here.
  */
+/**
+ * @brief An Emit method entire, for a device that LENDS its raster.
+ *
+ * The devices that hand their page to an embedding program do not write
+ * a file and carry no codec: emitting is offering the raster, and where
+ * the offer is taken the instance stops owning it. That sequence is the
+ * whole of their Emit and it is the same sequence in each of them.
+ *
+ * The order is the part that must not be written twice. An instance
+ * that recorded before the offer would go on believing it owns a raster
+ * the embedder now frees; one that recorded nothing after a taken offer
+ * would free the embedder's memory at Destroy.
+ *
+ * @param raster the instance's raster, or null where it has none
+ * @param disown note the raster as no longer the instance's
+ */
+int xpost_dev_buffer_emit_call(Xpost_Context *ctx, Xpost_Object devdic,
+                               Xpost_Object nameprivate,
+                               void *priv, size_t privsz,
+                               unsigned char *(*raster)(void *),
+                               void (*disown)(void *));
+
+/**
+ * @brief Define the two accessors such a device answers with.
+ *
+ * @param P the device's own instance type
+ *
+ * Fewer than a file-writing device needs, because there is no file, no
+ * band and no ground to reach -- only the raster and whether it is
+ * still the instance's.
+ */
+#define XPOST_DEV_BUFFER_ACCESSORS(P)                                   \
+    static unsigned char *_raster_of(void *p)                           \
+    {                                                                   \
+        P *d = p;                                                       \
+                                                                        \
+        return d->buf ? (unsigned char *)d->buf->data : NULL;           \
+    }                                                                   \
+    static void _disown(void *p)                                        \
+    {                                                                   \
+        ((P *)p)->bufowned = 0;                                         \
+    }
+
 void xpost_dev_band_page_begin(Xpost_Dev_Band *band);
 
 /**

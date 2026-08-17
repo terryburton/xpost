@@ -425,32 +425,19 @@ int _flush(Xpost_Context *ctx,
 }
 
 
+/* How this device answers for the shape of its own instance, so that
+   the offering itself is written once (xpost_dev_buffer_emit_call). */
+XPOST_DEV_BUFFER_ACCESSORS(PrivateData)
+
 static
 int _emit(Xpost_Context *ctx,
           Xpost_Object devdic)
 {
-    Xpost_Object privatestr;
     PrivateData private;
 
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    /* a released raster has nothing left to emit */
-    if (!private.buf)
-        return 0;
-
-    /* pass data back to client application; the raster then belongs to
-       the client, which gives the block it sits in back through the
-       release entry point, so Destroy must leave it alone from here on */
-    if (xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data))
-    {
-        private.bufowned = 0;
-        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
-    }
-
-    return 0;
+    return xpost_dev_buffer_emit_call(ctx, devdic, namePrivate,
+                                      &private, sizeof(private),
+                                      _raster_of, _disown);
 }
 
 /* -  .rowcost  elements bytes
