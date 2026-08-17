@@ -35,24 +35,24 @@ cats {
     % dictionary describing how its instances are handled
     { cat /Category findresource dup type /dicttype ne
         { (Category instance is not a dictionary) nm note } if pop }
-      (is found as a Category instance) nm works
+      (is found as a Category instance) nm works2
     { cat /Category resourcestatus
         { pop pop }{ (Category instance has no status) nm note } ifelse }
-      (has a status as a Category instance) nm works
+      (has a status as a Category instance) nm works2
 
     % it enumerates, whether or not it holds anything
     { /count 0 def
       (*) { pop /count count 1 add store } 100 string cat resourceforall }
-      (enumerates) nm works
+      (enumerates) nm works2
 
     % a name it certainly does not hold is reported absent rather than
     % invented, and asking for it outright is an error
     { /XpostNoSuchInstanceAtAll cat resourcestatus
         { pop pop (a missing instance is reported present) nm note }
         { } ifelse }
-      (reports a missing instance absent) nm works
+      (reports a missing instance absent) nm works2
     { /XpostNoSuchInstanceAtAll cat findresource }
-      (refuses to find a missing instance) nm refuses
+      (refuses to find a missing instance) nm refuses2
 
     % and whatever it does hold, it can find and give a status for --
     % the two operators have to agree with the enumeration. The name
@@ -69,22 +69,22 @@ cats {
           ifelse
           first cvn cat findresource pop
       } if }
-      (finds what it enumerates) nm works
+      (finds what it enumerates) nm works2
 } forall
 
 % the operators refuse a category that does not exist, rather than
 % inventing one
 { /XpostNoSuchCategory /Category findresource }
-    (an unknown category) (findresource) refuses
+    (an unknown category) (findresource) refuses2
 { /Anything /XpostNoSuchCategory findresource }
-    (an unknown category) (findresource on it) refuses
+    (an unknown category) (findresource on it) refuses2
 { (*) { pop } 100 string /XpostNoSuchCategory resourceforall }
-    (an unknown category) (resourceforall) refuses
+    (an unknown category) (resourceforall) refuses2
 
 % and resourcestatus refuses it too: the absent answer it returns is
 % about a missing instance, not a missing category
 { /Anything /XpostNoSuchCategory resourcestatus
     { pop pop } { } ifelse }
-    (an unknown category) (resourcestatus) refuses
+    (an unknown category) (resourcestatus) refuses2
 
 verdict

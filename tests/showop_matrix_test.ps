@@ -1,3 +1,4 @@
+%!testlib
 % Every text-showing operator against every kind of font, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -16,22 +17,7 @@
 % painting and the metrics checked separately, and each combination
 % reports for itself.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { % (what) (font)
-    (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store
-} def
-% The tag is put away before the procedure runs: a procedure that fails
-% may leave anything at all on the stack.
-/works { % {proc} (what) (font)
-    /s.f exch def /s.w exch def
-    stopped { s.w s.f note } if
-    clear
-} def
 
 % A procedure held in a name runs when the name is mentioned, so the
 % selection procedures are fetched with load rather than named.
@@ -67,60 +53,58 @@ fonts {
     aload pop /str exch def /nm exch def /sel exch def
 
     % the string-walking operators
-    { /sel load exec newpath 10 20 moveto str show } (show) nm works
-    { /sel load exec newpath 10 20 moveto 2 0 str ashow } (ashow) nm works
-    { /sel load exec newpath 10 20 moveto 2 0 8#040 str widthshow } (widthshow) nm works
+    { /sel load exec newpath 10 20 moveto str show } (show) nm works2
+    { /sel load exec newpath 10 20 moveto 2 0 str ashow } (ashow) nm works2
+    { /sel load exec newpath 10 20 moveto 2 0 8#040 str widthshow } (widthshow) nm works2
     % cx cy char ax ay string: the first pair goes to the named
     % character only, the second to every character
     { /sel load exec newpath 10 20 moveto 2 0 8#040 1 0 str awidthshow }
-        (awidthshow) nm works
-    { /sel load exec newpath 10 20 moveto { pop pop } str kshow } (kshow) nm works
+        (awidthshow) nm works2
+    { /sel load exec newpath 10 20 moveto { pop pop } str kshow } (kshow) nm works2
 
     % the operators given an explicit displacement per character
-    { /sel load exec newpath 10 20 moveto str [ 9 9 ] xshow } (xshow) nm works
-    { /sel load exec newpath 10 20 moveto str [ 0 0 ] yshow } (yshow) nm works
-    { /sel load exec newpath 10 20 moveto str [ 9 0 9 0 ] xyshow } (xyshow) nm works
+    { /sel load exec newpath 10 20 moveto str [ 9 9 ] xshow } (xshow) nm works2
+    { /sel load exec newpath 10 20 moveto str [ 0 0 ] yshow } (yshow) nm works2
+    { /sel load exec newpath 10 20 moveto str [ 9 0 9 0 ] xyshow } (xyshow) nm works2
 
     % the one that walks by show rather than by character
-    { /sel load exec newpath 10 20 moveto { pop } str cshow } (cshow) nm works
+    { /sel load exec newpath 10 20 moveto { pop } str cshow } (cshow) nm works2
 
     % a glyph named directly, bypassing the encoding
     { /sel load exec newpath 10 20 moveto
       nm (an outline font) eq { /A }{ /box } ifelse glyphshow }
-        (glyphshow) nm works
+        (glyphshow) nm works2
 
     % the metrics, which have to agree with the painting
-    { /sel load exec str stringwidth pop pop } (stringwidth) nm works
+    { /sel load exec str stringwidth pop pop } (stringwidth) nm works2
     { /sel load exec str stringwidth pop
       dup 0 le { (width is not positive) nm note } if pop }
-        (measures a positive width) nm works
+        (measures a positive width) nm works2
 
     % the outline, which is the same walk again into a path
-    { /sel load exec newpath 10 20 moveto str true charpath } (charpath) nm works
-    { /sel load exec newpath 10 20 moveto str false charpath } (charpath stroked) nm works
+    { /sel load exec newpath 10 20 moveto str true charpath } (charpath) nm works2
+    { /sel load exec newpath 10 20 moveto str false charpath } (charpath stroked) nm works2
 
     % every operator has to leave the current point where the next one
     % would start, which is what a displacement applied in the wrong
     % space gets wrong without failing
     { /sel load exec newpath 10 20 moveto str show currentpoint pop
-      10 le { (show did not advance) nm note } if } (advances) nm works
+      10 le { (show did not advance) nm note } if } (advances) nm works2
     { /sel load exec newpath 10 20 moveto 5 0 str ashow currentpoint pop
       /awide exch def
       newpath 10 20 moveto str show currentpoint pop
       awide ge { (ashow did not add its displacement) nm note } if
-    } (ashow adds its displacement) nm works
+    } (ashow adds its displacement) nm works2
     { /sel load exec newpath 10 20 moveto 2 0 8#040 1 0 (A B) awidthshow
       currentpoint pop /awide exch def
       newpath 10 20 moveto (A B) show currentpoint pop
       awide ge { (awidthshow did not add its displacements) nm note } if
-    } (awidthshow adds its displacements) nm works
+    } (awidthshow adds its displacements) nm works2
 
     % and an empty string is shown without complaint
-    { /sel load exec newpath 10 20 moveto ( ) show } (shows a space) nm works
-    { /sel load exec newpath 10 20 moveto () show } (shows an empty string) nm works
-    { /sel load exec () stringwidth pop pop } (measures an empty string) nm works
+    { /sel load exec newpath 10 20 moveto ( ) show } (shows a space) nm works2
+    { /sel load exec newpath 10 20 moveto () show } (shows an empty string) nm works2
+    { /sel load exec () stringwidth pop pop } (measures an empty string) nm works2
 } forall
 
-bad 0 eq (every showing operator works with every kind of font) assert
-
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

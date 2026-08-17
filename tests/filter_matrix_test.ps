@@ -1,3 +1,9 @@
+%!testlib
+% `holds2` is the shared assert2 with the two strings the other way round:
+% this suite names the question first and the member second, and printing
+% them in the order it always did is what lets the move be checked by
+% diffing the output.
+/holds2 { exch assert2 } bind def
 % Every file operator against every filter, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -12,29 +18,7 @@
 % So each operator is tried against each filter, and each combination
 % reports for itself.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { % (what) (filter)
-    (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store
-} def
-/works { % {proc} (what) (filter)  -  the operation completes
-    /m.f exch def /m.w exch def
-    stopped { m.w m.f note } if
-    clear
-} def
-/refuses { % {proc} (what) (filter)  -  the operation is refused
-    /m.f exch def /m.w exch def
-    stopped not { m.w m.f note } if
-    clear
-} def
-/holds { % bool (what) (filter)  -  the property is true of the filter
-    /m.f exch def /m.w exch def
-    not { m.w m.f note } if
-} def
 
 % each decoding filter with a source it can actually decode
 /cases [
@@ -47,24 +31,24 @@
 cases {
     aload pop /src exch def /fn exch def
 
-    { src fn cvn filter 8 string readstring pop pop }   (readstring) fn works
-    { src fn cvn filter read pop pop }                  (read) fn works
-    { src fn cvn filter 8 string readhexstring pop pop } (readhexstring) fn works
-    { src fn cvn filter 8 string readline pop pop }     (readline) fn works
-    { src fn cvn filter closefile }                     (closefile) fn works
-    { src fn cvn filter resetfile }                     (resetfile) fn works
-    { src fn cvn filter status pop }                    (status) fn works
-    { src fn cvn filter bytesavailable pop }            (bytesavailable) fn works
-    { src fn cvn filter flushfile }                     (flushfile) fn works
-    { src fn cvn filter /ASCIIHexDecode filter closefile } (filter over it) fn works
-    { src fn cvn filter dup closefile closefile }       (closing twice) fn works
-    { src fn cvn filter token { pop } if }              (token) fn works
+    { src fn cvn filter 8 string readstring pop pop }   (readstring) fn works2
+    { src fn cvn filter read pop pop }                  (read) fn works2
+    { src fn cvn filter 8 string readhexstring pop pop } (readhexstring) fn works2
+    { src fn cvn filter 8 string readline pop pop }     (readline) fn works2
+    { src fn cvn filter closefile }                     (closefile) fn works2
+    { src fn cvn filter resetfile }                     (resetfile) fn works2
+    { src fn cvn filter status pop }                    (status) fn works2
+    { src fn cvn filter bytesavailable pop }            (bytesavailable) fn works2
+    { src fn cvn filter flushfile }                     (flushfile) fn works2
+    { src fn cvn filter /ASCIIHexDecode filter closefile } (filter over it) fn works2
+    { src fn cvn filter dup closefile closefile }       (closing twice) fn works2
+    { src fn cvn filter token { pop } if }              (token) fn works2
 
     % and the operators each has to refuse
     { src fn cvn filter 0 string readstring pop pop }
-        (a zero-length read) fn refuses
+        (a zero-length read) fn refuses2
     { src fn cvn filter (x) writestring }
-        (writing to an input filter) fn refuses
+        (writing to an input filter) fn refuses2
 } forall
 
 % flushfile on an input file reads and discards characters until the end
@@ -79,9 +63,9 @@ cases {
     /m.d src fn cvn filter def
     m.d flushfile
     m.d 8 string readstring exch pop not
-        (flushfile leaves it at end of data) fn holds
+        (flushfile leaves it at end of data) fn holds2
     m.d status
-        (flushfile leaves it open) fn holds
+        (flushfile leaves it open) fn holds2
     m.d closefile
 } forall
 
@@ -89,21 +73,21 @@ cases {
 [ (ASCIIHexEncode) (ASCII85Encode) (NullEncode) (RunLengthEncode) ] {
     /fn exch def
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e (data) writestring e closefile o closefile }        (write and close) fn works
+      e (data) writestring e closefile o closefile }        (write and close) fn works2
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e (d) writestring e flushfile e closefile o closefile } (flushfile) fn works
+      e (d) writestring e flushfile e closefile o closefile } (flushfile) fn works2
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e (d) writestring e resetfile e closefile o closefile } (resetfile) fn works
+      e (d) writestring e resetfile e closefile o closefile } (resetfile) fn works2
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e status pop e closefile o closefile }                 (status) fn works
+      e status pop e closefile o closefile }                 (status) fn works2
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e 65 write e closefile o closefile }                   (write a byte) fn works
+      e 65 write e closefile o closefile }                   (write a byte) fn works2
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e <4142> writehexstring e closefile o closefile }      (writehexstring) fn works
+      e <4142> writehexstring e closefile o closefile }      (writehexstring) fn works2
 
     % and the one it has to refuse
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
-      e read pop pop }                          (reading an output filter) fn refuses
+      e read pop pop }                          (reading an output filter) fn refuses2
     % the refusal unwound past the closes, so the pair it opened is still
     % open; the file is deleted at the end and an open one need not go
     e closefile o closefile
@@ -135,21 +119,11 @@ ntok 4 eq {
 % dictionary does not carry them. Defaulted, SubFileDecode reaches its
 % end of data at once and hands back an empty stream, which reads as a
 % truncated file rather than as the mistake it is.
-/raises { % {proc} /errname (what)
-    /m.f2 exch def /m.e exch def
-    stopped {
-        $error /errorname get dup m.e ne {
-            (FAIL: ) print m.f2 print ( raised ) print ==
-            /bad bad 1 add store
-        }{ pop } ifelse
-    }{ m.f2 (is not refused) note } ifelse
-    clear
-} def
 
 { (abcXdef) 1 (X) /SubFileDecode filter 16 string readstring pop pop }
-    (the operand form) (SubFileDecode) works
+    (the operand form) (SubFileDecode) works2
 { (abcXdef) << /EODCount 1 /EODString (X) >> /SubFileDecode filter
-  16 string readstring pop pop } (the dictionary form) (SubFileDecode) works
+  16 string readstring pop pop } (the dictionary form) (SubFileDecode) works2
 
 { (abcXdef) << >> /SubFileDecode filter }
     /undefined (a dictionary carrying neither parameter) raises
@@ -170,8 +144,7 @@ ntok 4 eq {
     16 string readstring pop def
 opform dictform eq (both forms read the same) assert
 
-bad 0 eq (every operator works on every filter that takes it) assert
 
 (fmatrix.scratch) status { pop pop pop pop (fmatrix.scratch) deletefile } if
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

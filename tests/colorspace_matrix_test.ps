@@ -1,3 +1,4 @@
+%!testlib
 % Every colour space through every colour operator, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -12,22 +13,7 @@
 % So every family this interpreter implements is put through the same
 % set of operators, and each combination reports for itself.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { % (what) (space)
-    (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store
-} def
-% The tag is put away before the procedure runs: a procedure that fails
-% may leave anything at all on the stack.
-/works { % {proc} (what) (space)
-    /c.s exch def /c.w exch def
-    stopped { c.w c.s note } if
-    clear
-} def
 
 % Each entry: the space, the components a colour in it takes, and a
 % name for the report.
@@ -51,39 +37,39 @@ spaces {
     aload pop /nm exch def /comps exch def /sp exch def
 
     % it can be entered at all
-    { sp setcolorspace } (is selected) nm works
+    { sp setcolorspace } (is selected) nm works2
 
     % and reports itself as an array naming its family
     { sp setcolorspace currentcolorspace
       dup type /arraytype ne { (not an array) nm note } if
       0 get type /nametype ne { (family is not a name) nm note } if
-    } (reports its family) nm works
+    } (reports its family) nm works2
 
     % a colour is set in it and read back with the same component count
-    { sp setcolorspace comps aload pop setcolor } (takes a colour) nm works
+    { sp setcolorspace comps aload pop setcolor } (takes a colour) nm works2
     { sp setcolorspace comps aload pop setcolor
       currentcolor count comps length ne { (wrong component count) nm note } if
-      clear } (reports its components) nm works
+      clear } (reports its components) nm works2
 
     % the colour and the space both survive a gsave
     { sp setcolorspace comps aload pop setcolor
       gsave 0 setgray grestore
       currentcolorspace 0 get sp dup type /arraytype eq { 0 get } if ne
           { (space lost across gsave) nm note } if
-    } (survives a gsave) nm works
+    } (survives a gsave) nm works2
 
     % and a save, which reverts the graphics state wholesale
     { sp setcolorspace comps aload pop setcolor
-      /v save def 0 setgray v restore } (survives a save) nm works
+      /v save def 0 setgray v restore } (survives a save) nm works2
 
     % it paints
     { sp setcolorspace comps aload pop setcolor
-      newpath 0 0 20 20 rectfill } (fills) nm works
+      newpath 0 0 20 20 rectfill } (fills) nm works2
     { sp setcolorspace comps aload pop setcolor
-      newpath 0 0 moveto 20 20 lineto stroke } (strokes) nm works
+      newpath 0 0 moveto 20 20 lineto stroke } (strokes) nm works2
     { sp setcolorspace comps aload pop setcolor
       /Helvetica findfont 10 scalefont setfont
-      newpath 0 30 moveto (A) show } (paints a glyph) nm works
+      newpath 0 30 moveto (A) show } (paints a glyph) nm works2
 
     % it backs an image of its own component count
     { sp setcolorspace
@@ -92,22 +78,22 @@ spaces {
          /Decode [ comps length { 0 1 } repeat ]
          /ImageMatrix [2 0 0 -2 0 2]
          /DataSource < 00112233445566778899aabbccddeeff > >> image
-      grestore } (backs an image) nm works
+      grestore } (backs an image) nm works2
 
     % and it can be made the underlying space of a pattern
-    { [ /Pattern sp ] setcolorspace } (underlies a pattern) nm works
+    { [ /Pattern sp ] setcolorspace } (underlies a pattern) nm works2
 } forall
 
 % Pattern itself, which has no components of its own
-{ [/Pattern /DeviceRGB] setcolorspace } (is selected) (Pattern) works
+{ [/Pattern /DeviceRGB] setcolorspace } (is selected) (Pattern) works2
 { [/Pattern /DeviceRGB] setcolorspace currentcolorspace 0 get /Pattern ne
-  { (family is not Pattern) (Pattern) note } if } (reports its family) (Pattern) works
+  { (family is not Pattern) (Pattern) note } if } (reports its family) (Pattern) works2
 { << /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 8 8]
      /XStep 8 /YStep 8 /PaintProc { pop 0 0 4 4 rectfill } >>
   matrix makepattern
   [/Pattern /DeviceRGB] setcolorspace
   1 0 0 4 -1 roll setcolor
-  newpath 0 0 20 20 rectfill } (fills) (Pattern) works
+  newpath 0 0 20 20 rectfill } (fills) (Pattern) works2
 
 % the component counts each family is defined to take
 [ [/DeviceGray 1] [/DeviceRGB 3] [/DeviceCMYK 4] ] {
@@ -357,16 +343,6 @@ currentcolor null eq
 % otherwise the graphics state is left holding a space that answers
 % nothing, and the program is told at a place it has no way to connect
 % to the cause.
-/raises { % {proc} /errname (what)
-    /c.w exch def /c.e exch def
-    stopped {
-        $error /errorname get dup c.e ne {
-            (FAIL: ) print c.w print ( raised ) print ==
-            /bad bad 1 add store
-        }{ pop } ifelse
-    }{ c.w (is not refused) note } ifelse
-    clear
-} def
 
 { /NoSuchFamily setcolorspace } /undefined (an unknown family) raises
 { [/NoSuchFamily 1 2] setcolorspace } /undefined (an unknown family in an array) raises
@@ -390,6 +366,5 @@ currentcolorspace 0 get /DeviceCMYK eq
     (a refused space leaves the current one in force) assert
 
 0 setgray
-bad 0 eq (every space works with every colour operator) assert
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

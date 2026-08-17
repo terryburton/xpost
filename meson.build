@@ -4944,6 +4944,20 @@ test('shared-helpers',
   suite: cost_fast,
   timeout: 120)
 
+# The shared test framework, held to the tree. tests/testlib.ps is the one
+# place a case that may raise is run and the one place that puts the world
+# back after it, and that is worth nothing if a suite can quietly keep its
+# own copy -- a copy is what let a false pass sit unnoticed, where a refused
+# case left a singular transform in force and the five cases after it were
+# read as correctly refusing what they were actually testing. So the register
+# of suites that have not moved yet is held both ways, and a suite that asks
+# for the framework and then defines one of its names is refused outright.
+test('testlib',
+  find_program('tests/check-testlib.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # A colour space belongs to a family, and three tables in data/color.ps
 # each say something about those families. A family in one and missing
 # from another is one the machinery half knows: that is how the count of

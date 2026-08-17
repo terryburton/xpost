@@ -112,47 +112,88 @@
 %
 % The answer is parked in the framework's dictionary before the unwind,
 % because the unwind clears the operand stack and the answer is on it.
+%
+% No mark is laid to find the case's leavings by, though that is the
+% obvious way to tidy an operand stack. A mark is visible to the case: a
+% body that reads `count`, or that lays and clears a mark of its own, gets
+% a different answer with one of ours underneath it -- and several suites
+% here have bodies that do exactly that. The unwind clears the stack
+% wholesale instead, which needs no mark to know where to stop.
 /outcome {                              % { body }  .  /ok | /errorname
-    mark exch stopped
-    { cleartomark $error /errorname get }{ cleartomark /ok } ifelse
+    stopped { $error /errorname get }{ /ok } ifelse
     //.testlib exch /answer exch put
     //.testlib /unwind get exec
     //.testlib /answer get
 } bind def
 
-% { body } (what) (subject)  works  -
-% The case must not raise. Two strings because that is the shape the
-% cross-product suites already use: one names the question, the other the
-% member being asked, and printing them together is what makes a failure
-% in a table of a hundred cells readable.
-/works {                                % { body } (what) (subject)  .  -
+% (what) (subject)  note  -
+% Report a failure a case detected itself, rather than one it raised. A
+% case that checks something inside its own body has no boolean to hand
+% back -- the body's value is whether it raised -- so it says so directly.
+% Present because the suites that moved here already had it, spelled the
+% same way in each: the strings are named question-then-subject, which is
+% the other order from assert2, and both orders are kept rather than one
+% suite's call sites rewritten to match the other's.
+/note {                                 % (what) (subject)  .  -
+    exch false 3 1 roll assert2
+} bind def
+
+% ---- the runners
+%
+% Each comes in two shapes, named as assert and assert2 are: the plain one
+% takes a single message, and the numbered one takes a subject and a
+% question and prints them together, which is what makes a failure in a
+% table of a hundred cells readable. Both shapes were already in use here,
+% in files that had written their own; carrying both is what lets those
+% files move over without their call sites being rewritten in the same
+% step, which is the difference between a move that can be checked by
+% diffing the output and one that cannot.
+
+% { body } (what)  works  -
+% { body } (what) (subject)  works2  -
+% The case must not raise.
+/works {                                % { body } (what)  .  -
+    //.testlib exch /what exch put
+    outcome /ok eq //.testlib /what get assert
+} bind def
+/works2 {                               % { body } (what) (subject)  .  -
     //.testlib exch /subject exch put
     //.testlib exch /what exch put
     outcome /ok eq
     //.testlib /subject get //.testlib /what get assert2
 } bind def
 
-% { body } (what) (subject)  refuses  -
-% The case must raise, and this asks no more than that. It is the shape
-% the existing suites use and it is the weaker question: a test satisfied
-% by "some error" goes on passing when the operator starts refusing for
-% the wrong reason, which is how a rangecheck quietly becomes a typecheck.
-% Prefer `raises` below, which names the error; this exists so that a suite
-% written before the distinction was drawn can be moved here unchanged
-% rather than have its expectations rewritten in the same step.
-/refuses {                              % { body } (what) (subject)  .  -
+% { body } (what)  refuses  -
+% { body } (what) (subject)  refuses2  -
+% The case must raise, and these ask no more than that. That is the weaker
+% question: a test satisfied by "some error" goes on passing when the
+% operator starts refusing for the wrong reason, which is how a rangecheck
+% quietly becomes a typecheck. Prefer the pair below, which name the error.
+% These exist so a suite written before the distinction was drawn can be
+% moved here unchanged rather than have its expectations rewritten too.
+/refuses {                              % { body } (what)  .  -
+    //.testlib exch /what exch put
+    outcome /ok ne //.testlib /what get assert
+} bind def
+/refuses2 {                             % { body } (what) (subject)  .  -
     //.testlib exch /subject exch put
     //.testlib exch /what exch put
     outcome /ok ne
     //.testlib /subject get //.testlib /what get assert2
 } bind def
 
-% { body } /errorname (what) (subject)  raises  -
+% { body } /errorname (what)  raises  -
+% { body } /errorname (what) (subject)  raises2  -
 % The case must raise THAT error. This is the question worth asking, and
 % the one a new case should use: the error name is part of the contract,
 % and a test that does not check it cannot tell a correct refusal from a
 % refusal for the wrong reason.
-/raises {                               % { body } /errorname (what) (subject)  .  -
+/raises {                               % { body } /errorname (what)  .  -
+    //.testlib exch /what exch put
+    //.testlib exch /want exch put
+    outcome //.testlib /want get eq //.testlib /what get assert
+} bind def
+/raises2 {                              % { body } /errorname (what) (subject)  .  -
     //.testlib exch /subject exch put
     //.testlib exch /what exch put
     //.testlib exch /want exch put

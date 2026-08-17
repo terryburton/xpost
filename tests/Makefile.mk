@@ -84,6 +84,9 @@ tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
 tests/check-shared-helpers.sh \
+tests/check-testlib.sh \
+tests/testlib-facts \
+tests/testlib.ps \
 tests/check-colour-spaces.sh \
 tests/check-show-clip.sh \
 tests/check-test-cost.sh \
