@@ -84,6 +84,7 @@ tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
 tests/check-shared-helpers.sh \
+tests/check-error-quiet.sh \
 tests/check-testlib.sh \
 tests/testlib-facts \
 tests/testlib-prepend.sh \

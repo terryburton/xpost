@@ -149,13 +149,10 @@ int xpost_array_put_memory(Xpost_Memory_File *mem,
     ret = xpost_save_cow(mem, arraytype, a.comp_.sz, xpost_object_get_ent(a));
     if (ret)
         return ret;
-    if (i >= a.comp_.sz)
-    {
-        XPOST_LOG_ERR("cannot put value in array (rangecheck) %lld >= [%u]",
-                      (long long)i, a.comp_.sz);
-        /*breakhere((Xpost_Context *)mem);*/
+    /* An index outside the array is an ordinary rangecheck the caller
+       reports to the program, so it is answered quietly. */
+    if (i < 0 || (unsigned int)i >= a.comp_.sz)
         return rangecheck;
-    }
     ret = xpost_memory_put(mem, xpost_object_get_ent(a),
                            (unsigned int)(a.comp_.off + i),
                            (unsigned int)sizeof(Xpost_Object), &o);
@@ -208,6 +205,13 @@ Xpost_Object xpost_array_get_memory(Xpost_Memory_File *mem,
 {
     Xpost_Object o = { 0 };
     int ret;
+
+    /* An index outside the array is an ordinary rangecheck the caller
+       reports, so it is answered here rather than left to the bound in
+       xpost_memory_get, whose diagnostic is for an offset outside the
+       allocation -- a fault in this interpreter, not in the program. */
+    if (i < 0 || (unsigned int)i >= a.comp_.sz)
+        return invalid;
 
     ret = xpost_memory_get(mem, xpost_object_get_ent(a),
                            (unsigned int)(a.comp_.off +i),
