@@ -106,7 +106,8 @@
     (imagemask takes five operands) accepts
 { 8 8 true [8 0 0 -8 0 8] (\377\000\377\000\377\000\377\000) imagemask }
     (imagemask takes a string source) accepts
-{ << /ImageType 1 /Width 8 /Height 8 /Decode [1 0] /ImageMatrix [8 0 0 -8 0 8]
+{ << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
+     /Decode [1 0] /ImageMatrix [8 0 0 -8 0 8]
      /DataSource {<ff00ff00ff00ff00>} >> imagemask }
     (imagemask takes a dictionary) accepts
 

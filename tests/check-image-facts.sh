@@ -294,11 +294,20 @@ count divergences "$(grep -c . "$work/reg.diverge")"
 : > "$work/got.diverge"
 [ "$(centres "$(img 1 8 "$(samples 8)") dup /Width undef image")" = undefined ] \
     && echo missing-required >> "$work/got.diverge"
-# an imagemask stating a width other than one bit, which PLRM forbids
-case $(centres "<< /ImageType 1 /Width 8 /Height 1 /BitsPerComponent 8
-                   /Decode [0 1] /ImageMatrix [8 0 0 -1 0 1]
+# a stencil Decode of the right length carrying values that are neither
+# of the two the specification allows: accepted, and its first element
+# stands for the whole
+case $(centres "<< /ImageType 1 /Width 8 /Height 1 /BitsPerComponent 1
+                   /Decode [0.5 1] /ImageMatrix [8 0 0 -1 0 1]
                    /DataSource <AA> >> imagemask") in
-    *\ *) echo imagemask-value-rules-unchecked >> "$work/got.diverge" ;;
+    *\ *) echo stencil-decode-not-held-to-its-two-values >> "$work/got.diverge" ;;
+esac
+# and more than one data source, which this refuses where both oracles do not
+case $(centres "<< /ImageType 1 /Width 8 /Height 1 /BitsPerComponent 1
+                   /MultipleDataSources true
+                   /Decode [0 1] /ImageMatrix [8 0 0 -1 0 1]
+                   /DataSource [ <AA> ] >> imagemask") in
+    typecheck) echo stencil-strictness-differs-from-both >> "$work/got.diverge" ;;
 esac
 sort -u "$work/got.diverge" -o "$work/got.diverge"
 

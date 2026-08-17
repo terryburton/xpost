@@ -1621,6 +1621,25 @@ setglobal
         1 dict begin
         /d exch def
         d /ImageType get 1 ne { end /imagemask cvx /rangecheck signalerror } if
+        % PLRM Table 4.20 states three things of a stencil that the path
+        % below has no way to honour: one bit to a sample, one data source,
+        % and a Decode that is exactly [0 1] or [1 0]. The path is wired to
+        % one bit and reads a single source, so a dictionary saying anything
+        % else is not painted the way it asked -- it is painted the only way
+        % there is, and the difference is silent. Each is asked for here.
+        %
+        % A sample is one bit. The entry is required, so its absence is
+        % undefined and a width that is not one is out of range: two faults,
+        % two answers.
+        d /BitsPerComponent 2 copy known not
+            { pop pop end /imagemask cvx /undefined signalerror } if
+        get 1 ne { end /imagemask cvx /rangecheck signalerror } if
+        % Decode says which way round the mask reads, and only its first
+        % element is consulted below. A Decode of another length describes
+        % something this cannot express, and the first element alone would
+        % quietly stand for the whole of it.
+        d /Decode get length 2 ne
+            { end /imagemask cvx /rangecheck signalerror } if
         d /Width get d /Height get
         d /Decode get 0 get 0 ne
         d /ImageMatrix get
