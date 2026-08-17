@@ -139,6 +139,19 @@
   45 ne { (angle is not the grey one) (a type 2) note } if }
   (a type 2 screening with its grey triple) works
 
+% A type 10 describes a cell at a nonzero screen angle by two squares,
+% X and Y, whose sides are the horizontal and vertical displacement to
+% the next cell (PLRM 7.4.5). It carries Xsquare^2 + Ysquare^2
+% thresholds, square X first, each square in image order, and its
+% Thresholds may be a string or a file as a type 3's and a type 6's are
+% respectively.
+{ << /HalftoneType 10 /Xsquare 3 /Ysquare 2
+     /Thresholds <0110204030506070809008182838> >>
+  sethalftone } (a complete type 10 from a string) works
+{ << /HalftoneType 10 /Xsquare 3 /Ysquare 2
+     /Thresholds (0110204030506070809008182838) /ASCIIHexDecode filter >>
+  sethalftone } (a complete type 10 from a file) works
+
 % and comes back as the type it was set to
 { << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone
   currenthalftone /HalftoneType get 3 ne
@@ -154,7 +167,7 @@
 { << /HalftoneType (three) /Width 2 /Height 2 /Thresholds <0180C8FF> >>
   sethalftone } /typecheck (a HalftoneType that is not an integer) raises
 
-[ -1 0 9 10 99 ] {
+[ -1 0 9 99 ] {
     /t exch def
     { << /HalftoneType t /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
       sethalftone }
@@ -203,6 +216,20 @@
 { << /HalftoneType 16 /Width 2 /Height 2 /Width2 2
      /Thresholds (0100804000C800FF) /ASCIIHexDecode filter >>
   sethalftone } /undefined (a type 16 with Width2 and no Height2) raises
+% A type 16 may carry a second rectangle, and then it describes a cell
+% at an angle the way a type 10's two squares do: the repeat vectors are
+% (Width, Height2) and (-Width2, Height), whose determinant is the
+% sample count. It is a cell on the same condition, that Height and
+% Width2 are coprime.
+{ << /HalftoneType 16 /Width 4 /Height 3 /Width2 2 /Height2 2
+     /Thresholds
+     (00010A0B14151E1F28292A2B34353E3F48494A4B54555E5F68696A6B74757E7F)
+     /ASCIIHexDecode filter >>
+  sethalftone } (a type 16 with a second rectangle) works
+{ << /HalftoneType 16 /Width 4 /Height 2 /Width2 2 /Height2 2
+     /Thresholds (000102030405060708090A0B0C0D0E0F101112131415161718191A1B)
+     /ASCIIHexDecode filter >>
+  sethalftone } (a type 16 whose rectangles share a factor) works
 
 { << /HalftoneType 2
      /RedFrequency 60 /RedAngle 0 /RedSpotFunction { pop pop 0 }
@@ -216,6 +243,33 @@
      /BlueWidth 2 /BlueHeight 2 /BlueThresholds <0180C8FF>
      /GrayWidth 2 /GrayHeight 2 >>
   sethalftone } /undefined (a type 4 with no GrayThresholds) raises
+
+{ << /HalftoneType 10 /Ysquare 2 /Thresholds <0110204030506070809008182838> >>
+  sethalftone } /undefined (a type 10 with no Xsquare) raises
+{ << /HalftoneType 10 /Xsquare 3 /Thresholds <0110204030506070809008182838> >>
+  sethalftone } /undefined (a type 10 with no Ysquare) raises
+{ << /HalftoneType 10 /Xsquare 3 /Ysquare 2 >> sethalftone }
+  /undefined (a type 10 with no Thresholds) raises
+{ << /HalftoneType 10 /Xsquare (three) /Ysquare 2
+     /Thresholds <0110204030506070809008182838> >>
+  sethalftone } /typecheck (a type 10 whose Xsquare is a string) raises
+
+% The cell is expanded to an axis-aligned tile of side Xsquare^2 +
+% Ysquare^2, so a large angled cell asks for a square of that side. One
+% too large to hold is refused rather than truncated.
+{ << /HalftoneType 10 /Xsquare 40 /Ysquare 31
+     /Thresholds 2561 string >> sethalftone }
+  /limitcheck (a type 10 whose expanded cell will not fit) raises
+
+% Sides sharing a factor describe a smaller cell scaled up rather than a
+% cell of their own. The tile is reduced by that factor, so the cell
+% that gets built is the smaller one and every place in it is reached
+% exactly once, as it is when the sides are coprime.
+{ << /HalftoneType 10 /Xsquare 2 /Ysquare 2 /Thresholds <0011223344556677> >>
+  sethalftone } (a type 10 whose squares share a factor) works
+{ << /HalftoneType 10 /Xsquare 4 /Ysquare 2
+     /Thresholds <000102030405060708090A0B0C0D0E0F0011223344> >>
+  sethalftone } (a type 10 whose squares share a factor of two) works
 
 { << /HalftoneType 5
      /Gray << /HalftoneType 1 /Frequency 60 /Angle 45
