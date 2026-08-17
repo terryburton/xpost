@@ -8,13 +8,11 @@
 # dictionary starts empty or count the dictionary stack, and six read their
 # own colour_sampling_test.ps           refuses
 
-own    colour_sampling_test.ps        refuses
-own    filter_predictor_test.ps       refuses
 own    op_compare_test.ps             refuses
 own    op_radix_test.ps               outcome
 own    privatedict_install_test.ps    refuses
 
 cannot startup_surface_test.ps        raises  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
 
-owns 5
+owns 3
 cannots 1

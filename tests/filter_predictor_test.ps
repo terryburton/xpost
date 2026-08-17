@@ -1,3 +1,4 @@
+%!testlib
 % Predictor stages on a compressed stream, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -7,9 +8,6 @@
 % original bytes back: a stage that did nothing would return the
 % differences, which read as an image rather than as an error.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
 /want <0a141e28323c46505a646e780c16202a343e48525c66707a0f19232d37414b555f69737d> def
 /rd { % <<params>> <compressed>  ->  string
@@ -50,21 +48,13 @@ plain dup /Predictor 15 put exch rd
 want eq (rows may each use their own filter) assert
 
 % the parameters the stage is defined for
-/refuses { % {proc} /errname (what)
-    /e.w exch def /e.e exch def /e.p exch def
-    clear
-    /e.p load stopped {
-        $error /errorname get e.e eq e.w assert
-    }{ false e.w assert } ifelse
-    clear
-} def
 /src <789ce3129183031e3105389b5f5219ce0600470d03f4> def
-{ src << /Predictor 99 >> /FlateDecode filter } /rangecheck (a predictor out of range) refuses
-{ src << /Predictor 9 >> /FlateDecode filter } /rangecheck (a predictor below the png range) refuses
-{ src << /Predictor 16 >> /FlateDecode filter } /rangecheck (a predictor above the png range) refuses
-{ src << /Predictor (two) >> /FlateDecode filter } /typecheck (a predictor that is not an integer) refuses
-{ src << /Predictor 2 /BitsPerComponent 4 >> /FlateDecode filter } /rangecheck (a sample narrower than a byte) refuses
-{ src << /Predictor 2 /Colors 9 >> /FlateDecode filter } /rangecheck (more colours than a pixel carries) refuses
-{ src << /Predictor 2 /Columns 0 >> /FlateDecode filter } /rangecheck (a row of no columns) refuses
+{ src << /Predictor 99 >> /FlateDecode filter } /rangecheck (a predictor out of range) raises
+{ src << /Predictor 9 >> /FlateDecode filter } /rangecheck (a predictor below the png range) raises
+{ src << /Predictor 16 >> /FlateDecode filter } /rangecheck (a predictor above the png range) raises
+{ src << /Predictor (two) >> /FlateDecode filter } /typecheck (a predictor that is not an integer) raises
+{ src << /Predictor 2 /BitsPerComponent 4 >> /FlateDecode filter } /rangecheck (a sample narrower than a byte) raises
+{ src << /Predictor 2 /Colors 9 >> /FlateDecode filter } /rangecheck (more colours than a pixel carries) raises
+{ src << /Predictor 2 /Columns 0 >> /FlateDecode filter } /rangecheck (a row of no columns) raises
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

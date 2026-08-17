@@ -1,3 +1,4 @@
+%!testlib
 % The transfer functions and spot functions the graphics state records
 % are sampled when they are set, run through `xpost -q --no-sandbox -d
 % null` by run-ps-test.sh.
@@ -17,22 +18,6 @@
 % the counts below say so with a counter rather than with the absence of
 % an error, because a procedure that is never reached raises nothing.
 
-/fail false def
-/assert { % bool (name)  .  -
-    exch { pop }{ (FAIL: ) print print (\n) print /fail true def } ifelse
-} def
-/refuses { % {proc} /errorname (name)  .  -
-    /rf.w exch def /rf.e exch def
-    count 1 sub /rf.d exch def
-    stopped not { (FAIL: ) print rf.w print ( did not fail\n) print
-                  /fail true def } if
-    count rf.d sub dup 0 gt { { pop } repeat }{ pop } ifelse
-    $error /errorname get rf.e eq
-        { }{ (FAIL: ) print rf.w print ( raised ) print
-             $error /errorname get 40 string cvs print (\n) print
-             /fail true def } ifelse
-    $error /newerror false put
-} def
 
 % every counter the sampled procedures write through
 /seq 0 def
@@ -155,30 +140,30 @@ currentcolortransfer
 % transfer function, whichever channel it was given for.
 
 { { 1 } { } { } { } setcolortransfer } /typecheck
-    (a red transfer that pushes without popping) refuses
+    (a red transfer that pushes without popping) raises
 { { } { 1 } { } { } setcolortransfer } /typecheck
-    (a green transfer that pushes without popping) refuses
+    (a green transfer that pushes without popping) raises
 { { } { } { 1 } { } setcolortransfer } /typecheck
-    (a blue transfer that pushes without popping) refuses
+    (a blue transfer that pushes without popping) raises
 { { } { } { } { 1 } setcolortransfer } /typecheck
-    (a grey transfer that pushes without popping) refuses
+    (a grey transfer that pushes without popping) raises
 { { pop } { } { } { } setcolortransfer } /typecheck
-    (a red transfer that leaves no result) refuses
+    (a red transfer that leaves no result) raises
 { { } { } { } { pop } setcolortransfer } /typecheck
-    (a grey transfer that leaves no result) refuses
+    (a grey transfer that leaves no result) raises
 { { pop (x) } { } { } { } setcolortransfer } /typecheck
-    (a red transfer whose result is a string) refuses
+    (a red transfer whose result is a string) raises
 { { } { } { } { pop (x) } setcolortransfer } /typecheck
-    (a grey transfer whose result is a string) refuses
+    (a grey transfer whose result is a string) raises
 % one that takes more than its argument reaches past the sample into the
 % caller's own stack, and refuses where it runs out of it. That is also
 % what says the setter is holding nothing there: three procedures and a
 % name within reach would be what got popped instead
 count 0 eq (the stack is clear before the underflow probe) assert
 { { pop pop 0.5 } { } { } { } setcolortransfer } /stackunderflow
-    (a red transfer that pops too much) refuses
+    (a red transfer that pops too much) raises
 { { } { } { } { pop pop 0.5 } setcolortransfer } /stackunderflow
-    (a grey transfer that pops too much) refuses
+    (a grey transfer that pops too much) raises
 { } settransfer
 
 % and the same of the spot functions: twelve operands within reach would
@@ -186,10 +171,10 @@ count 0 eq (the stack is clear before the underflow probe) assert
 count 0 eq (the stack is clear before the spot underflow probe) assert
 { 60 45 { pop pop pop 0.5 } 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 }
   60 45 { pop pop 0.5 } setcolorscreen } /stackunderflow
-    (a red spot that pops past its arguments) refuses
+    (a red spot that pops past its arguments) raises
 { 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 }
   60 45 { pop pop pop 0.5 } setcolorscreen } /stackunderflow
-    (a grey spot that pops past its arguments) refuses
+    (a grey spot that pops past its arguments) raises
 60 45 { pop pop 0.5 } setscreen
 
 % --- the samples run where the caller can see them --------------------
@@ -320,11 +305,11 @@ pop
 % --- the operands come back when the setter refuses on them -----------
 
 { { } { } { } (notaproc) setcolortransfer } /typecheck
-    (setcolortransfer refuses a grey operand that is not a procedure) refuses
+    (setcolortransfer refuses a grey operand that is not a procedure) raises
 { 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 }
   60 (notanangle) { pop pop 0.5 } setcolorscreen } /typecheck
-    (setcolorscreen refuses a grey angle that is not a number) refuses
+    (setcolorscreen refuses a grey angle that is not a number) raises
 
 count 0 eq (the checks left nothing on the operand stack) assert
 
-fail { (FAILED\n) print }{ (SUCCESS\n) print } ifelse
+verdict
