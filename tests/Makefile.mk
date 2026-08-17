@@ -224,6 +224,7 @@ tests/job_snapshot_balance_test.c \
 tests/gc_marking_test.c \
 tests/global_vm_invariant_test.ps \
 tests/local_vm_invariant_test.ps \
+tests/vm_account_test.ps \
 tests/run-local-vm-invariant-test.sh \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \

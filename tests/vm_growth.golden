@@ -273,6 +273,7 @@ token_sign_test.ps                         zero
 trapping_test.ps                           once   unexplained
 type42_charstrings_test.ps                 once   unexplained
 vecout_gc_test.ps                          fits
+vm_account_test.ps                         zero
 vm_test.ps                                 once   unexplained
 vm_threshold_test.ps                       once   unexplained
 window_device_test.ps                      once   unexplained

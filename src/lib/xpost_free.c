@@ -285,6 +285,42 @@ static void _dump_chain(Xpost_Memory_File *mem, unsigned int z)
     }
 }
 
+unsigned int xpost_free_bytes(Xpost_Memory_File *mem)
+{
+    unsigned int total = 0;
+    unsigned int headz;
+    unsigned int b;
+    /* no chain can hold more entities than the table has rows, which is
+       the bound the walk below is held to: a walk that passes it is
+       following a cycle rather than a list, and stops with what it has
+       instead of never returning */
+    unsigned int rows = mem->table.nextent;
+
+    headz = xpost_memory_free_lists_adr(mem);
+
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
+    {
+        unsigned int z = headz + b * (unsigned int)sizeof(unsigned int);
+        unsigned int e;
+        unsigned int seen = 0;
+
+        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+        while (e && seen <= rows)
+        {
+            unsigned int sz;
+
+            if (!xpost_memory_table_get_size(mem, e, &sz))
+                break;
+            total += sz;
+            if (!xpost_memory_table_get_addr(mem, e, &z))
+                break;
+            ++seen;
+            memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+        }
+    }
+    return total;
+}
+
 /* print a dump of the free list */
 void xpost_free_dump(Xpost_Memory_File *mem)
 {

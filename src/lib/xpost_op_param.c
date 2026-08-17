@@ -145,6 +145,30 @@ int vmentcount (Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .vmfreebytes  local global
+   The bytes each bank's free lists hold: space a collection has
+   recovered, still inside the arena, waiting for an allocation the size
+   suits.
+   It is the half of the account vmstatus cannot give. The used figure
+   vmstatus reports is a cursor into the arena and does not fall when
+   memory comes back, and the maximum figure is the arena the bank
+   holds, which only ever grows -- so between them they say how much has
+   been taken and how much is held, and nothing says how much of what is
+   held is in use. That is this number: held, less free, is what the
+   bank is actually using, and a large figure here is a context sitting
+   on a peak it has finished with. */
+static
+int vmfreebytes (Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)xpost_free_bytes(ctx->lo))))
+        return stackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)xpost_free_bytes(ctx->gl))))
+        return stackoverflow;
+    return 0;
+}
+
 /* -  .vmfreescan  local global
    The number of free-list entries the allocator has examined in each
    memory file, saturating rather than wrapping. What an allocation
@@ -492,6 +516,8 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "globalvmstatus", (Xpost_Op_Func)globalvmstatus, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmentcount", (Xpost_Op_Func)vmentcount, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".vmfreebytes", (Xpost_Op_Func)vmfreebytes, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmfreescan", (Xpost_Op_Func)vmfreescan, 0);
     INSTALL;

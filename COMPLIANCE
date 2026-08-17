@@ -443,6 +443,22 @@ Known behavioural deviations
      largest; a real reports the size and loses the last digits of it. The
      same answer this interpreter gives an arithmetic result that leaves
      the integer range.
+ [X] vmstatus  the used count does not fall when memory is reclaimed, where the
+     operator is defined so that the count is meaningful immediately after a
+     collection and may otherwise be too large by whatever has become
+     unreachable and not yet been taken back. Here it is the bytes the bank
+     has taken from fresh storage and never the bytes still in use: a
+     collection returns space to a free list the bank keeps rather than to the
+     system, so the count stands where it was and the space is available
+     again. The bytes on that free list are reported by .vmfreebytes, and the
+     bank's own size less those bytes is what it is using.
+ [X] vmstatus  the maximum count is the storage the bank holds at the moment
+     it is asked, where the operator is defined to answer an estimate of the
+     size the bank could grow to. The number given is therefore a floor on
+     that estimate rather than the estimate: this bank grows on demand, and
+     what it could reach is a question about the machine rather than about
+     the interpreter. It never falls, so it is also the largest the bank has
+     ever been.
  [X] SubFileDecode  a zero count with an empty EOD string passes zero bytes
      (PLRM), where some interpreters read to end-of-file.
  [X] ]  a construction closed over more objects than an array can hold is

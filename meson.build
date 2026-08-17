@@ -3323,6 +3323,20 @@ test('local-vm-invariant',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Three numbers describe a bank and each answers a different question: the
+# cursor into the storage it has taken, the storage it holds, and the bytes on
+# its free lists. A collection moves the third and neither of the first two,
+# because what it recovers stays inside the bank -- so the account an embedder
+# wants, what the bank holds less what it holds for nothing, needs all three.
+# Each is pinned to the direction it may move, and the free figure is pinned
+# to something like the size of what was given up, so a reporter that has gone
+# blind fails rather than reading as a bank with nothing spare.
+test('vm-account',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/vm_account_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Global memory is never collected, so a writer that builds its across-page
 # bookkeeping per document spends it for good; one document per job must cost
 # a bounded amount.

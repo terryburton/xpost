@@ -329,6 +329,7 @@ vm test free-*
 vm test gc-*
 vm test global-vm-invariant
 vm test local-vm-invariant
+vm test vm-account
 vm test job-snapshot-balance
 vm test large-object
 vm test memory-bounds

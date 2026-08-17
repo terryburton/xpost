@@ -204,6 +204,18 @@ int xpost_free_init(Xpost_Memory_File *mem);
 void xpost_free_dump(Xpost_Memory_File *mem);
 
 /**
+ * @brief  the bytes the free lists hold: released, still inside the
+ *         arena, and available to an allocation the size suits
+ *
+ * The arena is never handed back to the system while the memory file
+ * lives, so the space a collection recovers stays in the process and
+ * shows up here rather than as a fall in what vmstatus reports used.
+ * Subtracting this from the arena size is what tells an embedder that a
+ * context is holding a peak it no longer needs.
+ */
+unsigned int xpost_free_bytes(Xpost_Memory_File *mem);
+
+/**
  * The allocator's answer when a collection should run before retrying:
  * not a success (1) and not a plain failure (0) -- the caller records
  * the request and falls back to fresh allocation, and the interpreter
