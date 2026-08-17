@@ -459,6 +459,51 @@
 { << /HalftoneType 1 /Frequency 60 /Angle -45 /SpotFunction { pop pop 0 } >>
   sethalftone } (a type 1 at a negative angle) works
 
+% ------------------------------------------- what the screen actually came to
+% A screen is not given the frequency and angle asked for: a cell has to
+% land on whole pixels, so the interpreter picks the nearest lattice it
+% can tile the device with. PLRM Table 7.4 lets a program find out what
+% it got -- if ActualFrequency and ActualAngle are present, sethalftone
+% sets them to what was achieved, and leaves Frequency and Angle alone
+% reflecting what was asked for. The feature is not available through
+% setscreen, which has no dictionary to answer into.
+
+/d1 << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 }
+       /ActualFrequency 0 /ActualAngle 0 >> def
+d1 sethalftone
+/isnum { type dup /integertype eq exch /realtype eq or } bind def
+d1 /ActualFrequency get isnum
+    (sethalftone answers with the frequency achieved) assert
+d1 /ActualAngle get isnum
+    (sethalftone answers with the angle achieved) assert
+d1 /ActualFrequency get 0 gt
+    (the frequency achieved is a real screen frequency) assert
+d1 /Frequency get 60 eq
+    (the frequency asked for is left as it was asked) assert
+d1 /Angle get 45 eq
+    (the angle asked for is left as it was asked) assert
+
+% asking again for what was achieved must achieve the same thing: the
+% lattice that answered is one the search can reach, so a second pass
+% settles rather than drifting
+/got d1 /ActualFrequency get def
+/d2 << /HalftoneType 1 /Frequency got /Angle d1 /ActualAngle get
+       /SpotFunction { pop pop 0 } /ActualFrequency 0 >> def
+{ d2 sethalftone } stopped
+{ false }{ d2 /ActualFrequency get got sub abs 0.001 lt } ifelse
+    (asking for what was achieved achieves it again) assert
+
+% a dictionary that does not ask is not answered
+/d3 << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >> def
+d3 sethalftone
+d3 /ActualFrequency known not
+    (a dictionary that did not ask gains no answer) assert
+
+% and setscreen answers nobody, having no dictionary to answer into
+60 45 { pop pop 0 } setscreen
+currenthalftone /ActualFrequency known not
+    (setscreen leaves no achieved frequency behind) assert
+
 % --------------------------------------------------- nothing is left behind
 % A rejected halftone must not have displaced the one already in force.
 

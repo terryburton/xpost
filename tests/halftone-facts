@@ -65,6 +65,6 @@ entries 10
 
 
 transfer-required  settled  PLRM Table 7.4 says a TransferFunction is REQUIRED of a type 5 component standing for a nonprimary colorant or a component of a DeviceN space. Neither implementation this is adjudicated against enforces that: both accept such a component without one, as this interpreter does. Refusing it would turn away programs both of them run, so the letter is not followed here and the reason is that following it would be the divergence
-screen-extras      thorn    AccurateScreens, ActualFrequency and ActualAngle are named nowhere in the tree. A dictionary carrying AccurateScreens is accepted and it survives currenthalftone as inert data; PLRM says sethalftone sets ActualFrequency and ActualAngle if present, and currenthalftone reports neither. HalftoneName appears only inside a comment
+screen-extras      thorn    AccurateScreens is named nowhere in the tree: a dictionary carrying it is accepted and it survives currenthalftone as data nobody reads. PLRM has it substitute a highly precise halftoning algorithm for the ordinary one, and there is one screening algorithm here, so ignoring it leaves ordinary halftoning in force -- which is what the specification says happens when it is absent or false. What is missing is the second algorithm, not the reading of the entry. HalftoneName is named only inside a comment; PLRM has it returned by GetHalftoneName, which does not exist here, and used by findcolorrendering, which does
 
 divergences 2

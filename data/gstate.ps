@@ -583,6 +583,7 @@ setglobal
     18 dict begin
     /proc exch def /ang exch def /freq exch def
     freq ang //.xpostsys /.screenlattice get exec
+    pop
     /quad exch def /q exch def /L exch def /b exch def /a exch def
     /.clamparg {
         dup -0.999 lt { pop -0.999 } if
@@ -745,7 +746,7 @@ setglobal
     end
 } exec put
 
-% freq ang  .screenlattice  a b L q quad
+% freq ang  .screenlattice  a b L q quad cand
 % the rotated integer lattice the screen tiles the device plane with:
 % the angle becomes the nearest rational tangent b/a whose cell
 % diagonal sits near the requested frequency. (a,b) and (-b,a) are the
@@ -754,7 +755,14 @@ setglobal
 % angle -- the lattice needs the angle only modulo ninety degrees, but
 % the spot pattern need not share the cell's symmetry, so the quarter
 % turns rotate the spot's argument instead. An axis-aligned screen
-% falls out as b = 0. The spot evaluation at install time and the
+% falls out as b = 0.
+%
+% cand is the angle within the quadrant that the chosen pair actually
+% stands for, taken from the candidate table rather than worked out
+% again from a and b. The table folds a quarter turn out of it where the
+% tangent is vertical, and a second expression that forgot to would call
+% an axis-aligned screen perpendicular -- which is what a second
+% expression did. The spot evaluation at install time and the
 % rendered threshold cell both build from this, so they sample the
 % same points.
 .xpostsys /.screenlattice {
@@ -765,7 +773,7 @@ setglobal
     /th ang 90 div dup floor sub 90 mul def
     /quad ang 90 div floor cvi 4 mod dup 0 lt { 4 add } if def
     /cands //.xpostsys /.latticecands get def
-    /besta n def /bestb 0 def /bestscore 1e9 def
+    /besta n def /bestb 0 def /bestcand 0 def /bestscore 1e9 def
     0 4 cands length 1 sub {
         /k exch def
         /score cands k 2 add get th sub abs
@@ -773,18 +781,20 @@ setglobal
         score bestscore lt {
             /bestscore score def
             /besta cands k get def /bestb cands k 1 add get def
+            /bestcand cands k 2 add get def
         } if
     } for
     /a besta def /b bestb def
     /q a a b b //.xpostsys /.celldet get exec def
     /L a a b b //.xpostsys /.cellside get exec def
-    a b L q quad
+    a b L q quad bestcand
     end
 } put
 .xpostsys /.installscreencell {
     20 dict begin
     /proc exch def /ang exch def /freq exch def
     freq ang //.xpostsys /.screenlattice get exec
+    pop
     /quad exch def /q exch def /L exch def /b exch def /a exch def
     /vals L L mul array def
     % arguments stay strictly inside (-1 1) whatever their sign: a
@@ -1288,6 +1298,50 @@ put
         { exch pop } ifelse
 } bind put
 
+% ht eff  .htanswer  -
+% Tell a dictionary what its screen came to.
+%
+% PLRM Table 7.4 has sethalftone set ActualFrequency and ActualAngle,
+% where they are present, to the frequency and angle achieved, and leave
+% Frequency and Angle as the program wrote them -- those say what was
+% asked for and go on saying it. A dictionary that did not ask is not
+% answered, and one that cannot be written is left alone.
+%
+% Only a screen searched for has an answer. A threshold array IS the
+% cell, so it settled for nothing and the entries mean nothing in the
+% types that carry one; the specification puts them in the type 1 table
+% alone, and that is the type asked for here -- of the screen that ended
+% up being installed, so a composite answers for the component that
+% reached the device.
+%
+% The answer is taken from the search rather than from the cell the
+% search went on to build, because a device that does not screen never
+% builds one and would otherwise have nothing to say about a screen it
+% was perfectly able to choose.
+%
+% setscreen reaches no dictionary at all, which is the whole of why the
+% specification says the feature is not available there.
+.xpostsys /.htanswer {
+    6 dict begin
+    /eff exch def
+    /ht exch def
+    ht wcheck
+    ht /ActualFrequency known ht /ActualAngle known or and
+    eff /HalftoneType 2 copy known { get 1 eq }{ pop pop false } ifelse and {
+        eff /Frequency get eff /Angle get
+        //.xpostsys /.screenlattice get exec
+        /cand exch def /quad exch def /q exch def pop pop pop
+        ht /ActualFrequency known {
+            ht /ActualFrequency
+               DEVICE /defaultmatrix get 0 get abs 72 mul q sqrt div put
+        } if
+        ht /ActualAngle known {
+            ht /ActualAngle cand quad 90 mul add put
+        } if
+    } if
+    end
+} bind put
+
 % ht [ keys ]  .htrequire  -
 % every key the declared type demands, or the missing one is undefined
 .xpostsys /.htrequire {
@@ -1510,6 +1564,8 @@ put
     % copied over
     graphicsdict /currgstate get /halftonetransfer
         ht /TransferFunction 2 copy known { get }{ pop pop null } ifelse put
+    graphicsdict /currgstate get /halftone get ht
+        //.xpostsys /.htanswer get exec
     end
     //.xpostsys /.spreadgrayscreen get exec
 } //.xpostsys /.defop get exec
