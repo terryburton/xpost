@@ -22,14 +22,22 @@
 # satisfied by a new address-holder nobody added to it.
 #
 #   $1  path to the source root
+set -u
 src=${1:?usage: check-vm-address-fields.sh <srcroot>}
-lib=$src/src/lib
-golden=$src/tests/vm_address_fields.golden
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 
-work=$(mktemp -d) || exit 1
+guard_workdir
 trap 'rm -rf "$work"' EXIT INT TERM
 
-[ -r "$golden" ] || { echo "FAILURES: cannot read $golden"; exit 1; }
+# Read with carriage returns taken out, for the reason given where
+# guard_mirror is defined: a declaration is followed by brace depth and a
+# member is recognised by what a line begins with, so a line ending the
+# scan does not know takes members out of the population in silence.
+guard_mirror lib "$src"/src/lib/*.h "$src"/src/lib/*.c
+lib=$mirror
+golden=$src/tests/vm_address_fields.golden
+guard_require_file "$golden" "the register of stored integers"
 
 # Every integer member of every structure, by brace depth rather than by
 # looking for a closing line: a structure carrying a documentation comment
@@ -143,24 +151,29 @@ sed -n 's/^\(address\|count\)  *\([^ ]*\)  *\([^ ]*\).*/\2 \3/p' "$golden" \
 
 fail=0
 
-if ! comm -23 "$work/found" "$work/register" > "$work/unregistered"; then
-    echo "FAILURES: cannot compare the two sets"; exit 1
-fi
-if [ -s "$work/unregistered" ]; then
-    echo "FAIL: a stored integer with no disposition. Say in"
-    echo "      tests/vm_address_fields.golden whether it holds an offset"
-    echo "      into a memory file's arena -- which a pass that rearranged"
-    echo "      the arena would have to rewrite -- or something else:"
-    sed 's/^/      /' "$work/unregistered"
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/found" "$work/register" \
+    "a stored integer with no disposition. Say in
+      tests/vm_address_fields.golden whether it holds an offset into a
+      memory file's arena -- which a pass that rearranged the arena
+      would have to rewrite -- or something else:" \
+    "the register names a member the headers no longer declare. A
+      register carrying entries for members that have gone is one
+      nobody has read lately:"
+[ "$guard_held" -eq 0 ] || fail=1
 
-comm -13 "$work/found" "$work/register" > "$work/departed"
-if [ -s "$work/departed" ]; then
-    echo "FAIL: the register names a member the headers no longer declare."
-    echo "      A register carrying entries for members that have gone is"
-    echo "      one nobody has read lately:"
-    sed 's/^/      /' "$work/departed"
+# One member, one disposition. Both sides of the comparison above are
+# deduplicated, so a member given a row as an address and another as a
+# count satisfies it either way and the register passes while
+# contradicting itself -- which is what happened when three members were
+# reclassified and the old rows were not taken out.
+sed -n 's/^\(address\|count\)  *\([^ ]*\)  *\([^ ]*\).*/\2 \3/p' "$golden" \
+    | sort | uniq -d > "$work/twice"
+if [ -s "$work/twice" ]; then
+    echo "FAIL: registered more than once. A member has one disposition;"
+    echo "      two rows for it means one was left behind when it was"
+    echo "      reclassified, and which one is read is nobody's decision:"
+    sed 's/^/      /' "$work/twice"
     fail=1
 fi
 

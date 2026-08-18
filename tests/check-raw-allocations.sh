@@ -80,24 +80,15 @@ sed -n 's/^\(settled\|blocks\)  *\([^ ]*\)  *\([^ ]*\).*/\2 \3/p' "$golden" \
 
 fail=0
 
-comm -23 "$work/found" "$work/register" > "$work/unregistered"
-if [ -s "$work/unregistered" ]; then
-    echo "FAIL: storage is taken from the arena here with no row to describe"
-    echo "      it. Say in tests/raw_allocations.golden why this block needs"
-    echo "      no entity of its own -- which means saying why a pass that"
-    echo "      rearranged the arena may step over it:"
-    sed 's/^/      /' "$work/unregistered"
-    fail=1
-fi
-
-comm -13 "$work/found" "$work/register" > "$work/departed"
-if [ -s "$work/departed" ]; then
-    echo "FAIL: the register names a call the library no longer makes. A"
-    echo "      converted site is recorded as converted and its row removed,"
-    echo "      not left standing:"
-    sed 's/^/      /' "$work/departed"
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/found" "$work/register" \
+    "storage is taken from the arena here with no row to describe it.
+      Say in tests/raw_allocations.golden why this block needs no entity
+      of its own -- which means saying why a pass that rearranged the
+      arena may step over it:" \
+    "the register names a call the library no longer makes. A converted
+      site has its row removed in the same commit, not left standing:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # Either disposition carries a reason: a settled site has to say why a
 # rearrangement may step over it, and a blocking one has to say what the
