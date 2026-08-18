@@ -51,6 +51,41 @@ ct() { od -An -j25 -N1 -tu1 "$1" | tr -d ' '; }
 [ "$(ct "$outrgb")" = 2 ] || { echo "FAIL: png colour type $(ct "$outrgb"), want 2"; exit 1; }
 echo "colour types OK (RGBA=6, RGB=2)"
 
+# Every channel is written at its full depth, and the file says so. The
+# IHDR bit depth is byte 24; the significant-bits chunk that follows it
+# names how many of those bits carry the original values, one byte per
+# channel, and it sits at a fixed place because IHDR is a fixed size.
+#
+# The two must agree. A channel whose significant bits are fewer than
+# its depth is one whose samples have been scaled down to fit and must
+# be scaled back up before they are written, and nothing here does that
+# scaling: the writer hands the library samples that already fill the
+# depth. So this is not a fact about the format, it is the condition
+# under which handing them over untouched is right, and a change to
+# either number has to be made together with a way of restoring the
+# bits the other one gives up.
+depth() { od -An -j24 -N1 -tu1 "$1" | tr -d ' '; }
+sbitname() { od -An -j37 -N4 -c "$1" | tr -d ' '; }
+sbits() { od -An -j41 -N"$2" -tu1 "$1" | tr -s ' ' | sed 's/^ //;s/ $//'; }
+for f in "$outa:4:pngalpha" "$outrgb:3:png"; do
+    img=${f%%:*}; rest=${f#*:}; nch=${rest%%:*}; dev=${rest##*:}
+    d=$(depth "$img")
+    [ "$d" = 8 ] || { echo "FAIL: $dev bit depth $d, want 8"; exit 1; }
+    [ "$(sbitname "$img")" = sBIT ] || {
+        echo "FAIL: $dev writes no significant-bits chunk after its header,"
+        echo "      so nothing states how many bits of each sample carry a value"
+        exit 1; }
+    want=8; i=1
+    while [ "$i" -lt "$nch" ]; do want="$want 8"; i=$((i+1)); done
+    got=$(sbits "$img" "$nch")
+    [ "$got" = "$want" ] || {
+        echo "FAIL: $dev declares significant bits [$got], want [$want] --"
+        echo "      samples narrower than the depth would have to be scaled"
+        echo "      back up before they are written, and they are not"
+        exit 1; }
+done
+echo "sample depth OK (8 bits, all of them significant, both devices)"
+
 # Read one image's pixels: the file, and how many bytes a pixel takes in
 # it. A four-byte pixel carries the alpha checks as well.
 pixels_of() {   # $1 file  $2 bytes a pixel  $3 how the file is named

@@ -682,6 +682,10 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
                  p->interlaced,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
+    /* every sample fills its channel: the writer hands the library
+       values that already occupy the whole of the depth declared above,
+       so what the file says carries a value is the depth itself and the
+       samples go out as they are */
     sig_bit.red = 8;
     sig_bit.green = 8;
     sig_bit.blue = 8;
@@ -690,8 +694,6 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
 
     png_set_compression_level(p->png, compression_level);
     png_write_info(p->png, p->info);
-    png_set_shift(p->png, &sig_bit);
-    png_set_packing(p->png);
     if (!p->alpha)
         /* rows carry a fourth byte per pixel; skip it when writing RGB */
         png_set_filler(p->png, 0, PNG_FILLER_AFTER);
