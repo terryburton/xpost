@@ -2021,6 +2021,17 @@ test('execform-cache',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The form cache holds a fixed number of entries, and an entry arriving at a
+# full table takes the place of the one captured longest ago -- one entry,
+# never the table. Drives more transformations than the table holds and counts
+# paint-procedure runs: a pass over the most recent keys is served from the
+# table, and only the oldest keys pay their captures again.
+test('form-cache-evict',
+  find_program('tests/run-ppm-test.sh'),
+  args: [ xpost_exe, files('tests/form_cache_evict_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The other half of the form cache: the counter that names a form and the
 # cache it keys are both in graphicsdict, so a restore winds the two back
 # together and a serial handed out a second time finds nothing filed under

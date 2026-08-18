@@ -1449,13 +1449,31 @@ setglobal
                     cap DEVICE //.internaldict /.recordsaving get exec
                         //.internaldict /.playsaving get exec
                 } if
-                % the drawings the cache is holding are given up before
-                % it is replaced, since what a recorder holds is not
-                % virtual memory and nothing else would give it back
+                % The table is full: the entry captured longest ago
+                % gives up its place -- and its drawing with it, since
+                % what a recorder holds is not virtual memory and
+                % nothing else would give it back -- rather than the
+                % whole table. A run using more forms than the table
+                % holds then keeps the ones it captured most recently,
+                % instead of paying every capture again from nothing.
+                % Each entry carries seq, its place in the order of
+                % capture, which is how the oldest is known: the
+                % stamps live in the entries themselves, so a restore
+                % that winds the table back winds the order back with
+                % it.
+                % (a key is an executable name, so it is read back with
+                % load rather than by its name, which would run it)
                 fc length 32 ge {
-                    //.xpostsys /.formcachedrop get exec
-                    graphicsdict /.formcache 32 dict put
-                    /fc graphicsdict /.formcache get def
+                    /ek null def /es 0 def
+                    fc { /seq get /ek load null eq 1 index es lt or
+                         { /es exch def /ek exch def }{ pop pop } ifelse
+                    } forall
+                    /ek load null ne {
+                        fc /ek load get dup /drawing known
+                            { /drawing get dup /Destroy get exec }
+                            { pop } ifelse
+                        fc /ek load undef
+                    } if
                 } if
                 gsave
                 % what the clip has cut so far: a shape the clip cuts is
@@ -1507,11 +1525,19 @@ setglobal
                         bx0 fbx ge by0 fby ge and
                         bx1 fbx fw add le and by1 fby fh add le and
                     }{ true } ifelse and def
+                % one past the newest capture held, so the entries read
+                % out in the order they were made. Read after the
+                % capture, since a form painting forms captures theirs
+                % inside it and those entries are in the table by now.
+                /seq 0 def
+                fc { /seq get dup seq gt
+                     { /seq exch def }{ pop } ifelse pop } forall
+                /seq seq 1 add def
                 held
-                    { fc key << /drawing cap
+                    { fc key << /drawing cap /seq seq
                                 /tx cm 4 get /ty cm 5 get >> put }
                     { cap dup /Destroy get exec
-                      fc key << >> put }
+                      fc key << /seq seq >> put }
                 ifelse
             } if
         } if

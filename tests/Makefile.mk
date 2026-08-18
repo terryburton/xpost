@@ -207,6 +207,7 @@ tests/font_cache_bound_test.ps \
 tests/font_cache_evict_test.ps \
 tests/font_directory_test.ps \
 tests/font_serial_test.ps \
+tests/form_cache_evict_test.ps \
 tests/form_serial_restore_test.ps \
 tests/font_glyphkey_test.ps \
 tests/font_glyph_identity_test.ps \

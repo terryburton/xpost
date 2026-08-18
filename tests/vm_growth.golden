@@ -135,6 +135,7 @@ font_type1_noaccess_test.ps                once   unexplained
 font_type1_sparse_subrs_test.ps            zero
 forall_large_test.ps                       once   unexplained
 form_band_test.ps                          once   unexplained
+form_cache_evict_test.ps                   once   unexplained
 form_nest_test.ps                          once   unexplained
 form_serial_restore_test.ps                once   unexplained
 free_scan_test.ps                          fits

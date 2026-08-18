@@ -1,0 +1,66 @@
+%!
+% The form cache serves the transformations a run is using now, not only
+% the first ones it ever saw. Run through the ppm device by
+% run-ppm-test.sh, since a drawing can only be held for a device that
+% takes one: prints SUCCESS iff every assertion holds.
+%
+% A form's drawing is keyed by the form and the linear part of the
+% transformation, and the cache holds a fixed number of entries. An
+% entry arriving at a full table takes the place of the one captured
+% longest ago -- one entry, not the table -- so a run using more
+% transformations than the table holds keeps the ones it used most
+% recently instead of paying every capture again from nothing.
+%
+% What is counted is runs of the paint procedure, which is the only
+% difference a cache makes: a placement of a held drawing does not run
+% it, a capture or a repaint does. The transformations are whole-number
+% scales, under which the marks land where the box says they do, so
+% every capture is held and the counts are exact.
+
+/faildict 1 dict def
+faildict /n 0 put
+/require { % bool (label)  .  -
+    exch { (ok   ) print print (\n) print }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/runs 0 def
+/F <<
+    /FormType 1
+    /BBox [0 0 2 2]
+    /Matrix matrix
+    /PaintProc { pop /runs runs 1 add store 0 0 2 2 rectfill }
+>> def
+/at { % i  .  -   the form under the i-th distinct linear transformation
+    /i exch def
+    gsave 100 400 translate i dup scale F execform grestore
+} bind def
+
+% more transformations than the table holds: each is a new key, each is
+% captured once, and each capture past the table's capacity gives up one
+% earlier entry
+1 1 40 { at } for
+runs 40 eq
+(forty transformations of a form are captured once each) require
+
+% the thirty-two most recent keys are still held, so a pass over them
+% runs the procedure not at all: a table that had been given up whole at
+% the overflow would pay most of these captures again
+9 1 40 { at } for
+runs 40 eq
+(a pass over the most recent keys is served from the table) require
+
+% the eight oldest keys gave their places up one at a time as the eight
+% newest arrived, so asking for them again is eight captures -- and only
+% eight, since each returns by giving up the oldest of the others
+1 1 8 { at } for
+runs 48 eq
+(the keys used longest ago gave up their places, and only theirs) require
+
+faildict /n get 0 eq { (SUCCESS\n) print }{
+    (FAILURES: ) print faildict /n get 20 string cvs print (\n) print
+} ifelse
+flush
+quit
