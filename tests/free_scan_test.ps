@@ -32,6 +32,7 @@
 } def
 
 /.vmfreescan 1183615869 internaldict /.vmfreescan get def
+/.vmcollect 1183615869 internaldict /.vmcollect get def
 
 /DICTS 10000 def
 /MORE 40000 def
@@ -55,7 +56,11 @@
     /hold n array def
     0 1 n 1 sub { hold exch 1 dict put } for
     /hold null store
-    2 vmreclaim
+    % A collection and nothing else. An explicit reclaim would close the
+    % arena up as well, which absorbs every free block into the run above
+    % the cursor and leaves the lists empty -- and the lists as a
+    % collection leaves them are the whole subject here.
+    .vmcollect
 } def
 
 % Allocate ALLOCS one-element arrays, held so that none of them is

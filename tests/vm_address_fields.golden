@@ -139,6 +139,7 @@ count    xpost_memory.h:Xpost_Memory_File   fd
 count    xpost_memory.h:Xpost_Memory_File   file_birth_max
 count    xpost_memory.h:Xpost_Memory_File   file_births
 count    xpost_memory.h:Xpost_Memory_File   free_list_alloc_is_installed
+count    xpost_memory.h:Xpost_Memory_File   compact_pending
 count    xpost_memory.h:Xpost_Memory_File   free_scan
 count    xpost_memory.h:Xpost_Memory_File   garbage_collect_auto
 count    xpost_memory.h:Xpost_Memory_File   garbage_collect_is_installed

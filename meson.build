@@ -1226,6 +1226,28 @@ test('free-list-recovery',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Whether the storage the arena gives up leaves the process. A bank's own
+# three numbers describe the bank and not what the process is charged
+# for, so what this reads is the resident set, which only the host
+# reports. Held over a real interpreter, since a collection takes the
+# stacks for its roots. It runs as a pair of processes: the same program
+# with and without a reclaim, so the difference is the operator's doing.
+vm_page_return_exe = executable('vm_page_return_test',
+  'tests/vm_page_return_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  # what the process is charged for is asked of the host, and on Windows
+  # that is a psapi call rather than a file to read
+  dependencies: [ libxpost_dep ] + (host_machine.system() == 'windows'
+    ? [ cc.find_library('psapi') ] : []),
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('vm-page-return',
+  find_program('tests/run-vm-page-return-test.sh'),
+  args: [ vm_page_return_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What the free list costs to allocate out of. Releasing a great many
 # composites of one size and then allocating smaller ones is the shape
 # an ordinary job makes between pages, and it is the shape in which a
@@ -3604,6 +3626,17 @@ test('access',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# That asking for a reclaim closes the arena up, and that the program's own
+# data comes through it unchanged. The rearrangement cannot happen inside the
+# operator -- it moves the bytes under every pointer derived from an entity's
+# address -- so what is under test is that the request survives the trip to
+# the interpreter's safe point and is acted on there.
+test('vm-reclaim-compaction',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/vm_reclaim_compaction_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every output device renders: the rest of the suite runs under -d null,
 # which never loads the graphics/device stack, so a device that fails to
 # initialise or emit a page would otherwise be invisible. Render a trivial
@@ -3774,6 +3807,17 @@ test('check-op-references',
 # has no refusal to ignore.
 test('check-vm-address',
   find_program('tests/check-vm-address.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
+# Where the arena may be closed up. Doing it inside an operator leaves the
+# machinery that ran the operator reading bytes that have moved, which is
+# not a crash but an operator dispatched with whatever now lies where its
+# arguments were -- found that way, from vmreclaim, before the call was
+# moved to the interpreter's safe point.
+test('check-compaction-safe-point',
+  find_program('tests/check-compaction-safe-point.sh'),
   args: [ meson.current_source_dir() ],
   suite: cost_fast,
   timeout: 120)

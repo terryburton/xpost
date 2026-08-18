@@ -1,0 +1,71 @@
+%!testlib
+% That asking for a reclaim rearranges the arena, and that the program's own
+% data comes through it unchanged. Run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff both hold.
+%
+% PLRM 8.2 gives vmreclaim as the place a program says it would rather pay for
+% a collection now than hold the memory, so it is where the arena is closed up
+% as well. The rearrangement itself cannot happen inside the operator -- every
+% pointer into virtual memory is derived from an entity's recorded address, and
+% the machinery running the operator holds such pointers -- so what the operator
+% does is ask, and the interpreter acts on it between operator executions. That
+% is why this is asked of a running program rather than of the pass directly:
+% what is under test is that the request survives the trip.
+%
+% COLLECTION: automatic collection is left running, because what is read is
+% the arena's high-water mark before and after an explicit reclaim, and the
+% reclaim collects both banks itself before the arena is closed up. A
+% collection that ran of its own accord in between could only free more, and
+% the reading asked for is that the mark falls -- so it cannot turn a failure
+% into a pass. The lengths compared afterwards are of strings the program
+% still names, which no collection may touch.
+
+/faildict 2 dict def
+faildict /n 0 put
+
+/bchk { % bool (label) . -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put } ifelse
+} bind def
+
+% enough live data to be worth moving, and enough garbage beside it that the
+% free blocks lie between the live ones rather than in one run at the top
+/keep 300 array def
+0 1 299 { /i exch def keep i i 40 string cvs put } for
+/sample keep 42 get def
+/tally 0 def
+0 1 299 { keep exch get length tally add /tally exch def } for
+/before tally def
+
+0 1 2000 { pop 400 array 250 string pop pop } for
+
+vmstatus pop /was exch def pop
+2 vmreclaim
+vmstatus pop /now exch def pop
+
+now was lt
+  (the arena shrinks when the program asks for a reclaim) bchk
+
+/after 0 def
+0 1 299 { keep exch get length after add /after exch def } for
+
+after before eq
+  (every string the program kept is still the length it was) bchk
+keep 42 get sample eq
+  (a string held across the reclaim is still the same string) bchk
+keep 299 get length 0 gt
+  (the last of them is still readable) bchk
+
+% the interpreter goes on working with an arena that has been moved under it
+/d 60 dict def
+0 1 59 { dup d 3 1 roll put } for
+d length 60 eq
+  (a dictionary built after the reclaim is sound) bchk
+(abcdef) 2 3 getinterval (cde) eq
+  (a string built after the reclaim is sound) bchk
+
+count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
+    faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
+faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

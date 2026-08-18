@@ -371,6 +371,22 @@ typedef struct Xpost_Memory_File
                                     immediate collection the operator
                                     asks for is not automatic and runs
                                     either way */
+    /** The program has asked for the arena to be closed up, and the
+        interpreter has not reached the point where it can be.
+
+        Rearranging the arena moves the bytes under every pointer derived
+        from an entity's recorded address, and the machinery running an
+        operator holds such pointers, so the operator that asks cannot be
+        the one that acts. The request is left here and read at the same
+        safe point between operator executions that a collection is taken
+        at, where the only references are the ones the table describes.
+
+        Not carried in a virtual memory image. It stands only between an
+        operator and the next step of the interpreter, so an image
+        written with it set would be recording that a request had been
+        made rather than anything about what the memory holds. */
+    int compact_pending;
+
     int garbage_collect_pending; /**< a collection is due; performed at the
                                       interpreter's safe point rather than
                                       inside the triggering allocation, so

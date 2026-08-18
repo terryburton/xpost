@@ -44,7 +44,8 @@
 #include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_compat.h" /* xpost_isatty */
-#include "xpost_memory.h"  /* itp contexts contain mfiles and mtabs */
+#include "xpost_memory.h"
+#include "xpost_free.h"  /* itp contexts contain mfiles and mtabs */
 #include "xpost_object.h"  /* eval functions examine objects */
 #include "xpost_stack.h"  /* eval functions manipulate stacks */
 #include "xpost_error.h"
@@ -558,6 +559,34 @@ static int _collection_wanted(Xpost_Context *ctx)
     return wanted;
 }
 
+/* The arena is closed up here, and only here.
+
+   A rearrangement moves the bytes under every pointer derived from an
+   entity's recorded address, so it cannot be done by the operator that
+   asks for it: that operator runs underneath machinery holding such
+   pointers. Between operator executions nothing holds one, which is the
+   property the collection above relies on and the reason it is taken in
+   the same place.
+
+   Closing the arena up hands the pages back itself, since gathering the
+   free storage into one run above the cursor is what lets them go in a
+   single call. The request is cleared whether or not a bank moved
+   anything, so that one with nothing to close up does not carry it into
+   the next reclaim. */
+static void _compaction_wanted(Xpost_Context *ctx)
+{
+    if (ctx->lo && ctx->lo->compact_pending)
+    {
+        ctx->lo->compact_pending = 0;
+        (void)xpost_free_compact(ctx->lo, NULL);
+    }
+    if (ctx->gl && ctx->gl->compact_pending)
+    {
+        ctx->gl->compact_pending = 0;
+        (void)xpost_free_compact(ctx->gl, NULL);
+    }
+}
+
 static
 int evalarray(Xpost_Context *ctx, Xpost_Object a)
 {
@@ -725,6 +754,17 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             if (ctx->lo->garbage_collect_is_installed
                 && ctx->lo->garbage_collect(ctx->lo, xpost_garbage_auto_banks(ctx), 1) < 0)
                 return VMerror;
+            EVALARRAY_RECHECK_BASES();
+        }
+
+        /* A rearrangement asked for by a reclaim, which asks for no
+           collection of its own: the operator has already had one. The
+           array being run is moved by it like everything else, so its
+           storage is found again before the next element is read. */
+        if ((ctx->lo && ctx->lo->compact_pending)
+            || (ctx->gl && ctx->gl->compact_pending))
+        {
+            _compaction_wanted(ctx);
             EVALARRAY_RECHECK_BASES();
         }
 
@@ -1974,6 +2014,7 @@ ctxswitch:
                 continue;
             }
         }
+        _compaction_wanted(ctx);
         /* a push the stack would not take, made somewhere other than
            inside an operator -- the dispatch answers for those itself.
            The object is on no stack and the step that pushed it carried
@@ -2142,6 +2183,7 @@ int xpost_interpreter_run_nested(Xpost_Context *ctx, Xpost_Object P)
                 continue;
             }
         }
+        _compaction_wanted(ctx);
         ret = eval(ctx);
         if (ret)
         {

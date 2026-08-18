@@ -14,6 +14,7 @@
 EXTRA_DIST += \
 tests/Makefile.mk \
 tests/access_test.ps \
+tests/vm_reclaim_compaction_test.ps \
 tests/api_definitions_test.c \
 tests/array_swap_range_test.ps \
 tests/bbox_test.ps \
@@ -99,6 +100,7 @@ tests/check-test-devices.sh \
 tests/check-test-quality.sh \
 tests/check-test-timeouts.sh \
 tests/check-vecbase.sh \
+tests/check-compaction-safe-point.sh \
 tests/check-vm-address.sh \
 tests/check-vm-address-fields.sh \
 tests/vm_address_fields.golden \
@@ -233,6 +235,8 @@ tests/gc_marking_test.c \
 tests/global_vm_invariant_test.ps \
 tests/local_vm_invariant_test.ps \
 tests/vm_account_test.ps \
+tests/vm_page_return_test.c \
+tests/run-vm-page-return-test.sh \
 tests/run-local-vm-invariant-test.sh \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \

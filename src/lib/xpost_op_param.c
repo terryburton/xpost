@@ -93,11 +93,20 @@ int vmreclaim (Xpost_Context *ctx, Xpost_Object I)
             if (ctx->garbage_collect_function(ctx->lo,
                                               XPOST_GARBAGE_SWEEP_LOCAL, 1) == -1)
                 return VMerror;
+            /* Closing the arena up cannot happen here: it moves the bytes
+               under every pointer derived from an entity's address, and
+               the machinery running this operator holds such pointers.
+               Asked for instead, and done at the interpreter's safe
+               point, which also hands the pages back once the free
+               storage has gathered above the live entities. */
+            ctx->lo->compact_pending = 1;
             break;
         case 2: /* perform immediate collection in local and global vm */
             if (ctx->garbage_collect_function(ctx->lo,
                                               XPOST_GARBAGE_SWEEP_BOTH, 1) == -1)
                 return VMerror;
+            ctx->lo->compact_pending = 1;
+            ctx->gl->compact_pending = 1;
             break;
     }
     return 0;
@@ -184,6 +193,26 @@ int vmfreescan (Xpost_Context *ctx)
     if (!xpost_stack_push(ctx->lo, ctx->os,
                           xpost_int_cons((int)ctx->gl->free_scan)))
         return stackoverflow;
+    return 0;
+}
+
+/* -  .vmcollect  -
+   An immediate collection of both banks, and nothing else.
+
+   vmreclaim collects and then asks for the arena to be closed up, which
+   absorbs every free block into the run above the cursor and leaves the
+   free lists empty. That is what a program asking for a reclaim wants,
+   and it is no use to anything measuring the lists themselves: the state
+   it wants to read is the one a collection leaves and a rearrangement
+   takes away. This performs the collection alone, so that the lists can
+   be read as a collection leaves them without waiting for one to happen
+   of its own accord. */
+static
+int vmcollect (Xpost_Context *ctx)
+{
+    if (ctx->garbage_collect_function(ctx->lo,
+                                      XPOST_GARBAGE_SWEEP_BOTH, 1) == -1)
+        return VMerror;
     return 0;
 }
 
@@ -520,6 +549,8 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".vmfreebytes", (Xpost_Op_Func)vmfreebytes, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmfreescan", (Xpost_Op_Func)vmfreescan, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".vmcollect", (Xpost_Op_Func)vmcollect, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmstackwalk", (Xpost_Op_Func)vmstackwalk, 0);
     INSTALL;

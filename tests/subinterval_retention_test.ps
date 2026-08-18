@@ -1,20 +1,27 @@
 % What a subinterval keeps alive, run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% How this is measured. The used figure vmstatus reports does not fall when
-% memory is reclaimed, so comparing it before and after a collection says
-% nothing -- a run that reclaims everything and a run that reclaims nothing
-% report the same number. Reclamation shows as reuse instead: drop the
-% object, collect, allocate the same shape again, and see whether the second
-% allocation costs anything. Nothing means the first was recovered and handed
-% back; full price means it was not.
+% How this is measured. An explicit reclaim closes the arena up, so the used
+% figure vmstatus reports comes back down to where the live storage ends.
+% Reclamation is therefore read directly: take the figure, allocate the
+% object, drop it, reclaim, and take the figure again. Back to where it
+% started means the object was recovered; still up by its size means it was
+% not, and something is holding it.
+%
+% This was written the other way round before the arena could be closed up.
+% The figure only ever rose then, so a run that reclaimed everything and one
+% that reclaimed nothing reported the same number, and reclamation had to be
+% inferred from whether a later allocation of the same shape cost anything.
+% The direct reading says the same thing without the second allocation, and
+% says it about the object under test rather than about the allocator's
+% willingness to reuse a block.
 
-% COLLECTION: this reads REUSE rather than a difference -- the header
-% below says why -- so a collection cannot make a reading mean something
-% else, and the reading does not depend on how often collection runs. The
-% case at the end holds that: it repeats the measurement with VMThreshold
-% set far below the block it allocates, which is where a request that
-% exhausts the count meets a free list holding exactly what it asks for.
+% COLLECTION: every reading here is taken immediately after a reclaim this
+% program asks for, so a collection running of its own accord in between
+% can only have done work this one would have done anyway. The case at the
+% end additionally sets VMThreshold far below the block it allocates, which
+% is where a request that exhausts the count meets storage that has just
+% been given back.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
@@ -22,27 +29,23 @@
 
 % --- a composite nothing refers to is reclaimed and reused ----------------
 
-/a 60000 array def
-/a null def
 1 vmreclaim
 /mark1 used def
 /b 60000 array def
-1 vmreclaim
-used mark1 sub /arraycost exch def
 /b null def
 1 vmreclaim
-arraycost 1000 lt (an unreferenced array is reclaimed and its space reused) assert
+used mark1 sub /arraycost exch def
+arraycost 1000 lt
+    (an unreferenced array is reclaimed and the arena comes back) assert
 
-/s 60000 string def
-/s null def
 1 vmreclaim
 /mark2 used def
 /t 60000 string def
-1 vmreclaim
-used mark2 sub /stringcost exch def
 /t null def
 1 vmreclaim
-stringcost 1000 lt (an unreferenced string is reclaimed and its space reused) assert
+used mark2 sub /stringcost exch def
+stringcost 1000 lt
+    (an unreferenced string is reclaimed and the arena comes back) assert
 
 % --- a subinterval keeps its own contents readable ------------------------
 % Whatever the collector does with the rest, the window itself must survive
@@ -69,12 +72,12 @@ swin length 42 eq (a string subinterval survives its host being dropped) assert
 % -------------------------------------------------------------------------
 % KNOWN DEVIATION (TODO, not asserted): a subinterval holds its whole backing
 % composite alive, not just the elements it spans.
-% Measured by the reuse method above: with a 42-element window kept out of a
-% 60000-element array and every other reference dropped, the next
-% 60000-element array costs the full 960000 bytes rather than nothing. A
-% 42-byte window out of a 60000-byte string likewise leaves the next such
-% string costing full price. Dropping the window as well as the host reclaims
-% everything, so the window is what holds it.
+% Measured by the method above, at the narrower object width: with a
+% 42-element window kept out of a 60000-element array and every other
+% reference dropped, a reclaim leaves 480040 bytes below the cursor, against
+% 40 when the window is dropped as well. A 42-byte window out of a
+% 60000-byte string holds 60056 bytes the same way, against 48. So the
+% window is what holds the host, and it holds all of it.
 % An Adobe interpreter reclaims all but the window: "the only live reference
 % is to a 42-element subinterval near the middle of the original large array;
 % an Adobe PostScript interpreter ... will in fact reclaim all of the array
@@ -98,15 +101,13 @@ swin length 42 eq (a string subinterval survives its host being dropped) assert
 % above run at the default.
 currentuserparams /VMThreshold get /th0 exch def
 100000 setvmthreshold
-/c 60000 array def
-/c null def
 1 vmreclaim
 /mark4 used def
 /d 60000 array def
-1 vmreclaim
-used mark4 sub 0 eq
-    (a freed block is reused however often collection is asked for) assert
 /d null def
+1 vmreclaim
+used mark4 sub 1000 lt
+    (a block is recovered however often collection is asked for) assert
 th0 setvmthreshold
 1 vmreclaim
 

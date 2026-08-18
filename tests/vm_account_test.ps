@@ -7,23 +7,31 @@
 % are easy to mistake for one another, and a reader who mistakes them draws
 % the wrong conclusion from a perfectly healthy run, so they are pinned here.
 %
-%   used     the bytes the bank has taken from fresh storage. It is a cursor
-%            and never falls: a collection puts space back on a free list the
-%            bank keeps, and does not wind the cursor back. So the difference
-%            in used across an operation is the space the operation had to be
-%            given NEW because nothing already released could serve it -- not
-%            what it allocated, and not what it holds.
+%   used     the bytes below the bank's cursor. It rises as the bank takes
+%            fresh storage, and an explicit reclaim winds it back: closing
+%            the arena up slides the live entities together, so the cursor
+%            ends where the live storage ends. A collection that runs of its
+%            own accord does not wind it back, because it does not close the
+%            arena up -- it puts space on a free list and leaves it where it
+%            lies. So the difference in used across an ordinary operation is
+%            the space that operation had to be given NEW because nothing
+%            already released could serve it.
 %
 %   maximum  the storage the bank holds. It grows on demand and never
-%            shrinks, so it is also the largest the bank has ever been.
+%            shrinks, so it is also the largest the bank has ever been. The
+%            pages under the free storage are handed back to the system, but
+%            the range they sat in is kept, so this figure does not move.
 %
 %   free     the bytes on the bank's free lists: recovered, still inside the
 %            storage the bank holds, and available to an allocation of a size
-%            they suit. Reported by .vmfreebytes.
+%            they suit. Reported by .vmfreebytes. An explicit reclaim empties
+%            them, because closing the arena up absorbs the blocks they named
+%            -- the space is then above the cursor rather than on a list.
 %
-% The account an embedder wants is maximum less free: what the bank holds,
-% less what it is holding for nothing. Neither vmstatus figure gives that on
-% its own, which is why the third number exists.
+% The account an embedder wants is maximum less used: what the bank holds,
+% less what is live in it. Before a reclaim the free lists hold the rest and
+% .vmfreebytes reports it; after one the cursor has come back and the same
+% space lies above it.
 %
 % COLLECTION: this reads the numbers around a collection it asks for itself,
 % and asserts the direction each one moves rather than any absolute figure, so
@@ -68,36 +76,39 @@ u1 u0 sub 2000000 gt (taking many arrays moves the cursor by a real amount) asse
 /a2 arena def
 /f2 freebytes def
 
-% The cursor does not come back. This is the deviation the COMPLIANCE note
-% records, and it is asserted rather than merely described, so that a change
-% to it is a failure here and not a surprise somewhere else.
-u2 u1 ge (a collection does not lower the cursor) assert
+% The cursor comes back. An explicit reclaim closes the arena up: the live
+% entities are slid together and the cursor is left where they end, so the
+% space the dropped arrays occupied is no longer below it. Asserted rather
+% than merely described, so that a change to it is a failure here and not a
+% surprise somewhere else.
+u2 u1 le (an explicit reclaim lowers the cursor) assert
 
-% Nor does the bank give its storage back. What a collection recovers stays
-% inside the bank, which is why a context's largest moment is its permanent
-% size.
-a2 a1 ge (a collection does not shrink the bank) assert
+% The bank does not give its storage back, though. The pages under the free
+% run are returned to the system, but the range they sat in is kept, so a
+% context's largest moment is still the largest mapping it ever asks for.
+a2 a1 ge (a reclaim does not shrink the bank) assert
 
-% And the recovered space is reported. This is the assertion that makes the
-% other two readable: without it, "the numbers did not move" would be
-% indistinguishable from "nothing was recovered".
-f2 f0 gt (a collection puts the space it recovers on the free lists) assert
-
-% Not merely reported but reported at something like its size, so a figure
-% that has gone blind or been truncated fails. Sixty arrays of sixty thousand
-% elements is at least fourteen million bytes at the narrower object width;
-% the assertion asks for a quarter of that, which no rounding or bookkeeping
-% difference reaches.
-f2 f0 sub 3500000 gt
-    (the free lists report the space at something like its size) assert
+% And it comes back by something like the amount that was dropped. This is
+% the assertion that makes the first one readable: without it, "the cursor
+% moved" would be indistinguishable from "the cursor moved by a byte". Sixty
+% arrays of sixty thousand elements is at least fourteen million bytes at the
+% narrower object width; the assertion asks for a quarter of that, which no
+% rounding or bookkeeping difference reaches.
+u1 u2 sub 3500000 gt
+    (the cursor comes back by something like the space that was dropped) assert
 
 % ---- and the account that follows from them ------------------------------
 %
-% What the bank is using is what it holds less what it holds for nothing.
-% After giving up that much, the bank is using far less than it holds, and
-% that gap is the thing no single number here reports.
+% After a reclaim the recovered space is above the cursor rather than on a
+% list, so the free lists report little or nothing: the blocks they named
+% were absorbed when the live entities were slid over them. The gap between
+% what the bank holds and what is live in it is maximum less used, and it is
+% the thing no single number here reports.
 
-a2 f2 sub a2 lt (a bank holding free space is using less than it holds) assert
+f2 f0 sub 3500000 lt
+    (a reclaim does not leave the recovered space on the free lists) assert
+a2 u2 sub 3500000 gt
+    (what the bank holds is far more than what is live in it) assert
 a2 f2 sub 0 ge (what a bank is using is not negative) assert
 
 failcount 0 eq { (SUCCESS\n) print }

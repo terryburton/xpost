@@ -538,7 +538,7 @@ static int _by_adr(const void *a, const void *b)
    between deriving one and using it holds a pointer this invalidates.
    The interpreter's safe point between operator executions is where no
    such pointer is held, which is the same reason a collection is taken
-   there. */
+   there; tests/check-compaction-safe-point.sh holds the callers to it. */
 int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed)
 {
     unsigned char *isfree;
@@ -637,6 +637,18 @@ int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed)
         }
 
     mem->high_water = cursor;
+
+    /* The storage the blocks occupied is now one run above the cursor,
+       which is the whole reason for gathering it there: the pages under
+       it go back to the system in a single call, where before they could
+       only be given up a free block at a time and only where a block
+       happened to cover a whole page. Anything allocated here later
+       takes the range afresh, and a page given up this way faults back
+       in cleared, which is what an allocation above the cursor gets in
+       any case. */
+    if (before > cursor)
+        (void)xpost_memory_file_release_range(mem, cursor, before - cursor);
+
     if (freed) *freed = before - cursor;
 
     free(isfree);
