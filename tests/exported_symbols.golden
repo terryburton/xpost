@@ -288,10 +288,10 @@ xpost_memory_file_release_range
 xpost_memory_get
 xpost_memory_init
 xpost_memory_page_size
-xpost_memory_return_grain
 xpost_memory_put
 xpost_memory_register_free_list_alloc_function
 xpost_memory_register_garbage_collect_function
+xpost_memory_return_grain
 xpost_memory_table_alloc
 xpost_memory_table_alloc_special
 xpost_memory_table_dump
@@ -301,6 +301,7 @@ xpost_memory_table_get_mark
 xpost_memory_table_get_size
 xpost_memory_table_get_tag
 xpost_memory_table_init
+xpost_memory_table_release_row
 xpost_memory_table_set_addr
 xpost_memory_table_set_mark
 xpost_memory_table_set_size

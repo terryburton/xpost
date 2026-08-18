@@ -1053,6 +1053,20 @@ static void _install_bank(Xpost_Memory_File *mem, const _Bank *b)
         memcpy(mem->base, b->arena, used);
     mem->high_water = used;
     mem->start = b->field[XPOST_VM_IMAGE_BANK_START];
+
+    /* The chain of rows that describe nothing is derived rather than
+       carried in the image: every row on it has a size of zero, so it is
+       read back off the rows themselves. A head written alongside them
+       could disagree with them, and the rows are what an allocation acts
+       on. Read after the collector's band is known, since the specials
+       below it also carry no size and are not rows to hand out. */
+    mem->table.freerow = 0;
+    for (ent = entities; ent-- > mem->start; )
+        if (mem->table.tab[ent].sz == 0)
+        {
+            mem->table.tab[ent].nextfree = mem->table.freerow;
+            mem->table.freerow = ent;
+        }
     mem->free_substack = b->field[XPOST_VM_IMAGE_BANK_FREE_SUBSTACK];
     mem->free_scan = b->field[XPOST_VM_IMAGE_BANK_FREE_SCAN];
     mem->threshold = (int)b->field[XPOST_VM_IMAGE_BANK_THRESHOLD];

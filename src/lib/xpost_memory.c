@@ -984,6 +984,7 @@ xpost_memory_table_init(Xpost_Memory_File *mem, unsigned int nspecials)
         return 0;
     }
     mem->table.nextent = 0;
+    mem->table.freerow = 0;
     mem->ent_reserve_open = 0;
     mem->ent_exhausted = 0;
 
@@ -1058,6 +1059,32 @@ _xpost_memory_table_alloc_new(Xpost_Memory_File *mem,
        accord here, where a slot outside it is being handed out: that is
        the run allocating with room to spare, which is the whole of what
        the reserve was waiting for. */
+    /* A row released by a rearrangement of the arena describes nothing
+       and is on no block free list, so nothing else can offer it. Taken
+       before the cursor is touched, since the whole reason it is here is
+       that the cursor cannot come back down. */
+    if (mem->table.freerow)
+    {
+        ent = mem->table.freerow;
+        mem->table.freerow = mem->table.tab[ent].nextfree;
+        if (!xpost_memory_file_alloc(mem, sz, &adr))
+        {
+            /* put it back rather than lose the number to a failed
+               request: the row is still one nothing else can offer */
+            mem->table.tab[ent].nextfree = mem->table.freerow;
+            mem->table.freerow = ent;
+            XPOST_LOG_ERR("%d unable to allocate entity data storage", VMerror);
+            return 0;
+        }
+        mem->table.tab[ent].adr = adr;
+        mem->table.tab[ent].sz = sz;
+        mem->table.tab[ent].tag = tag;
+        mem->table.tab[ent].mark = 0;
+        mem->table.tab[ent].nextfree = 0;
+        *entity = ent;
+        return 1;
+    }
+
     last = XPOST_OBJECT_COMP_MAX_ENT - XPOST_MEMORY_TABLE_ENT_RESERVE;
 
     ent = mem->table.nextent;
@@ -1115,6 +1142,39 @@ _xpost_memory_table_alloc_new(Xpost_Memory_File *mem,
     }
 
     *entity = ent;
+    return 1;
+}
+
+/* Hand back the row of an entity whose storage has gone.
+
+   A rearrangement of the arena slides the live entities down over the
+   free blocks. A block it slid over no longer has bytes, so its row
+   describes nothing and belongs on no block free list -- and a row on no
+   list is a number that can never be issued again, which would let a job
+   that fragments and compacts repeatedly spend the whole entity range
+   without spending memory.
+
+   The row is cleared here rather than by the caller, so that "a released
+   row describes nothing" is true by construction at the one place a row
+   is released, and not a thing each caller is trusted to have done. A
+   row that still holds storage is refused: that one belongs on a block
+   free list, where the bytes are kept for reuse as well as the number,
+   and accepting it here would drop them. */
+int xpost_memory_table_release_row(Xpost_Memory_File *mem, unsigned int ent)
+{
+    if (!mem || !mem->table.tab)
+        return 0;
+    if (ent == 0 || ent >= mem->table.nextent)
+        return 0;
+    if (mem->table.tab[ent].sz != 0)
+        return 0;
+
+    mem->table.tab[ent].adr = 0;
+    mem->table.tab[ent].used = 0;
+    mem->table.tab[ent].tag = 0;
+    mem->table.tab[ent].mark = 0;
+    mem->table.tab[ent].nextfree = mem->table.freerow;
+    mem->table.freerow = ent;
     return 1;
 }
 

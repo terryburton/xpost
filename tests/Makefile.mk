@@ -216,6 +216,7 @@ tests/forall_large_test.ps \
 tests/free_list_admission_test.c \
 tests/free_list_recovery_test.c \
 tests/free_list_size_rule_test.c \
+tests/table_row_reuse_test.c \
 tests/free_scan_test.ps \
 tests/function_matrix_test.ps \
 tests/fused_equivalence_test.ps \

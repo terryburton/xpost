@@ -191,6 +191,22 @@ typedef struct Xpost_Memory_Table
 {
     unsigned int nextent; /**< next slot in table */
     unsigned int max; /**< allocated size */
+    /** The head of the rows that describe nothing, or 0 for none.
+
+        A row that stops being used normally keeps its storage and goes
+        on a block free list, where an allocation takes the number and
+        the bytes together. A pass that rearranges the arena separates
+        them: it slides the live entities down over a free block, so the
+        block's bytes are gone while its row remains, and a row on no
+        list is a number that can never be issued again. Those rows are
+        chained here instead, through the same link a free row carries,
+        and the two chains cannot overlap -- a row is either on a block
+        list with its storage or on this one with none.
+
+        Derived rather than stored: every row on it has a size of zero,
+        so a table read back from an image is scanned for them rather
+        than carrying a copy of this head that could disagree. */
+    unsigned int freerow;
     struct
     {
         unsigned int adr; /**< allocation address */
@@ -1120,5 +1136,14 @@ void xpost_memory_table_dump_ent(Xpost_Memory_File *mem,
  * the table at address 0 in @p mem.
  */
 void xpost_memory_table_dump(const Xpost_Memory_File *mem);
+
+/**
+ * @brief hand back the row of an entity whose storage has gone, so that
+ *        its number can be issued again. Refuses a row that still holds
+ *        storage: that one belongs on a block free list, which keeps the
+ *        bytes for reuse as well as the number.
+ */
+XPOST_MUST_CHECK int xpost_memory_table_release_row(Xpost_Memory_File *mem,
+                                                    unsigned int ent);
 
 #endif

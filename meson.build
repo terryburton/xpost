@@ -1176,6 +1176,22 @@ test('free-list-size-rule',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# That a row emptied by a rearrangement of the arena can be issued again.
+# The cursor the entity-width limit is measured against only ever rises,
+# so a compacting job that could not reissue would reach that limit with
+# an arena that is mostly empty.
+table_row_reuse_exe = executable('table_row_reuse_test',
+  'tests/table_row_reuse_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('table-row-reuse',
+  table_row_reuse_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What that refusal is worth. Emptying the buckets throws away every
 # entity the list held, so the answer the allocator gives has to reach a
 # collection: an allocator that emptied them and reported a plain

@@ -154,6 +154,7 @@ count    xpost_memory.h:Xpost_Memory_File   start
 count    xpost_memory.h:Xpost_Memory_File   steps
 count    xpost_memory.h:Xpost_Memory_File   threshold
 count    xpost_memory.h:Xpost_Memory_File   threshold_bytes
+count    xpost_memory.h:Xpost_Memory_Table  freerow
 count    xpost_memory.h:Xpost_Memory_Table  mark
 count    xpost_memory.h:Xpost_Memory_Table  max
 count    xpost_memory.h:Xpost_Memory_Table  nextent
