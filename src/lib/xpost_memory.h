@@ -705,6 +705,31 @@ XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_file_grow(Xpost_Memory_File
                                       size_t sz);
 
 /**
+ * @brief Give the whole pages inside a range of the arena back to the
+ * system, and answer how many bytes went.
+ *
+ * @param[in,out] mem The memory file
+ * @param[in] adr The start of the range, as an offset into the arena
+ * @param[in] len How long the range is
+ * @return the bytes handed back, which is zero where none could be
+ *
+ * The range stays addressable and stays part of the file: what goes is
+ * the storage behind it, so a later read finds zeros rather than what
+ * was there and the pages are charged again when they are next written.
+ * Only whole pages can go, so a range shorter than a page, or one that
+ * spans no page boundary a page apart, hands back nothing.
+ *
+ * The caller is what knows the range holds nothing anyone will read.
+ * This answers only whether the backing could take it: an arena that is
+ * a mapping of a file is not this process's to give back -- the bytes
+ * belong to the file -- and where the arena came from the host allocator
+ * the file does not own the pages under it.
+ */
+unsigned int xpost_memory_file_release_range(Xpost_Memory_File *mem,
+                                             unsigned int adr,
+                                             unsigned int len);
+
+/**
  * @brief Allocate memory in the given memory file and return offset.
  *
  * @param[in,out] mem The memory file.

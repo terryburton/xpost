@@ -285,6 +285,7 @@ xpost_memory_file_dump
 xpost_memory_file_exit
 xpost_memory_file_grow
 xpost_memory_file_init
+xpost_memory_file_release_range
 xpost_memory_get
 xpost_memory_init
 xpost_memory_page_size

@@ -299,6 +299,59 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
     return 1;
 }
 
+/* Give the whole pages inside a range of the arena back to the system.
+   Answers the bytes that went, which is zero where none could.
+
+   WHICH BACKINGS CAN TAKE IT. Only an anonymous mapping: those pages are
+   storage this process holds on its own account, and dropping them
+   charges them again when the range is next written. A mapping of a file
+   is not this process's to give back -- the bytes are the file's, and
+   dropping the pages only means reading them in again -- and where the
+   arena came from the host allocator the file does not own the pages
+   under it and has no way to name them.
+
+   WHICH CALL. MADV_DONTNEED is what returns pages on Linux. The other
+   POSIX systems answer the call and keep the storage, so an arena there
+   is left alone rather than told to do something that would report a
+   figure it did not deliver. */
+unsigned int
+xpost_memory_file_release_range(Xpost_Memory_File *mem,
+                                unsigned int adr,
+                                unsigned int len)
+{
+#if defined(HAVE_MMAP) && defined(__linux__) && defined(MADV_DONTNEED)
+    size_t ps = xpost_memory_page_size;
+    size_t from;
+    size_t to;
+
+    if (!mem || !mem->base || mem->fd != -1 || ps == 0)
+        return 0;
+    /* the range is the file's to speak for */
+    if ((size_t)adr + len > mem->max)
+        return 0;
+
+    from = (((size_t)adr + ps - 1) / ps) * ps;
+    to = (((size_t)adr + len) / ps) * ps;
+    if (to <= from)
+        return 0;
+
+    if (madvise(xpost_vm_ptr(mem, (unsigned int)from), to - from,
+                MADV_DONTNEED) != 0)
+    {
+        XPOST_LOG_ERR("cannot hand back %lu bytes at %lu (error: %s)",
+                      (unsigned long)(to - from), (unsigned long)from,
+                      strerror(errno));
+        return 0;
+    }
+    return (unsigned int)(to - from);
+#else
+    (void)mem;
+    (void)adr;
+    (void)len;
+    return 0;
+#endif
+}
+
 /*
    Close, deallocate, and destroy memory file structure
  */
