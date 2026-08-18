@@ -61,24 +61,40 @@
 # onwards. A gate reading the second run alone would have called that a leak
 # of a megabyte and a half.
 #
-# So each workload is asked twice, and any that costs something is asked
-# again after four more runs. What comes to nothing is held to coming to
-# nothing; what still costs something after those runs is the worklist. Neither
-# assertion needs a tolerance or an assumption about how wide an object is,
-# which is what makes them hold on every build. Every class is recorded by
-# name in tests/vm_growth.golden and held in both directions: a workload that
-# has become free is reported too, because the population making the
-# assertion should only grow, and a line excusing something that no longer
-# needs excusing is cover for the next thing to land in that state.
+# So each workload is asked twice, and any that costs something -- or is
+# registered as still costing -- is asked again over a SETTLED WINDOW: five
+# runs to let the free list cover the sizes asked for, then three measured
+# runs, six through eight. The settled figure is the smallest of the three.
+# A workload that holds something pays for it on every run, so every run of
+# the window costs something and the minimum is positive; one whose figure
+# ever comes back at nothing -- or below it -- inside the window is fitting,
+# not holding. A single run's figure is not judged, because it is a sample
+# of the allocator's fit behaviour and its sign moves with the host: the
+# same workload reads +136 or -264 on its second run under nothing more
+# than a different data-directory path length, and +344 lands on run six on
+# one host and run seven on another. The window is what those samples
+# oscillate across, and the minimum is what a retention cannot get under.
+# What comes to nothing is held to coming to nothing; what still costs
+# something on every settled run is the worklist. Neither assertion needs a
+# tolerance or an assumption about how wide an object is, which is what
+# makes it hold on every build. Every class is recorded by name in
+# tests/vm_growth.golden and held in both directions: a workload that has
+# become free is reported too, because the population making the assertion
+# should only grow, and a line excusing something that no longer needs
+# excusing is cover for the next thing to land in that state.
 #
 # The classes:
 #
-#   zero          Runs cleanly twice and the second run costs nothing. This
-#                 is the one that is re-derived and enforced exactly: it
-#                 fails if the workload ever costs anything, or stops
-#                 running twice at all.
+#   zero          Runs cleanly twice and the second run costs nothing. It
+#                 fails if the workload comes to hold something on every
+#                 settled run, or stops running twice at all. Which of zero
+#                 and fits a settling workload reads as is a fact about the
+#                 host's allocator state at run two, not about the workload,
+#                 so the two classes are enforced identically and the name
+#                 records what the deriving host saw.
 #
-#   fits          Costs something on a second run and nothing by the sixth.
+#   fits          Costs something on a second run and nothing within the
+#                 settled window.
 #                 The collector is not at fault and this is not a leak: what
 #                 the previous run released has been given back, but the
 #                 allocator can serve a request out of a released block only
@@ -92,17 +108,24 @@
 #                 third and 19,056 on its fourth. The assertion for this
 #                 class is that it still reaches nothing.
 #
-#   costs <why>   Still costs something after five runs. That may be a
-#                 retention, or it may be the same fit effect needing more
-#                 passes than five to cover the sizes asked for; which it is
-#                 has not been established per workload, and that is what
-#                 makes this the worklist.
+#   costs <why>   Costs something on every run of the settled window: even
+#                 the smallest of runs six through eight is positive. That
+#                 may be a retention, or a fit effect needing more passes
+#                 than the window holds; which it is has not been
+#                 established per workload, and that is what makes this the
+#                 worklist.
 #
 #   once <why>    Does not survive being run twice in one interpreter.
 #
-# Two classes carry an assertion: zero must stay free, and fits must still
-# reach nothing. For costs and once what is enforced is only that they are still
-# not free, so either can be promoted the moment it becomes so. The
+# A class may be written as two separated by a slash, narrow/wide, where
+# the two composite-size builds genuinely behave differently: the build
+# answers which half applies, asked of the interpreter itself -- a string
+# past the narrow length limit is refused on one build and made on the
+# other -- rather than inferred from anything about the binary.
+#
+# Two classes carry an assertion: zero and fits must still reach nothing
+# within the window. For costs and once what is enforced is only that they
+# are still not free, so either can be promoted the moment it becomes so. The
 # distinction between those two is recorded as observed and not held to: a
 # workload that errors on its second run one day and merely costs something
 # the next would make a gate out of its own flakiness, and nothing here needs
@@ -186,6 +209,32 @@ if [ "$nrec" -lt 50 ]; then
     exit 1
 fi
 
+# ---- which composite-size build this is ----
+#
+# A register row may state one class per build where the two genuinely
+# differ, written narrow/wide, and the interpreter is asked which half
+# applies: a string one past the narrow length limit is refused on the
+# narrow build and made on the wide one. Asked rather than inferred,
+# because nothing about the binary's name or the build directory answers
+# for what the binary actually refuses. A run that cannot say is not
+# allowed to judge split rows against either half.
+cat > "$work/width.ps" <<PS
+mark { 65536 string } stopped
+{ cleartomark (XGNARROW) }{ cleartomark (XGWIDE) } ifelse print (\n) print
+flush
+PS
+wprobe=$(xg_limit 60 "$xpost" -q --no-sandbox -d null "$work/width.ps" \
+             </dev/null 2>/dev/null)
+case $wprobe in
+    *XGNARROW*) width=narrow ;;
+    *XGWIDE*)   width=wide ;;
+    *)
+        echo "FAILURES: the interpreter did not answer which composite-size"
+        echo "      build it is, so a register row that states one class per"
+        echo "      build cannot be judged against either half"
+        exit 1 ;;
+esac
+
 # ---- measure every workload in the directory ----
 #
 # The population is the directory, not a list: a workload that arrives
@@ -259,46 +308,88 @@ PS
         printf '%s once\n' "$b" >> "$work/measured"
         continue
     fi
+    # Which class the register expects of this workload on this build. Read
+    # here for one routing decision only: a workload the register says still
+    # costs is always taken through the settled window, so that promoting it
+    # is a judgement of the window and never of the second run's sample --
+    # whose sign moves with the host. The measured class itself never
+    # depends on what the register expects.
+    regclass=$(awk -v n="$b" '$1 == n { print $2; exit }' "$work/recorded")
+    case $regclass in
+        */*) case $width in
+                 narrow) regclass=${regclass%%/*} ;;
+                 *)      regclass=${regclass#*/}  ;;
+             esac ;;
+    esac
     # Nothing, or less than nothing. A collection the program asks for
     # closes the arena up, so the figure is what is live rather than a mark
     # that only rises, and a run that leaves the arena smaller than it found
     # it has given back more than it took. That is the opposite of the thing
     # this weighs, so it belongs with the workloads that cost nothing rather
     # than being reported as a cost of a negative number of bytes.
-    if [ "$cost" -le 0 ]; then
+    if [ "$cost" -le 0 ] && [ "$regclass" != costs ] && [ "$regclass" != once ]
+    then
         printf '%s zero\n' "$b" >> "$work/measured"
         continue
     fi
 
-    # It cost something on the second run, which by itself does not mean it
-    # holds anything: the allocator serves a request out of a released block
-    # only where that block is at least as large as the request, so a run
-    # asking for a spread of sizes needs fresh space for every size larger
-    # than anything released so far.
+    # It cost something on the second run -- or the register says it still
+    # costs -- which by itself does not mean it holds anything: the
+    # allocator serves a request out of a released block only where that
+    # block is at least as large as the request, so a run asking for a
+    # spread of sizes needs fresh space for every size larger than anything
+    # released so far.
     #
-    # So the ones that cost anything are asked again, after four more runs,
-    # by which point the released blocks cover the sizes asked for. Only
-    # these workloads pay for the extra runs.
-    cat > "$work/case/again.ps" <<PS
+    # So these workloads are asked over the settled window: five runs to
+    # let the released blocks come to cover the sizes asked for, then three
+    # measured runs. The settled figure is the smallest of the three. A
+    # workload that holds something pays for it on every one of them, so
+    # the minimum is positive; one whose figure ever comes back at nothing
+    # or below inside the window is fitting, not holding -- the samples
+    # oscillate, and no single run's sign is a fact about the workload.
+    # Only these workloads pay for the extra runs.
+    # The driver pays its own prices outside the measured stretches. A name
+    # is interned when its token is first read, and this file is read as it
+    # is executed, so a reading name first mentioned between two readings
+    # would charge the workload eight bytes a run -- measured exactly: a
+    # workload that costs nothing read as costing eight on every run of the
+    # window until the names were taken up front.
+    cat > "$work/case/window.ps" <<PS
 /xg.used { vmstatus pop exch pop } bind def
 /xg.tgt (prep.ps) def
 /xg.one { mark { xg.tgt run } stopped pop cleartomark 1 vmreclaim } bind def
+/xg.a 0 def /xg.b 0 def /xg.c 0 def /xg.d 0 def
 xg.one xg.one xg.one xg.one xg.one
-/xg.mark xg.used def
-xg.one
-xg.used xg.mark sub
-(XGAGAIN ) print 20 string cvs print (\n) print
+/xg.a xg.used def
+xg.one /xg.b xg.used def
+xg.one /xg.c xg.used def
+xg.one /xg.d xg.used def
+(XGWIN ) print
+xg.b xg.a sub 20 string cvs print ( ) print
+xg.c xg.b sub 20 string cvs print ( ) print
+xg.d xg.c sub 20 string cvs print (\n) print
 flush
 PS
-    wout=$(cd "$work/case" && xg_limit 360 \
-               "$xpost" -q --no-sandbox -d null again.ps </dev/null 2>/dev/null)
-    again=$(printf '%s\n' "$wout" | LC_ALL=C sed -n 's/^XGAGAIN \(-*[0-9][0-9]*\)$/\1/p' | tail -1)
-    if [ -z "$again" ]; then
+    wout=$(cd "$work/case" && xg_limit 600 \
+               "$xpost" -q --no-sandbox -d null window.ps </dev/null 2>/dev/null)
+    win=$(printf '%s\n' "$wout" | LC_ALL=C \
+              sed -n 's/^XGWIN \(-*[0-9][0-9]* -*[0-9][0-9]* -*[0-9][0-9]*\)$/\1/p' | tail -1)
+    if [ -z "$win" ]; then
         printf '%s costs %s\n' "$b" "$cost" >> "$work/measured"
-    elif [ "$again" -le 0 ]; then
-        printf '%s fits %s\n' "$b" "$cost" >> "$work/measured"
+        continue
+    fi
+    least=$(printf '%s\n' "$win" | awk '{ m = $1
+                                           if ($2 + 0 < m) m = $2 + 0
+                                           if ($3 + 0 < m) m = $3 + 0
+                                           print m }')
+    if [ "$least" -le 0 ]; then
+        if [ "$cost" -le 0 ]; then
+            printf '%s zero\n' "$b" >> "$work/measured"
+        else
+            printf '%s fits %s\n' "$b" "$cost" >> "$work/measured"
+        fi
     else
-        printf '%s costs %s\n' "$b" "$again" >> "$work/measured"
+        printf '%s costs %s\n' "$b" "$least" >> "$work/measured"
     fi
 done
 
@@ -323,33 +414,31 @@ while read -r name class extra; do
     fi
     want=$(printf '%s\n' "$row" | cut -d' ' -f2)
     why=$(printf '%s\n' "$row" | cut -d' ' -f3-)
+    # a split row states one class per composite-size build, narrow/wide,
+    # and this run judges the half the interpreter answered for
+    case $want in
+    */*)
+        case $width in
+            narrow) want=${want%%/*} ;;
+            *)      want=${want#*/}  ;;
+        esac ;;
+    esac
 
     case $want in
-    zero)
-        case $class in
-        zero) ;;
-        costs|fits)
-            printf '%s  cost nothing to run a second time and now costs %s bytes,\n' \
-                "$name" "$extra" >> "$work/problems"
-            printf '        so something it does is held rather than given back\n' \
-                >> "$work/problems" ;;
-        *)  printf '%s  ran cleanly twice and no longer does, so it is not\n' \
-                "$name" >> "$work/problems"
-            printf '        measuring anything here any more\n' >> "$work/problems" ;;
-        esac
-        ;;
-    fits)
-        # The assertion for this class is convergence: it may cost something
-        # while the free list is still settling, and must come to nothing
-        # once it has. A workload that stops converging is holding something.
+    zero|fits)
+        # One assertion for both: the workload must still reach nothing
+        # within the settled window. Which of the two names a settling
+        # workload wears is a fact about the deriving host's allocator
+        # state at run two, not about the workload, so the register is not
+        # held to it in either direction.
         case $class in
         zero|fits) ;;
         costs)
-            printf '%s  used to reach nothing by its sixth run and now still costs %s\n' \
+            printf '%s  used to reach nothing and now holds %s bytes on every\n' \
                 "$name" "$extra" >> "$work/problems"
-            printf '        bytes after five runs, so what it takes is no longer\n' \
+            printf '        run of the settled window (runs six through eight), so\n' \
                 >> "$work/problems"
-            printf '        explained by which sizes the allocator can reuse\n' \
+            printf '        something it does is held rather than given back\n' \
                 >> "$work/problems" ;;
         *)  printf '%s  ran cleanly twice and no longer does, so it is not\n' \
                 "$name" >> "$work/problems"
@@ -366,9 +455,9 @@ while read -r name class extra; do
             printf '        second time. Move it to zero, so it is held to that.\n' \
                 >> "$work/problems" ;;
         fits)
-            printf '%s  is registered as %s and now reaches nothing by its sixth run.\n' \
+            printf '%s  is registered as %s and now reaches nothing within the settled\n' \
                 "$name" "$want" >> "$work/problems"
-            printf '        Move it to fits, so it is held to reaching nothing.\n' \
+            printf '        window. Move it to fits, so it is held to reaching nothing.\n' \
                 >> "$work/problems" ;;
         esac
         ;;
@@ -405,8 +494,9 @@ ncosts=$(awk '$2 == "costs"' "$work/measured" | grep -c . || true)
 nonce=$(awk '$2 == "once"' "$work/measured" | grep -c . || true)
 nwhy=$(awk '$2 == "costs" || $2 == "once" { if ($3 == "unexplained") u++ } END { print u + 0 }' \
            "$work/recorded")
-printf 'SUCCESS (%s workloads: %s free on a second run, %s reaching nothing by the sixth --\n' \
+printf 'SUCCESS (%s workloads: %s free on a second run, %s reaching nothing within the\n' \
     "$nrun" "$nzero" "$nfits"
-printf '         both held to it -- %s still costing after five runs, %s not\n' \
-    "$ncosts" "$nonce"
+printf '         settled window -- both held to it -- %s still costing on every\n' \
+    "$ncosts"
+printf '         settled run, %s not\n' "$nonce"
 printf '         survivable twice; %s carry no explanation yet)\n' "$nwhy"

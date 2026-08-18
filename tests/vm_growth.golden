@@ -9,15 +9,27 @@
 # leak neither the sanitizers nor the collector can see: memory that is
 # allocated, still named, and named forever.
 #
+# A single run's figure is a sample, not a verdict: its sign moves with the
+# host's allocator state, down to the length of the data directory's path.
+# So a workload whose second run costs anything is judged over a settled
+# window -- five runs to let the free list cover the sizes asked for, then
+# three measured runs -- and it is holding only where every one of the
+# three costs something. The smallest of the three is the settled figure,
+# and it is what a retention cannot get under.
+#
 # The classes here are MEASURED, not chosen, and the guard re-derives every
 # one of them on every run:
 #
-#   zero          Runs cleanly twice and the second run costs nothing. Held
-#                 to that exactly -- no tolerance, and no assumption about
-#                 how wide an object is, which is what makes it hold on
-#                 every build.
+#   zero          Runs cleanly twice and the second run costs nothing. Held,
+#                 with fits, to reaching nothing within the settled window
+#                 -- no tolerance, and no assumption about how wide an
+#                 object is, which is what makes it hold on every build.
+#                 Which of the two names a settling workload wears records
+#                 what the deriving host's allocator happened to cover by
+#                 run two, so the two are one assertion.
 #
-#   fits          Costs something on a second run and nothing by the sixth.
+#   fits          Costs something on a second run and nothing within the
+#                 settled window.
 #                 Not a leak, and not the collector's doing: what the
 #                 previous run released has been given back -- five
 #                 collections between runs instead of one, over both banks
@@ -35,12 +47,12 @@
 #                 cost anything on a second run are this and nothing more.
 #                 The assertion is that they still reach nothing.
 #
-#   costs <why>   Still costs something after five runs. That may be a
-#                 retention, or the same fit effect needing more than five
-#                 passes to cover the sizes asked for; which it is has not
-#                 been established per workload. Fifteen of these, and they
-#                 are the worklist. Reported if it becomes free, so it can
-#                 be promoted.
+#   costs <why>   Costs something on every run of the settled window: even
+#                 the smallest of the three measured runs is positive. That
+#                 may be a retention, or the fit effect needing more passes
+#                 than the window holds; which it is has not been
+#                 established per workload. These are the worklist.
+#                 Reported if it becomes free, so it can be promoted.
 #
 #   once <why>    Does not survive being run twice in one interpreter: it
 #                 makes something inaccessible, leaves a device installed,
@@ -49,6 +61,11 @@
 #                 read as the cleanest of all, so this class is refused a
 #                 measurement rather than credited with a good one.
 #                 Reported if it starts surviving, so it can be promoted.
+#
+# A class written as two names separated by a slash states one per
+# composite-size build, narrow/wide, for the workloads whose behaviour
+# genuinely differs between the two; the guard asks the interpreter which
+# build it is and judges that half.
 #
 # WHAT `unexplained` MEANS, and it is not a shrug. The class is a
 # measurement and is true. The CAUSE, for a workload marked unexplained, has
@@ -98,7 +115,7 @@ device_private_test.ps                     once   unexplained
 device_restore_retired_test.ps             costs  unexplained
 device_retire_restored_test.ps             once   unexplained
 empty_clip_test.ps                         once   unexplained
-entity_limit_test.ps                       once   unexplained
+entity_limit_test.ps                       once/fits  unexplained
 error_dict_test.ps                         zero
 error_unwind_test.ps                       once   unexplained
 execform_cache_test.ps                     once   unexplained
@@ -237,7 +254,7 @@ pdf_pipe_test.ps                           zero
 privatedict_install_test.ps                once   unexplained
 quit_run_test.ps                           once   unexplained
 raster_class_test.ps                       once   unexplained
-raster_row_test.ps                         costs  unexplained
+raster_row_test.ps                         fits
 record_excess_test.ps                      once   unexplained
 record_glyph_test.ps                       zero
 record_image_test.ps                       zero
