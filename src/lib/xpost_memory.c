@@ -505,6 +505,13 @@ xpost_memory_file_release_range(Xpost_Memory_File *mem,
             return 0;
         }
 # endif
+        /* The storage has gone, so nothing may be read from the range
+           until it is taken again. Said here rather than left to the
+           call, because the two routes leave a checker's view of the
+           range differing: a re-mapping is a system call it follows, and
+           advice to drop the pages is not something it sees at all. */
+        XPOST_VG_POISON_RANGE(mem->base, (unsigned int)from,
+                              (unsigned int)(to - from));
     }
     return (unsigned int)(to - from);
 #else

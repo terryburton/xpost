@@ -602,11 +602,21 @@ int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed)
     qsort(live, nlive, sizeof(*live), _by_adr);
 
     cursor = floor_adr;
+    /* The slide writes over the blocks it passes, and a block the lists
+       hold is closed to a checker the arena is described to. So the
+       extent is opened for the length of the pass and closed again as
+       the pass goes: the padding as each entity lands, and the whole run
+       above the cursor once the slide is done. Without this every move
+       is a write the checker refuses, and every later read of an entity
+       that moved is a read it refuses -- the arena's own bookkeeping
+       reported as the error it exists to find. */
+    XPOST_VG_REOPEN_RANGE(mem->base, floor_adr, before - floor_adr);
     for (i = 0; i < nlive; i++)
     {
         unsigned int e = live[i].ent;
         unsigned int a = mem->table.tab[e].adr;
         unsigned int s = mem->table.tab[e].sz;
+        unsigned int pad;
 
         if (a != cursor)
         {
@@ -620,6 +630,9 @@ int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed)
         }
         /* alignment is kept as the allocator hands it out, so that an
            entity's address means the same thing after the pass as before */
+        pad = ((s + 7u) & ~7u) - s;
+        if (pad)
+            XPOST_VG_POISON_RANGE(mem->base, cursor + s, pad);
         cursor += (s + 7u) & ~7u;
     }
 
@@ -637,6 +650,11 @@ int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed)
         }
 
     mem->high_water = cursor;
+
+    /* and what stands above the mark is nobody's to read, whether or not
+       the storage under it goes back to the system below */
+    if (before > cursor)
+        XPOST_VG_POISON_RANGE(mem->base, cursor, before - cursor);
 
     /* The storage the blocks occupied is now one run above the cursor,
        which is the whole reason for gathering it there: the pages under
