@@ -505,3 +505,26 @@ guard_srcdata() {   # <source tree root>
         *)  srcdata=$(cd "$1" && pwd)/data ;;
     esac
 }
+
+# The divergence half of a family register, held both ways.
+#
+# A family register carries what the family does that the specification
+# does not require of it, or requires differently, and each such line is
+# found by a probe of its own. Both directions matter and for different
+# reasons: a line no probe still finds is a difference that has been
+# fixed or has moved, and leaving it there makes the register a record of
+# what used to be true; a probe finding something no line names is a
+# difference nobody has decided about, which is the one that matters,
+# because it is the state a newly-written difference arrives in.
+#
+# The wording is here rather than in each guard because it tells the
+# reader what to do about it, and eight guards had eight copies of it.
+guard_hold_divergence() {   # <register> <what the register names> <what was found>
+    guard_hold "$2" "$3" \
+        "named in the register and no longer found by the probe that finds
+      it. A reason that has outlived its difference reads exactly like one
+      that still holds; retire the line and the count with it:" \
+        "found by a probe here and named by no line in the register. Say
+      what the difference is and whether it is settled, a thorn or being
+      changed, in tests/$1:"
+}

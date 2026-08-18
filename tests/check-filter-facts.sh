@@ -420,11 +420,7 @@ done
 LC_ALL=C sort -u "$work/got-diverge" -o "$work/got-diverge"
 
 guard_held=0
-guard_hold "$work/reg-diverge" "$work/got-diverge" \
-    "named in the register and no longer found by the probe that finds
-      it. Retire the line and the count with it:" \
-    "found by a probe here and named by no line in the register. Say what
-      the difference is in tests/filter-facts:"
+guard_hold_divergence filter-facts "$work/reg-diverge" "$work/got-diverge"
 [ "$guard_held" -eq 0 ] || fail=1
 
 ndiv=$(awk '/^divergences /{ print $2; found = 1 } END { if (!found) print "" }' \

@@ -258,12 +258,7 @@ v=$(awk '$1 == "vector-device" { print $2 }' "$work/got.cache")
 
 sort -u "$work/got.diverge" -o "$work/got.diverge"
 guard_held=0
-guard_hold "$work/reg.diverge" "$work/got.diverge" \
-    "named in the register and no longer found by the probe that finds
-      it. Retire the line and the count with it:" \
-    "found by a probe here and named by no line in the register. Say
-      what the difference is and whether it is settled, a thorn or being
-      changed, in tests/form-facts:"
+guard_hold_divergence form-facts "$work/reg.diverge" "$work/got.diverge"
 [ "$guard_held" -eq 0 ] || fail=1
 
 [ "$fail" = 0 ] || exit 1

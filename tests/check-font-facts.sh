@@ -332,11 +332,7 @@ if ! diff_out=$(diff "$work/cid.want" "$work/cid.got" 2>&1); then
 fi
 
 guard_held=0
-guard_hold "$work/reg.diverge" "$work/got.diverge" \
-    "named in the register and no longer found by the probe that finds
-      it. Retire the line and the count with it:" \
-    "found by a probe here and named by no line in the register. Say what
-      the difference is in tests/font-facts:"
+guard_hold_divergence font-facts "$work/reg.diverge" "$work/got.diverge"
 [ "$guard_held" -eq 0 ] || fail=1
 
 thorns=$(awk 'NF >= 3 && $2 == "thorn" { print "      " $1 }' "$work/reg")
