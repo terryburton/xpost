@@ -672,7 +672,16 @@ static int _put_bank(_Writer *w, Xpost_Context *ctx, unsigned int bank,
         if (!_put(w, mem->table.tab[ent].sz)) return 0;
         if (!_put(w, mem->table.tab[ent].mark)) return 0;
         if (!_put(w, mem->table.tab[ent].tag)) return 0;
-        if (!_put(w, mem->table.tab[ent].nextfree)) return 0;
+        /* The link is written for the rows that describe storage, where
+           it chains the released blocks of one size, and written as
+           nothing for the rows that describe none, where it chains the
+           rows waiting to be issued again. That second chain is derived
+           on the way back in, from the rows themselves; writing the link
+           for those rows would put a value in the image that a load does
+           not restore, so a context read from an image would write back
+           an image differing from the one it read. */
+        if (!_put(w, (ent >= mem->start && mem->table.tab[ent].sz == 0)
+                     ? 0u : mem->table.tab[ent].nextfree)) return 0;
     }
 
     return _put_arena(w, ctx, mem, bank == 0, host_state);
