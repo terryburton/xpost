@@ -17,20 +17,24 @@
 # again is paid for every job after it too.
 #
 # WHAT THE NUMBER IS. Each round reports the difference in the second value
-# vmstatus gives, taken before and after one run, with a collection asked for
-# at the end of the run. That value is mem->used, which xpost_memory.h calls
-# the cursor to free space: allocation from fresh arena advances it and
-# nothing ever moves it back, because reclamation puts blocks on the free
-# list rather than rewinding the arena. An allocation served out of the free
-# list therefore costs nothing here.
+# vmstatus gives, taken before and after one run, with a reclaim asked for at
+# the end of the run. That value is the bank's high-water mark. A collection
+# alone does not move it: what a collection recovers goes on a free list and
+# stays where it is. A reclaim a program asks for closes the gaps between
+# what is left, so the mark comes back over everything the run gave up, and
+# what remains is what the run is still holding.
 #
-# So a round measures exactly one quantity: HOW MANY BYTES THIS RUN HAD TO
-# TAKE FROM FRESH ARENA BECAUSE NO RELEASED BLOCK COULD SERVE THEM. That is
-# what makes it the right instrument and also what makes it a strange one.
-# It is not live bytes, not bytes allocated, and not bytes leaked. A run that
-# allocates a hundred megabytes and releases them all reads zero on its
-# second pass; a run that holds one small object reads the size of that
-# object, every pass, for ever.
+# So a round measures one quantity: HOW MUCH MORE THE INTERPRETER IS HOLDING
+# AFTER THIS RUN THAN BEFORE IT. A run that allocates a hundred megabytes and
+# releases them all reads nothing; a run that holds one small object reads
+# the size of that object, every pass, for ever. A run that leaves the arena
+# smaller than it found it reads a negative number, which is a run that gave
+# back more than it took and is counted with the ones that cost nothing.
+#
+# The number is read off the stack before the round prints anything, and that
+# order is part of the measurement: anything allocated between the mark and
+# the reading is charged to the workload, and the first print of a run
+# allocates.
 #
 # WHY THIS IS NOT ONE THRESHOLD OVER EVERY TEST, AND WHY IT IS NOT ONE RUN.
 # Two things were measured over the whole directory before any of it was
@@ -134,6 +138,44 @@ guard_require_file "$golden" "the register of second-run costs"
 guard_workdir
 trap 'rm -rf "$work"' EXIT INT TERM
 
+XPOST_DATA_DIR="$src/data"
+export XPOST_DATA_DIR
+
+# A limit on one run, and it is set well above what any workload here needs
+# rather than near it. What the limit is for is a workload that hangs; a
+# limit a slow workload can reach on a slow host turns the measurement into a
+# race, and the workload that loses it reads as one that cannot be run twice
+# -- which is a claim about the host's speed dressed as a claim about the
+# workload. The longest run in this directory takes twenty-seven seconds on
+# the machine this was written on, so thirty seconds was a coin toss for it.
+#
+# The limit is honoured on the hosts that carry a command for it and on the
+# ones that do not. The base system of macOS has no timeout(1), and a run
+# that never starts reads here exactly like a workload that cannot be run
+# a second time -- so a guard naming the command outright reports the
+# whole directory as unmeasurable and says nothing about any of it. The
+# limit is kept rather than dropped where the command is missing, because
+# what it is for is a workload that hangs, and the shell can do the same
+# job: the run in the background with a sleeper beside it, and whichever
+# finishes first decides. The sleeper's output goes nowhere, so that the
+# command substitution around a call does not wait on it as well.
+if command -v timeout > /dev/null 2>&1; then
+    xg_limit() { _lim=$1; shift; timeout "$_lim" "$@"; }
+elif command -v gtimeout > /dev/null 2>&1; then
+    xg_limit() { _lim=$1; shift; gtimeout "$_lim" "$@"; }
+else
+    xg_limit() {
+        _lim=$1; shift
+        "$@" &
+        _job=$!
+        ( sleep "$_lim"; kill -9 "$_job" ) > /dev/null 2>&1 &
+        _watch=$!
+        wait "$_job"; _rc=$?
+        kill "$_watch" > /dev/null 2>&1
+        return $_rc
+    }
+fi
+
 # ---- the register ----
 grep -vE '^[[:space:]]*(#|$)' "$golden" | tr -d '\r' \
   | sed 's/[[:blank:]][[:blank:]]*/ /g; s/^ //; s/ $//' > "$work/recorded"
@@ -171,31 +213,60 @@ for f in "$src"/tests/*.ps; do
         *)            cp "$f" "$work/case/prep.ps" ;;
     esac
 
-    # The reading is reuse, not a difference: the used figure never falls, so
-    # a collection each time round is what makes what the last run gave back
-    # available to the next one.
+    # The reading is reuse, not a difference: a collection each time round is
+    # what makes what the last run gave back available to the next one.
+    #
+    # The figure is taken off the stack before anything is printed, and that
+    # order is the measurement rather than a matter of taste. A collection the
+    # program asks for closes the arena up, so the number this reads is what
+    # is live and not a mark that only ever rises -- and anything allocated
+    # between the mark and the reading is then counted against the workload.
+    # The first print of a run allocates, so a reading taken after it charges
+    # every workload in the directory the same few bytes for the guard's own
+    # report.
+    # The workload and the driving program are named relatively, and the run
+    # is made from their directory. The scratch directory is the shell's, and
+    # where the shell and the interpreter do not spell a path the same way --
+    # a POSIX shell driving a native Windows binary -- an absolute name from
+    # the one is a name the other cannot open. The workload then never runs,
+    # and a workload that never runs reads here as one that cannot be run
+    # twice: the whole directory reports as unmeasurable and the guard says
+    # nothing about any of it.
     cat > "$work/case/drive.ps" <<PS
 /xg.used { vmstatus pop exch pop } bind def
-/xg.tgt ($work/case/prep.ps) def
+/xg.tgt (prep.ps) def
 mark { xg.tgt run } stopped { (XGFAIL1\n) print } if cleartomark
 1 vmreclaim
 /xg.mark xg.used def
 mark { xg.tgt run } stopped { (XGFAIL2\n) print } if cleartomark
 1 vmreclaim
-(XGCOST ) print xg.used xg.mark sub 20 string cvs print (\n) print
+xg.used xg.mark sub
+(XGCOST ) print 20 string cvs print (\n) print
 flush
 PS
-    out=$(cd "$work/case" && XPOST_DATA_DIR="$src/data" timeout 30 \
-              "$xpost" -q --no-sandbox -d null "$work/case/drive.ps" </dev/null 2>/dev/null)
+    out=$(cd "$work/case" && xg_limit 120 \
+              "$xpost" -q --no-sandbox -d null drive.ps </dev/null 2>/dev/null)
     st=$?
-    cost=$(printf '%s\n' "$out" | sed -n 's/^XGCOST \(-*[0-9][0-9]*\)$/\1/p' | tail -1)
-    erred=$(printf '%s\n' "$out" | grep -c 'XGFAIL[12]' || true)
+    # Read in the C locale. What a workload prints is bytes and not text --
+    # a raster, a font program, whatever the run put on its output -- and a
+    # sed asked to match a pattern against a byte that is not a character in
+    # the locale it was started in refuses the input rather than failing to
+    # match it. The figure is then unreadable and the workload reads as one
+    # that cannot be run twice.
+    cost=$(printf '%s\n' "$out" | LC_ALL=C sed -n 's/^XGCOST \(-*[0-9][0-9]*\)$/\1/p' | tail -1)
+    erred=$(printf '%s\n' "$out" | LC_ALL=C grep -c 'XGFAIL[12]' || true)
 
     if [ "$st" -ne 0 ] || [ -z "$cost" ] || [ "$erred" != 0 ]; then
         printf '%s once\n' "$b" >> "$work/measured"
         continue
     fi
-    if [ "$cost" -eq 0 ]; then
+    # Nothing, or less than nothing. A collection the program asks for
+    # closes the arena up, so the figure is what is live rather than a mark
+    # that only rises, and a run that leaves the arena smaller than it found
+    # it has given back more than it took. That is the opposite of the thing
+    # this weighs, so it belongs with the workloads that cost nothing rather
+    # than being reported as a cost of a negative number of bytes.
+    if [ "$cost" -le 0 ]; then
         printf '%s zero\n' "$b" >> "$work/measured"
         continue
     fi
@@ -211,20 +282,21 @@ PS
     # these workloads pay for the extra runs.
     cat > "$work/case/again.ps" <<PS
 /xg.used { vmstatus pop exch pop } bind def
-/xg.tgt ($work/case/prep.ps) def
+/xg.tgt (prep.ps) def
 /xg.one { mark { xg.tgt run } stopped pop cleartomark 1 vmreclaim } bind def
 xg.one xg.one xg.one xg.one xg.one
 /xg.mark xg.used def
 xg.one
-(XGAGAIN ) print xg.used xg.mark sub 20 string cvs print (\n) print
+xg.used xg.mark sub
+(XGAGAIN ) print 20 string cvs print (\n) print
 flush
 PS
-    wout=$(cd "$work/case" && XPOST_DATA_DIR="$src/data" timeout 90 \
-               "$xpost" -q --no-sandbox -d null "$work/case/again.ps" </dev/null 2>/dev/null)
-    again=$(printf '%s\n' "$wout" | sed -n 's/^XGAGAIN \(-*[0-9][0-9]*\)$/\1/p' | tail -1)
+    wout=$(cd "$work/case" && xg_limit 360 \
+               "$xpost" -q --no-sandbox -d null again.ps </dev/null 2>/dev/null)
+    again=$(printf '%s\n' "$wout" | LC_ALL=C sed -n 's/^XGAGAIN \(-*[0-9][0-9]*\)$/\1/p' | tail -1)
     if [ -z "$again" ]; then
         printf '%s costs %s\n' "$b" "$cost" >> "$work/measured"
-    elif [ "$again" -eq 0 ]; then
+    elif [ "$again" -le 0 ]; then
         printf '%s fits %s\n' "$b" "$cost" >> "$work/measured"
     else
         printf '%s costs %s\n' "$b" "$again" >> "$work/measured"

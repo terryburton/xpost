@@ -4936,7 +4936,7 @@ test('check-vm-growth',
   find_program('tests/check-vm-growth.sh'),
   suite: cost_slow,
   args: [ meson.current_source_dir(), xpost_exe ],
-  timeout: 900)
+  timeout: 1800)
 
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table
