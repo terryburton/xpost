@@ -3977,7 +3977,7 @@ static int _devinstalled(Xpost_Context *ctx, Xpost_Object devdic)
 
     if (xpost_memory_save_stack_ready(ctx->lo))
         depth = (unsigned int)xpost_stack_count(ctx->lo,
-                    xpost_memory_save_stack_adr(ctx->lo));
+                    xpost_memory_save_stack_ent(ctx->lo));
     /* the depth is recorded as depth + 1 so that zero means nothing is
        recorded; a save stack cannot exceed 255 levels (xpost_op_save.c),
        and the ceiling here keeps the arithmetic in step with that */

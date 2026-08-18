@@ -19,5 +19,3 @@
 
 settled  xpost_context.c   initglobal   the reservation at the foot of global virtual memory: it is the first allocation the bank makes, so it lies below every entity and no rearrangement reaches it, and nothing addresses it -- it exists so that the low addresses, which every link in this tree spells "absent" as zero, are never handed out as live storage
 settled  xpost_context.c   initlocal    the same reservation at the foot of local virtual memory, made the same way and for the same reason
-
-blocks  xpost_stack.c     xpost_stack_init            a stack segment. Every stack in virtual memory is one of these -- the operand, execution, dictionary and hold stacks, the name stack, and the record stack a save owns -- and each segment names the next and the previous by address, so a segment that moved would orphan the rest of its chain

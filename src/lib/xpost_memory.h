@@ -544,12 +544,18 @@ xpost_memory_free_lists_ready(Xpost_Memory_File *mem)
 }
 
 /**
- * @brief address of the save stack (xpost_save_init).
+ * @brief the save stack (xpost_save_init).
+ *
+ * The entity IS the stack's first segment rather than a row holding the
+ * number of one: a segment is an entity, and this one's number is fixed
+ * before any constructor runs, so a row of its own would have nothing
+ * left to say.
  */
 static inline unsigned int
-xpost_memory_save_stack_adr(Xpost_Memory_File *mem)
+xpost_memory_save_stack_ent(Xpost_Memory_File *mem)
 {
-    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK].adr;
+    (void)mem;
+    return XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK;
 }
 
 /**
@@ -576,12 +582,16 @@ xpost_memory_context_list_adr(Xpost_Memory_File *mem)
 }
 
 /**
- * @brief address of the name stack (xpost_name_init).
+ * @brief the name stack (xpost_name_init).
+ *
+ * Its own first segment, as the master save stack is, and named the same
+ * way.
  */
 static inline unsigned int
-xpost_memory_name_stack_adr(Xpost_Memory_File *mem)
+xpost_memory_name_stack_ent(Xpost_Memory_File *mem)
 {
-    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr;
+    (void)mem;
+    return XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK;
 }
 
 /**

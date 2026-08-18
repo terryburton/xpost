@@ -3815,7 +3815,7 @@ static void _rewind_job_snapshots(Xpost_Context *ctx,
         xpost_save_restore_snapshot(ctx->gl);
     if (xpost_object_get_type(lsav) == savetype)
     {
-        unsigned int vs = xpost_memory_save_stack_adr(ctx->lo);
+        unsigned int vs = xpost_memory_save_stack_ent(ctx->lo);
         integer llev;
 
         /* the depth is counted, the level recorded: comparing them in

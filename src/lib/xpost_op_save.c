@@ -122,7 +122,7 @@ int Zsave(Xpost_Context *ctx)
        another level's bookkeeping */
     Xpost_Object v;
 
-    vs = xpost_memory_save_stack_adr(ctx->lo);
+    vs = xpost_memory_save_stack_ent(ctx->lo);
     if (xpost_stack_count(ctx->lo, vs) >= 255)
         return limitcheck;
     v = xpost_save_create_snapshot_object(ctx->lo);
@@ -159,7 +159,7 @@ int Vrestore(Xpost_Context *ctx,
     unsigned int vs;
     ++ctx->namebind_gen; /* restored dicts may change bindings */
 
-    vs = xpost_memory_save_stack_adr(ctx->lo);
+    vs = xpost_memory_save_stack_ent(ctx->lo);
     z = xpost_stack_count(ctx->lo, vs);
     /* the depth is counted, the level recorded: comparing them in the
        wider signed type keeps a depth that came back short of the level

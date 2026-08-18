@@ -234,16 +234,16 @@ static Xpost_Object _bogus_name(Xpost_Context *ctx, Xpost_Memory_File *mem,
 /* initialize the name special entities XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, NAME_TREE */
 int xpost_name_init(Xpost_Context *ctx)
 {
-    Xpost_Memory_Table *tab;
     unsigned int ent;
-    unsigned int t;
     unsigned int mode;
     unsigned int nstk;
     int ret;
 
     mode = ctx->vmmode;
     ctx->vmmode = GLOBAL;
-    ret = xpost_memory_table_alloc_special(ctx->gl, 0, 0,
+    /* the entity is the name stack's first segment, for the reason
+       given where the save stack's is made */
+    ret = xpost_memory_table_alloc_special(ctx->gl, sizeof(Xpost_Stack), 0,
                                            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK,
                                            &ent);
     if (!ret)
@@ -258,15 +258,14 @@ int xpost_name_init(Xpost_Context *ctx)
         return 0;
     }
 
-    if (!xpost_stack_init(ctx->gl, &t))
+    if (!xpost_stack_init_in(ctx->gl,
+                             XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK))
     {
         XPOST_LOG_ERR("cannot create the name stack");
         return 0;
     }
-    tab = &ctx->gl->table; //recalc pointer
-    tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     xpost_memory_set_name_tree(ctx->gl, 0, 0);
-    nstk = xpost_memory_name_stack_adr(ctx->gl);
+    nstk = xpost_memory_name_stack_ent(ctx->gl);
     xpost_stack_push(ctx->gl, nstk, _bogus_name(ctx, ctx->gl,
                     XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME));
     /* The name no program can spell takes the slot after the tree's. It is
@@ -281,7 +280,9 @@ int xpost_name_init(Xpost_Context *ctx)
     }
 
     ctx->vmmode = LOCAL;
-    ret = xpost_memory_table_alloc_special(ctx->lo, 0, 0,
+    /* the entity is the name stack's first segment, for the reason
+       given where the save stack's is made */
+    ret = xpost_memory_table_alloc_special(ctx->lo, sizeof(Xpost_Stack), 0,
                                            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK,
                                            &ent);
     if (!ret)
@@ -296,15 +297,14 @@ int xpost_name_init(Xpost_Context *ctx)
         return 0;
     }
 
-    if (!xpost_stack_init(ctx->lo, &t))
+    if (!xpost_stack_init_in(ctx->lo,
+                             XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK))
     {
         XPOST_LOG_ERR("cannot create the name stack");
         return 0;
     }
-    tab = &ctx->lo->table; //recalc pointer
-    tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     xpost_memory_set_name_tree(ctx->lo, 0, 0);
-    nstk = xpost_memory_name_stack_adr(ctx->lo);
+    nstk = xpost_memory_name_stack_ent(ctx->lo);
     xpost_stack_push(ctx->lo, nstk, _bogus_name(ctx, ctx->lo,
                     XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME));
     if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0))
@@ -381,7 +381,7 @@ int tstinsert(Xpost_Memory_File *mem,
             p = _tstnode(mem, ti); //recalc pointer
             p->eq = t;
         }else {
-            nstk = xpost_memory_name_stack_adr(mem);
+            nstk = xpost_memory_name_stack_ent(mem);
             p->eq = xpost_stack_count(mem, nstk); /* payload at the terminator */
         }
     } else {
@@ -406,7 +406,7 @@ unsigned int addname(Xpost_Context *ctx,
     unsigned int u;
     Xpost_Object str;
 
-    names = xpost_memory_name_stack_adr(mem);
+    names = xpost_memory_name_stack_ent(mem);
     u = xpost_stack_count(mem, names);
 
     str = xpost_string_cons(ctx, n, s);
@@ -557,7 +557,7 @@ Xpost_Object xpost_name_get_string(Xpost_Context *ctx,
     Xpost_Memory_File *mem = xpost_context_select_memory(ctx, n);
     unsigned int names;
     Xpost_Object str;
-    names = xpost_memory_name_stack_adr(mem);
+    names = xpost_memory_name_stack_ent(mem);
     str = xpost_stack_bottomup_fetch(mem, names, n.mark_.padw);
     return str;
 }

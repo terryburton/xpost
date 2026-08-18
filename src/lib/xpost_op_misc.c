@@ -328,11 +328,11 @@ int Odumpnames(Xpost_Context *ctx)
 {
     unsigned int names;
     printf("\nGlobal Name stack: ");
-    names = xpost_memory_name_stack_adr(ctx->gl);
+    names = xpost_memory_name_stack_ent(ctx->gl);
     xpost_stack_dump(ctx->gl, names);
     (void)puts("");
     printf("\nLocal Name stack: ");
-    names = xpost_memory_name_stack_adr(ctx->lo);
+    names = xpost_memory_name_stack_ent(ctx->lo);
     xpost_stack_dump(ctx->lo, names);
     (void)puts("");
     return 0;

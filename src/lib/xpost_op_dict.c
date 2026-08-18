@@ -250,7 +250,7 @@ int xpost_op_any_load(Xpost_Context *ctx,
         xpost_memory_table_dump(ctx->lo);
         xpost_memory_file_dump(ctx->gl);
         xpost_memory_table_dump(ctx->gl);
-        names = xpost_memory_name_stack_adr(ctx->gl);
+        names = xpost_memory_name_stack_ent(ctx->gl);
         xpost_stack_dump(ctx->gl, names);
         xpost_object_dump(K);
     }

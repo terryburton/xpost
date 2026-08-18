@@ -110,7 +110,7 @@ int vmstatus (Xpost_Context *ctx)
     Xpost_Memory_File *vm;
     unsigned int vstk;
 
-    vstk = xpost_memory_save_stack_adr(ctx->lo);
+    vstk = xpost_memory_save_stack_ent(ctx->lo);
     lev = xpost_stack_count(ctx->lo, vstk);
     /* PLRM 8.2: the two counts are of the bank the allocation mode
        selects, virtual memory being accounted for separately in each.
@@ -483,7 +483,7 @@ int globalvmstatus (Xpost_Context *ctx)
     int lev;
     unsigned int vstk;
 
-    vstk = xpost_memory_save_stack_adr(ctx->gl);
+    vstk = xpost_memory_save_stack_ent(ctx->gl);
     lev = xpost_stack_count(ctx->gl, vstk);
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(lev)))
         return stackoverflow;

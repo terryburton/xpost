@@ -60,30 +60,29 @@ typedef struct {
 } saverec_;
 */
 
-/* create a stack in slot XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK.
-   sz is 0 so gc will ignore it. */
+/* create the master save stack, which is the entity in slot
+   XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK */
 int xpost_save_init(Xpost_Memory_File *mem)
 {
-    unsigned t;
     unsigned ent;
-    Xpost_Memory_Table *tab;
     int ret;
 
-    ret = xpost_memory_table_alloc_special(mem, 0, 0,
+    /* The entity IS the stack's first segment, rather than a row holding
+       the number of one. A segment is an entity, and this one's number
+       is fixed before any constructor runs, so there is nothing left for
+       a row of its own to say. */
+    ret = xpost_memory_table_alloc_special(mem, sizeof(Xpost_Stack), 0,
                                            XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK,
-                                           &ent); /* an entry of zero length */
+                                           &ent);
     if (!ret)
     {
         return 0;
     }
-
-    if (!xpost_stack_init(mem, &t))
+    if (!xpost_stack_init_in(mem, ent))
     {
         XPOST_LOG_ERR("cannot create the save stack");
         return 0;
     }
-    tab = &mem->table;
-    tab->tab[ent].adr = t;
 
     return 1;
 }
@@ -97,7 +96,7 @@ void xpost_save_stamp_birth(Xpost_Memory_File *mem, unsigned int ent)
     unsigned int vs;
     unsigned int cnt;
 
-    vs = xpost_memory_save_stack_adr(mem);
+    vs = xpost_memory_save_stack_ent(mem);
     cnt = xpost_stack_count(mem, vs);
     mem->table.tab[ent].mark =
           (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET)
@@ -112,7 +111,7 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
     unsigned int vs;
 
     v.tag = savetype;
-    vs = xpost_memory_save_stack_adr(mem);
+    vs = xpost_memory_save_stack_ent(mem);
     v.save_.lev = xpost_stack_count(mem, vs);
     if (mem->free_substack)
     {
@@ -132,7 +131,7 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
     }
     else
     {
-        /* the stack address is narrower than the save object's stk
+        /* the stack's entity is narrower than the save object's stk
            field on a wide-word build: land it whole */
         unsigned int stk;
 
@@ -161,7 +160,7 @@ unsigned xpost_save_ent_is_saved(Xpost_Memory_File *mem,
     unsigned int vs;
     Xpost_Object sav;
 
-    vs = xpost_memory_save_stack_adr(mem);
+    vs = xpost_memory_save_stack_ent(mem);
 
     if (xpost_stack_count(mem, vs) == 0)
         return 1;
@@ -262,7 +261,7 @@ int xpost_save_save_ent(Xpost_Memory_File *mem,
     unsigned int adr;
     unsigned int cpy;
 
-    adr = xpost_memory_save_stack_adr(mem);
+    adr = xpost_memory_save_stack_ent(mem);
     sav = xpost_stack_topdown_fetch(mem, adr, 0);
 
     tab = &mem->table;
@@ -307,7 +306,7 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
     unsigned int cnt;
     unsigned int sent, cent;
 
-    v = xpost_memory_save_stack_adr(mem); // save-stack address
+    v = xpost_memory_save_stack_ent(mem); // the save stack
     sav = xpost_stack_pop(mem, v); // save-object (stack of saverec_'s)
     if (xpost_object_get_type(sav) == invalidtype)
         return;
@@ -375,9 +374,10 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
     }
 
     /* The record stack is now empty and, with its save object popped, wholly
-       unreferenced. It is a raw file allocation the collector does not
-       reclaim, so one has to be parked for a later save to take rather than
-       left where nothing can reach it.
+       unreferenced, so one is parked for a later save to take rather than
+       left for the collector to reclaim and a later save to build again.
+       The collector is told where the pool is, since nothing else in the
+       heap reaches what is on it.
        The pool holds as many as the program has had save levels open at
        once, chained through each parked stack's prevseg -- which a parked
        stack does not otherwise use, and whose value in the last of the

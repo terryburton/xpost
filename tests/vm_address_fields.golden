@@ -18,10 +18,11 @@
 # under the register rather than a substitute for it, since a member reached
 # through a subscript -- the table row -- does not match.
 #
-# The address column is short because virtual memory is referenced by entity
-# number almost everywhere, and the table is what turns a number into a
-# place. The exceptions are the stacks and the two arrays an operator record
-# points at, which are named by where they are.
+# The address column holds two rows. Virtual memory is referenced by entity
+# number everywhere else, and the table is what turns a number into a place,
+# so what a rearrangement of the arena has to rewrite is the table's own
+# column of addresses and the cursor marking how far the arena has been
+# handed out.
 #
 # A member is keyed by the structure that declares it as well as by the
 # header, because two structures in one header can declare a member of the
@@ -31,16 +32,16 @@
 # after its closing brace keeps the header as its heading.
 #
 # disposition  header[:structure]  member  [reason, for an address]
-address  xpost_context.h:_Xpost_Context     ds                       the dictionary stack, same
-address  xpost_context.h:_Xpost_Context     es                       the execution stack, same
-address  xpost_context.h:_Xpost_Context     hold                     the stack a constructor stashes a new object on until its operator returns, same
-address  xpost_context.h:_Xpost_Context     os                       the operand stack, named by where it is rather than by which entity it is
-address  xpost_memory.h:Xpost_Memory_File   free_substack            a parked save-record stack, held by where it is because those stacks are raw file allocations rather than table entities
+count    xpost_context.h:_Xpost_Context     ds
+count    xpost_context.h:_Xpost_Context     es
+count    xpost_context.h:_Xpost_Context     hold
+count    xpost_context.h:_Xpost_Context     os
+count    xpost_memory.h:Xpost_Memory_File   free_substack
 address  xpost_memory.h:Xpost_Memory_File   high_water               the offset one past the last byte handed out, which a rearrangement would set to its new value rather than move
 address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
-address  xpost_object.h                     stk                      the record stack a save object owns, reached with xpost_stack_at and so a place rather than a number
-address  xpost_stack.h                      nextseg                  the next segment of a chained stack, so a moved segment would orphan the rest of the chain
-address  xpost_stack.h                      prevseg                  the previous segment, and on the root segment the top one; same
+count    xpost_object.h                     stk
+count    xpost_stack.h                      nextseg
+count    xpost_stack.h                      prevseg
 count    xpost_context.h:_Xpost_Context     batch
 count    xpost_context.h:_Xpost_Context     callback_error
 count    xpost_context.h:_Xpost_Context     device_made

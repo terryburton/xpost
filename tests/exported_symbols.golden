@@ -453,6 +453,7 @@ xpost_stack_clear
 xpost_stack_count
 xpost_stack_dump
 xpost_stack_init
+xpost_stack_init_in
 xpost_stack_peek_top
 xpost_stack_pop
 xpost_stack_push

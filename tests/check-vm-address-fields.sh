@@ -179,15 +179,20 @@ fi
 
 # The dispositions are cross-checked against how the members are used, so
 # that the register cannot be wrong in the direction that matters. An
-# address is what reaches the offset argument of xpost_vm_ptr, or of one of
-# the typed spellings built on it; a member that gets there and is filed as
-# a count is filed wrongly, and a compaction taking the register at its word
-# would leave that one behind.
+# address is what reaches the offset argument of xpost_vm_ptr, the one call
+# that turns an offset into a pointer; a member that gets there and is filed
+# as a count is filed wrongly, and a compaction taking the register at its
+# word would leave that one behind.
+#
+# The typed spellings -- xpost_stack_at, xpost_dict_head -- are not asked
+# about, because what they take is an entity number and the table turns it
+# into an offset first. A member reaching one of those is named by which
+# entity it is, which is what a count is.
 #
 # This finds what it can rather than everything: a member reached through a
 # subscript, as the table row is, does not match. It is a floor under the
 # register, not a substitute for reading it.
-grep -hoE "xpost_(stack_[a-z_]+|vm_ptr|ent_ptr)[[:blank:]]*\([^,()]*,[[:blank:]]*[^,()]*" \
+grep -hoE "xpost_vm_ptr[[:blank:]]*\([^,()]*,[[:blank:]]*[^,()]*" \
     "$lib"/*.c "$lib"/*.h 2>/dev/null \
   | sed -E 's/^[^,]*,[[:blank:]]*//' \
   | grep -oE "[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z_][A-Za-z0-9_]*$" \

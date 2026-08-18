@@ -1262,7 +1262,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
     }
 
     _xpost_operator_push_args_to_hold(ctx, ctx->lo, ctx->os, sp[i].in);
-    hold = xpost_vm_ptr(ctx->lo, ctx->hold);
+    hold = xpost_stack_at(ctx->lo, ctx->hold);
 
     switch(sp[i].in)
     {

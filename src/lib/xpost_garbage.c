@@ -255,7 +255,7 @@ int _xpost_garbage_reach_dict(Xpost_Context *ctx,
                 unsigned int address;
                 Xpost_Object str;
 
-                address = xpost_memory_name_stack_adr(
+                address = xpost_memory_name_stack_ent(
                     xpost_context_select_memory(ctx, tp[j].key));
 
                 str = xpost_stack_bottomup_fetch(
@@ -623,11 +623,71 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
 }
 
 
+/* Mark every segment of a stack, so the sweep does not take back the
+   stack a program is running on.
+
+   A segment is an entity, and an entity nothing marks is one the sweep
+   takes back. The whole chain is marked, not the part a read of the
+   stack would walk: a walk of the contents stops at the topmost segment,
+   whereas a stack that grew and then shrank keeps the segments past that
+   one chained, and a later push moves straight back into them rather
+   than making another. They are as live as the ones below them.
+
+   The walk is by number because the number is what a mark is set on. */
+static
+int _xpost_garbage_mark_stack_segments(Xpost_Memory_File *mem,
+                                       unsigned int stackent)
+{
+    unsigned int e;
+
+    if (!mem) return 0;
+
+    for (e = stackent; e; )
+    {
+        /* the first segment of the name stack and of the save stack is a
+           special entity, below the band the collector owns and never
+           swept; the walk passes through it to reach the rest */
+        if (xpost_ent_in_collector_band(mem, e)
+            && !_xpost_garbage_mark_ent(mem, e))
+            return 0;
+        e = xpost_stack_at(mem, e)->nextseg;
+    }
+    return 1;
+}
+
+
+/* Mark the record stacks a restore parked for reuse.
+
+   The pool is a chain through each parked stack's own prevseg, the last
+   naming itself, and nothing else in the heap reaches it. Those stacks
+   are entities, so a pool nothing marks is a pool the sweep empties out
+   from under the next save that takes one. */
+static
+int _xpost_garbage_mark_substack_pool(Xpost_Memory_File *mem)
+{
+    unsigned int e;
+
+    if (!mem) return 0;
+
+    e = mem->free_substack;
+    while (e)
+    {
+        unsigned int next;
+
+        if (!_xpost_garbage_mark_stack_segments(mem, e))
+            return 0;
+        next = xpost_stack_at(mem, e)->prevseg;
+        e = (next == e) ? 0 : next;
+    }
+    return 1;
+}
+
+
 /* mark all names in stack except 0::BOGUSNAME */
 static
 int _xpost_garbage_mark_names(Xpost_Context *ctx,
                               Xpost_Memory_File *mem,
-                              unsigned int stackadr,
+                              unsigned int stackent,
                               int markall)
 {
     unsigned int start = 1; /* skip 0::BOGUSNAME */
@@ -636,10 +696,13 @@ int _xpost_garbage_mark_names(Xpost_Context *ctx,
     if (!mem) return 0;
 
 #ifdef DEBUG_GC
-    printf("marking stack of size %d\n", xpost_stack_count(mem, stackadr));
+    printf("marking stack of size %d\n", xpost_stack_count(mem, stackent));
 #endif
 
-    for (s = xpost_stack_at(mem, stackadr); s;
+    if (!_xpost_garbage_mark_stack_segments(mem, stackent))
+        return 0;
+
+    for (s = xpost_stack_at(mem, stackent); s;
          s = xpost_stack_next_segment(mem, s), start = 0)
     {
         for (i = start; i < s->top; i++)
@@ -657,7 +720,7 @@ int _xpost_garbage_mark_names(Xpost_Context *ctx,
 static
 int _xpost_garbage_mark_stack(Xpost_Context *ctx,
                               Xpost_Memory_File *mem,
-                              unsigned int stackadr,
+                              unsigned int stackent,
                               int markall)
 {
     Xpost_Stack *s;
@@ -665,10 +728,13 @@ int _xpost_garbage_mark_stack(Xpost_Context *ctx,
     if (!mem) return 0;
 
 #ifdef DEBUG_GC
-    printf("marking stack of size %d\n", xpost_stack_count(mem, stackadr));
+    printf("marking stack of size %d\n", xpost_stack_count(mem, stackent));
 #endif
 
-    for (s = xpost_stack_at(mem, stackadr); s;
+    if (!_xpost_garbage_mark_stack_segments(mem, stackent))
+        return 0;
+
+    for (s = xpost_stack_at(mem, stackent); s;
          s = xpost_stack_next_segment(mem, s))
     {
         for (i = 0; i < s->top; i++)
@@ -688,7 +754,7 @@ int _xpost_garbage_mark_stack(Xpost_Context *ctx,
 static
 int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                    Xpost_Memory_File *mem,
-                                   unsigned int stackadr,
+                                   unsigned int stackent,
                                    int markall)
 {
     if (!mem) return 0;
@@ -701,10 +767,13 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
         (void)ctx;
 
 #ifdef DEBUG_GC
-        printf("marking saverec stack of size %d\n", xpost_stack_count(mem, stackadr));
+        printf("marking saverec stack of size %d\n", xpost_stack_count(mem, stackent));
 #endif
 
-    for (s = xpost_stack_at(mem, stackadr); s;
+    if (!_xpost_garbage_mark_stack_segments(mem, stackent))
+        return 0;
+
+    for (s = xpost_stack_at(mem, stackent); s;
          s = xpost_stack_next_segment(mem, s))
     {
         for (i = 0; i < s->top; i++)
@@ -783,7 +852,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
 static
 int _xpost_garbage_mark_save(Xpost_Context *ctx,
                              Xpost_Memory_File *mem,
-                             unsigned int stackadr,
+                             unsigned int stackent,
                              int markall)
 {
     Xpost_Stack *s;
@@ -791,10 +860,13 @@ int _xpost_garbage_mark_save(Xpost_Context *ctx,
     if (!mem) return 0;
 
 #ifdef DEBUG_GC
-    printf("marking save stack of size %d\n", xpost_stack_count(mem, stackadr));
+    printf("marking save stack of size %d\n", xpost_stack_count(mem, stackent));
 #endif
 
-    for (s = xpost_stack_at(mem, stackadr); s;
+    if (!_xpost_garbage_mark_stack_segments(mem, stackent))
+        return 0;
+
+    for (s = xpost_stack_at(mem, stackent); s;
          s = xpost_stack_next_segment(mem, s))
     {
         for (i = 0; i < s->top; i++)
@@ -1102,10 +1174,12 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
         if (markall)
             _xpost_garbage_unmark(ctx->gl);
 
-        ad = xpost_memory_save_stack_adr(mem);
+        ad = xpost_memory_save_stack_ent(mem);
         if (!_xpost_garbage_mark_save(ctx, mem, ad, markall))
             return -1;
-        ad = xpost_memory_name_stack_adr(mem);
+        if (!_xpost_garbage_mark_substack_pool(mem))
+            return -1;
+        ad = xpost_memory_name_stack_ent(mem);
 #ifdef DEBUG_GC
         printf("marking name stack\n");
 #endif
@@ -1121,10 +1195,12 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
            names. */
         if (markall && other)
         {
-            ad = xpost_memory_save_stack_adr(other);
+            ad = xpost_memory_save_stack_ent(other);
             if (!_xpost_garbage_mark_save(ctx, other, ad, markall))
                 return -1;
-            ad = xpost_memory_name_stack_adr(other);
+            if (!_xpost_garbage_mark_substack_pool(other))
+                return -1;
+            ad = xpost_memory_name_stack_ent(other);
             if (!_xpost_garbage_mark_names(ctx, other, ad, markall))
                 return -1;
         }

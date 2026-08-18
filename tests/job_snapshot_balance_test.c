@@ -75,12 +75,12 @@ static void allow_allocation(Xpost_Memory_File *mem)
 
 static int global_save_depth(Xpost_Context *ctx)
 {
-    return xpost_stack_count(ctx->gl, xpost_memory_save_stack_adr(ctx->gl));
+    return xpost_stack_count(ctx->gl, xpost_memory_save_stack_ent(ctx->gl));
 }
 
 static int local_save_depth(Xpost_Context *ctx)
 {
-    return xpost_stack_count(ctx->lo, xpost_memory_save_stack_adr(ctx->lo));
+    return xpost_stack_count(ctx->lo, xpost_memory_save_stack_ent(ctx->lo));
 }
 
 static char out_buf[64];

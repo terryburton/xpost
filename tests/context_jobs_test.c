@@ -92,12 +92,12 @@ static size_t out_sink(void *user, const char *buf, size_t len)
 
 static int global_save_depth(Xpost_Context *ctx)
 {
-    return xpost_stack_count(ctx->gl, xpost_memory_save_stack_adr(ctx->gl));
+    return xpost_stack_count(ctx->gl, xpost_memory_save_stack_ent(ctx->gl));
 }
 
 static int local_save_depth(Xpost_Context *ctx)
 {
-    return xpost_stack_count(ctx->lo, xpost_memory_save_stack_adr(ctx->lo));
+    return xpost_stack_count(ctx->lo, xpost_memory_save_stack_ent(ctx->lo));
 }
 
 /* Run one job to its end. A job under the returning semantics is not one

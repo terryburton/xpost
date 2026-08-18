@@ -82,23 +82,27 @@ typedef struct
 } Xpost_Stack;
 
 /**
- * @brief the stack segment at address @p stackadr in @p mem.
+ * @brief the stack segment entity @p stackent names in @p mem.
  *
- * The one spelling of a stack pointer. Stacks are reached from an address
- * far more often than anything else in virtual memory is, so the cast was
- * written out at eighty-four sites; it is written here instead. As with
- * every pointer into a memory file, an allocation in @p mem may move the
- * file and invalidate the result, so it is derived where it is used
- * rather than held across a call that can allocate.
+ * The one spelling of a stack pointer. Stacks are reached far more often
+ * than anything else in virtual memory is, so the cast was written out at
+ * eighty-four sites; it is written here instead. As with every pointer
+ * into a memory file, an allocation in @p mem may move the file and
+ * invalidate the result, so it is derived where it is used rather than
+ * held across a call that can allocate.
+ *
+ * A segment is an entity, so what every holder of a stack stores is the
+ * segment's number and the table says where its bytes are. A number
+ * survives the storage moving; an address would not.
  */
 static inline Xpost_Stack *
-xpost_stack_at(Xpost_Memory_File *mem, unsigned int stackadr)
+xpost_stack_at(Xpost_Memory_File *mem, unsigned int stackent)
 {
-    return (Xpost_Stack *)xpost_vm_ptr(mem, stackadr);
+    return (Xpost_Stack *)xpost_ent_ptr(mem, stackent);
 }
 
 /**
- * @brief the segment at @p stackadr, counted as one step of a chain walk.
+ * @brief the segment @p stackent names, as one step of a chain walk.
  *
  * The one spelling of a move to a segment's immediate neighbour, which
  * is what a walk of the chain is made of. Reaching a position in a stack
@@ -112,11 +116,11 @@ xpost_stack_at(Xpost_Memory_File *mem, unsigned int stackadr)
  * outright, however many segments lie between them.
  */
 static inline Xpost_Stack *
-xpost_stack_step(Xpost_Memory_File *mem, unsigned int stackadr)
+xpost_stack_step(Xpost_Memory_File *mem, unsigned int stackent)
 {
     if (mem->stack_walk < (unsigned int)INT_MAX)
         ++mem->stack_walk;
-    return xpost_stack_at(mem, stackadr);
+    return xpost_stack_at(mem, stackent);
 }
 
 /**
@@ -126,7 +130,7 @@ xpost_stack_step(Xpost_Memory_File *mem, unsigned int stackadr)
  * segment shorter than full is the stack's top and ends the walk; an
  * exactly-full segment continues into its successor if it has one. Walk
  * a whole stack as
- *     for (s = xpost_stack_at(mem, stackadr); s;
+ *     for (s = xpost_stack_at(mem, stackent); s;
  *          s = xpost_stack_next_segment(mem, s))
  *         for (i = 0; i < s->top; i++) ... s->data[i] ...
  * The usual caveat applies: an allocation in @p mem invalidates @p s.
@@ -140,44 +144,53 @@ xpost_stack_next_segment(Xpost_Memory_File *mem, Xpost_Stack *s)
 }
 
 /**
- * @brief Create a stack data structure, returns vm address in addr.
+ * @brief Make a stack, returning the entity of its first segment.
  */
-XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *addr);
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *ent);
+
+/**
+ * @brief Make a stack in a segment-sized entity that already exists.
+ *
+ * The name stack and the master save stack are special entities, whose
+ * numbers are fixed before any constructor runs, and each is its own
+ * stack's first segment rather than a row holding the number of one.
+ */
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_stack_init_in(Xpost_Memory_File *mem, unsigned int ent);
 
 /**
  * @brief Empty the stack.
  */
-void xpost_stack_clear(Xpost_Memory_File *mem, unsigned int stackadr);
+void xpost_stack_clear(Xpost_Memory_File *mem, unsigned int stackent);
 
 /**
  * @brief Dump the contents of a stack to stdout using xpost_object_dump.
  */
-void xpost_stack_dump(Xpost_Memory_File *mem, unsigned int stackadr);
+void xpost_stack_dump(Xpost_Memory_File *mem, unsigned int stackent);
 
 /**
  * @brief Count elements in stack.
  */
-int xpost_stack_count(Xpost_Memory_File *mem, unsigned int stackadr);
+int xpost_stack_count(Xpost_Memory_File *mem, unsigned int stackent);
 
 /**
  * @brief Put an object on top of the stack.
  */
 XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
-                                unsigned int stackadr,
+                                unsigned int stackent,
                                 Xpost_Object obj);
 
 /**
  * @brief Index the stack from the top down, fetching object.
  */
 Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,
-                                       unsigned stackadr,
+                                       unsigned stackent,
                                        int i);
 
 /**
  * @brief Index the stack from the top down, replacing object.
  */
 XPOST_MUST_CHECK int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
-                                unsigned stackadr,
+                                unsigned stackent,
                                 int i,
                                 Xpost_Object obj);
 
@@ -188,7 +201,7 @@ XPOST_MUST_CHECK int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
  * of xpost_stack_topdown_fetch per index would be O(n^2) on a segmented stack.
  */
 int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
-                                  unsigned stackadr,
+                                  unsigned stackent,
                                   int type,
                                   Xpost_Object *out);
 
@@ -200,7 +213,7 @@ int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
  * stack.
  */
 int xpost_stack_peek_top(Xpost_Memory_File *mem,
-                         unsigned stackadr,
+                         unsigned stackent,
                          int n,
                          Xpost_Object *out);
 
@@ -208,14 +221,14 @@ int xpost_stack_peek_top(Xpost_Memory_File *mem,
  * @brief Index the stack from the bottom up, fetching object.
  */
 Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
-                                        unsigned stackadr,
+                                        unsigned stackent,
                                         int i);
 
 /**
  * @brief Index the stack from the bottom up, replacing object.
  */
 XPOST_MUST_CHECK int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
-                                 unsigned stackadr,
+                                 unsigned stackent,
                                  int i,
                                  Xpost_Object obj);
 
@@ -223,7 +236,7 @@ XPOST_MUST_CHECK int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
  * @brief Pop the stack, remove and return top object.
  */
 XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
-                                        unsigned stackadr);
+                                        unsigned stackent);
 
 /**
  * @}

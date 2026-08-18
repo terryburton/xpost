@@ -150,7 +150,6 @@ int IIroll(Xpost_Context *ctx,
            Xpost_Object J)
 {
     Xpost_Object *src;
-    unsigned char *base;
     Xpost_Stack *root, *top, *seg;
     int n = N.int_.val;
     integer j;
@@ -169,17 +168,16 @@ int IIroll(Xpost_Context *ctx,
        a deep stack O(n^2). Snapshot the top n operands in a single top-down
        pass (src[0] is the topmost), then write them back rotated in one more
        pass, each position taking the operand the shared rule names.
-       Neither pass allocates VM, so the cached base/segment pointers stay
-       valid throughout. */
+       Neither pass allocates VM, so the segment pointers stay valid
+       throughout. */
     src = malloc((size_t)n * sizeof(Xpost_Object));
     if (!src)
         return VMerror;
 
     xpost_stack_peek_top(ctx->lo, ctx->os, n, src);
 
-    base = ctx->lo->base;
-    root = (Xpost_Stack *)(base + ctx->os);
-    top = (Xpost_Stack *)(base + root->prevseg);
+    root = xpost_stack_at(ctx->lo, ctx->os);
+    top = xpost_stack_at(ctx->lo, root->prevseg);
 
     seg = top; got = 0;
     while (got < n)
@@ -191,7 +189,7 @@ int IIroll(Xpost_Context *ctx,
             seg->data[t - 1 - m] = src[xpost_op_roll_source(got + m, n, j)];
         got += put;
         if (got < n)
-            seg = (Xpost_Stack *)(base + seg->prevseg);
+            seg = xpost_stack_at(ctx->lo, seg->prevseg);
     }
 
     free(src);

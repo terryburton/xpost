@@ -1528,7 +1528,7 @@ _file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
     }
     if (xpost_memory_save_stack_ready(mem))
     {
-        vs = xpost_memory_save_stack_adr(mem);
+        vs = xpost_memory_save_stack_ent(mem);
         depth = (unsigned int)xpost_stack_count(mem, vs);
     }
     if (depth > 254)

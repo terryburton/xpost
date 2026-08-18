@@ -1,0 +1,88 @@
+% Collecting while a stack is segmented, run through `xpost -d null`
+% by run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% A stack is a chain of segments, each an entity of its own, and the
+% collector marks every one of them as it walks the stack. An entity
+% nothing marks is one the sweep takes back, and what it would be taking
+% back here is the stack the program is running on.
+%
+% Two things separate this from a stack that merely gets deep. A stack
+% that grew and then shrank keeps the segments above its top chained,
+% and a later push moves straight back into them rather than making
+% another: those segments hold nothing a read of the stack would reach,
+% so a mark that followed what a read follows would miss exactly them.
+% And a save owns a record stack of its own, which a restore parks for a
+% later save to take; nothing else in the heap reaches what is parked.
+%
+% Each fixture is read back after the collection, so a segment handed
+% away and written over shows up as a lost value and not only as a
+% process that died.
+
+/failcount 0 def
+/assert { % bool (name)  .  -
+    exch { pop } { (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+} def
+
+% --- grow past several segments, shrink below one, grow again ---
+%
+% The regrowth reuses the segments the shrink left chained above the
+% top. A collection runs while they are up there holding nothing.
+
+/deep 3500 def
+/shallow 80 def
+/regrow 2500 def
+
+/cycle {
+    0 1 deep { } for
+    count deep ge
+        (a stack holds what was pushed across several segments) assert
+    count shallow sub { pop } repeat
+    1 vmreclaim
+    0 1 regrow { } for
+    count regrow ge
+        (a stack regrown into its spare segments holds what was pushed) assert
+    % the values are the loop counter, so the topmost says how far it got
+    regrow eq
+        (the top of a regrown stack is the value last pushed) assert
+    clear
+} def
+
+1 1 8 { pop cycle } for
+
+% --- a save's record stack, and the pool a restore parks it in ---
+%
+% Each pass takes a save, makes work for its record stack, restores, and
+% collects. The restore parks the record stack where only the collector
+% is told to look, and the next save takes it back out again.
+
+/d 200 dict def
+0 1 199 { /k exch def d k k 2 mul put } for
+
+1 1 8 {
+    pop
+    /snap save def
+    0 1 1500 { } for
+    /scratch 60 dict def
+    0 1 59 { /k exch def scratch k k 3 mul put } for
+    count 1500 ge
+        (a stack stays whole while a save records what changed) assert
+    clear
+    snap restore
+    1 vmreclaim
+} for
+
+d 100 get 200 eq
+    (a dictionary written before a save survives the restores) assert
+
+% --- the name stack, which chains segments of its own ---
+
+1 1 1200 { 20 string cvs cvn pop } for
+2 vmreclaim
+/zzzmarker 12345 def
+zzzmarker 12345 eq
+    (a name interned after a collection resolves to its value) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
+flush
+quit

@@ -101,8 +101,8 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem,
     _verify_push(ctx, ctx->f, 0xFFFFFFFF, 3);
     XPOST_CONTEXT_OBJECT_ROOTS(XPOST_VERIFY_CONTEXT_ROOT)
 #undef XPOST_VERIFY_CONTEXT_ROOT
-    _verify_stack(ctx, ctx->gl, xpost_memory_name_stack_adr(ctx->gl));
-    _verify_stack(ctx, ctx->lo, xpost_memory_name_stack_adr(ctx->lo));
+    _verify_stack(ctx, ctx->gl, xpost_memory_name_stack_ent(ctx->gl));
+    _verify_stack(ctx, ctx->lo, xpost_memory_name_stack_ent(ctx->lo));
 
     while (head < _vq_n)
     {

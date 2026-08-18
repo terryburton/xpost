@@ -167,8 +167,8 @@ if [ -s "$work/strays" ]; then
     echo "FAIL: a special entity is named outside its constructor:"
     cat "$work/strays"
     echo "      call the accessor for it in xpost_memory.h --"
-    echo "      xpost_memory_save_stack_adr(mem) and its siblings, which"
-    echo "      return the address directly because it cannot be missing"
+    echo "      xpost_memory_save_stack_ent(mem) and its siblings, which"
+    echo "      answer directly because the entity cannot be missing"
     fail=1
 fi
 
@@ -186,17 +186,19 @@ done < "$work/permitted"
 
 nspecial=$(sed -n '/^} Xpost_Memory_Table_Special;/q;p' "$header" \
            | grep -c '^ *XPOST_MEMORY_TABLE_SPECIAL_[A-Z_]*,\{0,1\}$')
-naccessor=$(grep -c '^xpost_memory_[a-z_]*_adr(Xpost_Memory_File \*mem)$' "$header")
+naccessor=$(grep -cE '^xpost_memory_[a-z_]*_(adr|ent)\(Xpost_Memory_File \*mem\)$' "$header")
 if [ "$nspecial" -lt 7 ]; then
     echo "FAILURES: the special-entity enum parsed as only $nspecial members;"
     echo "      it moved or changed shape and this check no longer reads it"
     exit 1
 fi
 # FREE, SAVE_STACK, CONTEXT_LIST, NAME_STACK, NAME_TREE, OPERATOR_TABLE each
-# have an address accessor. BOGUS_NAME is an entity number, not a structure,
+# have an accessor. Four return an address; the two stacks return an entity,
+# because a stack segment is an entity and each of those specials is its own
+# stack's first segment. BOGUS_NAME is an entity number, not a structure,
 # and is named only where the name stack is built.
 if [ "$naccessor" -ne 6 ]; then
-    echo "FAILURES: $naccessor address accessors for $nspecial special"
+    echo "FAILURES: $naccessor accessors for $nspecial special"
     echo "      entities; an entity without one has nothing to reach it by"
     echo "      and its callers will go back to the fallible lookup"
     exit 1
@@ -228,6 +230,17 @@ for f in "$lib"/*.c "$lib"/*.h; do
             code = code substr(line, 1, i - 1)
             line = substr(line, i + 2); incomment = 1
         }
+        # A local holding a memory file\047s base defeats the rule below:
+        # once copied, base + adr reads as arithmetic on an ordinary
+        # pointer and no arrow is left to find. That is how a stack was
+        # reached at seven sites. The relocation detector keeps a base to
+        # compare rather than to add to, and is what it is by its
+        # spelling.
+        if (code ~ /=[ \t]*[A-Za-z_][A-Za-z0-9_>.-]*->base[ \t]*;/ &&
+            code !~ /sp->base/ && code !~ /seen_/) {
+            printf "%s %d\n", FILENAME, FNR
+            next
+        }
         if (code !~ /->base[ \t]*\+/) next
         if (code ~ /b->buf[ \t]*\+[ \t]*b->base/) next     # record buffer
         if (code ~ /ctx->base[ \t]*\+[ \t]*ctx->length/) next  # DSC document
@@ -240,6 +253,8 @@ if [ -s "$work/derivations" ]; then
     sed 's/ /:/; s/^/      /' "$work/derivations"
     echo "      use xpost_vm_ptr(mem, adr), or the typed spelling built on"
     echo "      it -- xpost_stack_at, xpost_dict_head, xpost_operator_table."
+    echo "      A line holding a base in a local is reported for the same"
+    echo "      reason: it is where the next such derivation comes from."
     echo "      The base moves under any allocation; one spelling is what"
     echo "      lets that be dealt with in one place rather than 156"
     fail=1

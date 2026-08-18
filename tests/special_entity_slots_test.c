@@ -101,7 +101,7 @@ int main(void)
        so its slot is the one no shared check covers. */
     {
         Xpost_Object o;
-        unsigned int nstk = xpost_memory_name_stack_adr(ctx->gl);
+        unsigned int nstk = xpost_memory_name_stack_ent(ctx->gl);
 
         o = xpost_stack_bottomup_fetch(ctx->gl, nstk, 0);
         if (xpost_object_get_ent(o) != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)

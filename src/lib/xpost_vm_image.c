@@ -694,16 +694,16 @@ static int _put_bank(_Writer *w, Xpost_Context *ctx, unsigned int bank,
    the image sees. */
 static void _clear_scratch(Xpost_Context *ctx)
 {
-    unsigned int adr = ctx->hold;
+    unsigned int ent = ctx->hold;
 
-    xpost_stack_clear(ctx->lo, adr);
-    while (adr)
+    xpost_stack_clear(ctx->lo, ent);
+    while (ent)
     {
-        Xpost_Stack *seg = xpost_stack_at(ctx->lo, adr);
+        Xpost_Stack *seg = xpost_stack_at(ctx->lo, ent);
         unsigned int next = seg->nextseg;
 
         memset(seg->data, 0, sizeof seg->data);
-        adr = next;
+        ent = next;
     }
 }
 

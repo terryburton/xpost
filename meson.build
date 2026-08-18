@@ -1682,6 +1682,23 @@ test('gc-deep-chain',
   suite: cost_fast,
   timeout: 300)
 
+# A stack is a chain of segments, each an entity, and the collector marks
+# every one of them as it walks the stack. What separates this from a
+# stack that merely gets deep is where the unmarked ones would be: a
+# stack that grew and then shrank keeps the segments above its top
+# chained for a later push to move back into, and they hold nothing a
+# read of the stack would reach, so a mark following what a read follows
+# misses exactly those. A save's record stack is the other such place --
+# a restore parks it where only the collector is told to look. Each
+# fixture is read back after collecting, so a segment handed away and
+# written over is a lost value and not only a process that died.
+test('gc-stack-segments',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gc_stack_segments_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # A collection nothing asked for, provoked by the entity table rather
 # than by the bytes behind it. A finely divided clipping region costs
 # tens of thousands of entity slots and the next clip leaves every one
