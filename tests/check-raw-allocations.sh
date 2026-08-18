@@ -75,7 +75,11 @@ if ! grep -q . "$work/found" && ! grep -q "^none" "$golden"; then
     exit 1
 fi
 
-sed -n 's/^\(settled\|blocks\)  *\([^ ]*\)  *\([^ ]*\).*/\2 \3/p' "$golden" \
+# Read with awk rather than with a sed alternation: `\|` inside a basic
+# regular expression is a GNU extension, and the sed in the base system of
+# macOS takes it as a literal bar. The register would come out empty there
+# and every call site would be reported as unregistered.
+awk '$1 == "settled" || $1 == "blocks" { print $2, $3 }' "$golden" \
     | sort -u > "$work/register"
 
 fail=0

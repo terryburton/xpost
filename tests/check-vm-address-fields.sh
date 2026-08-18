@@ -146,7 +146,11 @@ if [ "$nfound" -lt 40 ]; then
     exit 1
 fi
 
-sed -n 's/^\(address\|count\)  *\([^ ]*\)  *\([^ ]*\).*/\2 \3/p' "$golden" \
+# Read with awk rather than with a sed alternation: `\|` inside a basic
+# regular expression is a GNU extension, and the sed in the base system of
+# macOS takes it as a literal bar. The register would come out empty there
+# and every declared member would be reported as having no disposition.
+awk '$1 == "address" || $1 == "count" { print $2, $3 }' "$golden" \
     | sort -u > "$work/register"
 
 fail=0
@@ -167,7 +171,7 @@ guard_hold "$work/found" "$work/register" \
 # count satisfies it either way and the register passes while
 # contradicting itself -- which is what happened when three members were
 # reclassified and the old rows were not taken out.
-sed -n 's/^\(address\|count\)  *\([^ ]*\)  *\([^ ]*\).*/\2 \3/p' "$golden" \
+awk '$1 == "address" || $1 == "count" { print $2, $3 }' "$golden" \
     | sort | uniq -d > "$work/twice"
 if [ -s "$work/twice" ]; then
     echo "FAIL: registered more than once. A member has one disposition;"
