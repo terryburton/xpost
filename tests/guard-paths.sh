@@ -435,3 +435,33 @@ guard_pnm_ink() {   # <file> -> "ink <n>" or "blank"
 guard_pnm_bilevel() {   # <file> -> "yes" or "no"
     od -An -v -tu1 -N2 "$1" | awk '{ print ($2 == 52) ? "yes" : "no" }'
 }
+
+# The count a register declares for a kind of entry, held against what the
+# derivation actually found.
+#
+# A register that says how many entries it carries holds itself to a
+# number, and that number is what catches an entry deleted rather than
+# edited: what is gone leaves no line to disagree with, so the entries
+# alone cannot show it. The declaration is only worth carrying if
+# something compares it, and a declared count that nothing compares reads
+# exactly like one that is checked.
+#
+# Returns non-zero when the count is missing or wrong, and sets guard_held,
+# so a caller may test each call or fold them all at the end.
+guard_hold_count() {    # <register> <keyword> <how many were derived>
+    _ghc_n=$(awk -v K="$2" '$1 == K && NF == 2 && $2 ~ /^[0-9]+$/ && !f {
+                                print $2; f = 1 }' "$1")
+    case ${_ghc_n:-} in
+        ''|*[!0-9]*)
+            echo "FAILURES: the register has no '$2 <n>' line, so the entries"
+            echo "          below it are held to nothing but each other"
+            guard_held=1
+            return 1 ;;
+        *)  if [ "$_ghc_n" -ne "$3" ]; then
+                echo "FAILURES: the register records $2 $_ghc_n and holds $3"
+                guard_held=1
+                return 1
+            fi ;;
+    esac
+    return 0
+}

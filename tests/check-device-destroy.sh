@@ -951,17 +951,8 @@ guard_hold "$work/recorded-exempt" "$work/exempt" \
       collector owns; say so in tests/device_destroy.golden:"
 [ "$guard_held" -eq 0 ] || fail=1
 
-count() {           # <keyword> <have>
-    n=$(awk -v K="$1" '$1 == K && !found { print $2; found = 1 } END { if (!found) print "" }' "$golden")
-    case $n in
-        ''|*[!0-9]*)
-            echo "FAILURES: the register has no '$1 <n>' line"
-            fail=1 ;;
-        *)  if [ "$n" -ne "$2" ]; then
-                echo "FAILURES: the register records $1 $n and holds $2"
-                fail=1
-            fi ;;
-    esac
+count() {           # <keyword> <how many were derived>
+    guard_hold_count "$golden" "$1" "$2" || fail=1
 }
 count entries "$(grep -c . "$work/recorded")"
 count exemptions "$(grep -c . "$work/recorded-exempt")"

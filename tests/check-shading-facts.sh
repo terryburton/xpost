@@ -136,18 +136,8 @@ guard_hold "$work/reg.type" "$work/table" \
 [ "$guard_held" -eq 0 ] || fail=1
 
 # ---- the counts the register states
-count() {           # <keyword> <have>
-    n=$(awk -v K="$1" '$1 == K && NF == 2 && $2 ~ /^[0-9]+$/ && !f { print $2; f = 1 }' \
-        "$work/reg")
-    case ${n:-} in
-        ''|*[!0-9]*)
-            echo "FAILURES: the register has no '$1 <n>' line"
-            fail=1 ;;
-        *)  if [ "$n" -ne "$2" ]; then
-                echo "FAILURES: the register records $1 $n and holds $2"
-                fail=1
-            fi ;;
-    esac
+count() {           # <keyword> <how many were derived>
+    guard_hold_count "$work/reg" "$1" "$2" || fail=1
 }
 count types "$(grep -c . "$work/reg.type")"
 count widths "$(grep -c . "$work/reg.width")"

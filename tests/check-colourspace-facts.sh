@@ -298,12 +298,8 @@ if ! cmp -s "$work/reg.base" "$work/got.base"; then
     fail=1
 fi
 
-count() {           # <keyword> <have>
-    n=$(awk -v K="$1" '$1 == K && NF == 2 && $2 ~ /^[0-9]+$/ && !f { print $2; f = 1 }' "$work/reg")
-    case ${n:-} in
-        ''|*[!0-9]*) echo "FAILURES: the register has no '$1 <n>' line"; fail=1 ;;
-        *) [ "$n" -eq "$2" ] || { echo "FAILURES: the register records $1 $n and holds $2"; fail=1; } ;;
-    esac
+count() {           # <keyword> <how many were derived>
+    guard_hold_count "$work/reg" "$1" "$2" || fail=1
 }
 count families    "$(grep -c . "$work/reg.fam")"
 count tables      "$(grep -c . "$work/reg.table")"

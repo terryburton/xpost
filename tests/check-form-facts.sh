@@ -223,12 +223,8 @@ while read -r cond want rest; do
     echo "$cond $n" >> "$work/got.cache"
 done < "$work/reg.cache"
 
-count() {           # <keyword> <have>
-    n=$(awk -v K="$1" '$1 == K && NF == 2 && $2 ~ /^[0-9]+$/ && !f { print $2; f = 1 }' "$work/reg")
-    case ${n:-} in
-        ''|*[!0-9]*) echo "FAILURES: the register has no '$1 <n>' line"; fail=1 ;;
-        *) [ "$n" -eq "$2" ] || { echo "FAILURES: the register records $1 $n and holds $2"; fail=1; } ;;
-    esac
+count() {           # <keyword> <how many were derived>
+    guard_hold_count "$work/reg" "$1" "$2" || fail=1
 }
 count types "$(grep -c . "$work/reg.type")"
 count entries "$(grep -c . "$work/reg.entry")"
