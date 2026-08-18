@@ -228,7 +228,7 @@ awk '
     /^[ \t]/ { if (last != "") prose[last] = prose[last] + 1; next }
     NF == 0 { next }
     $1 == "question" || $1 == "method" || $1 == "state" || $1 == "part" ||
-    $1 == "elsewhere" || $1 == "open" || $1 == "trait" {
+    $1 == "elsewhere" || $1 == "open" || $1 == "trait" || $1 == "tune" {
         print "KIND", $2, $1 > (out "/reg.kind")
         line = ""
         for (i = 3; i <= NF; i++) line = line " " $i
@@ -271,7 +271,8 @@ fi
 # held out of the comparison against what the devices state and checked
 # against the tree below instead.
 awk '$3 == "trait" { print $2 }' "$work/reg.kind" | sort > "$work/keys.trait"
-awk '$3 != "trait" { print $2 }' "$work/reg.kind" | sort > "$work/keys.reg"
+awk '$3 == "tune"  { print $2 }' "$work/reg.kind" | sort > "$work/keys.tune"
+awk '$3 != "trait" && $3 != "tune" { print $2 }' "$work/reg.kind" | sort > "$work/keys.reg"
 if [ "$(sort "$work/keys.reg" | uniq -d | grep -c . || true)" -ne 0 ]; then
     echo "FAIL: tests/device-facts classifies an entry twice:"
     sort "$work/keys.reg" | uniq -d | sed 's/^/      /'
@@ -413,6 +414,77 @@ while read -r t; do
     fi
 done < "$work/keys.trait"
 
+# ---- the tuning options, which are not on a class either
+#
+# A compiled driver may read a knob out of userdict when it builds or
+# opens its instance -- how hard its codec compresses, whether its image
+# interlaces, which row filters its codec may choose between. Such a
+# knob is not a key on a class, so the comparison above cannot see it;
+# what it is is a word in the run's vocabulary, and a word added to one
+# member of the family must force the question for the rest exactly as
+# a class entry does.
+#
+# The population is derived by the mechanism, not the spelling: a read
+# of userdict through xpost_dict_get(ctx, ud, xpost_name_cons(ctx,
+# "...")) in a device's driver is a tuning option whatever it is called.
+# A device is charged with every option its driver body reads, which is
+# what makes two devices out of one body carry the same set. Comments
+# are stripped first, string contents kept, so a call written about is
+# not a call.
+: > "$work/tune.derived"
+while read -r d; do
+    f=$(driver_of "$d")
+    [ -n "$f" ] || continue
+    awk '
+        FNR == 1 { inblock = 0 }
+        {
+            line = $0; sub(/\r$/, "", line)
+            out = ""; i = 1; n = length(line)
+            while (i <= n) {
+                c = substr(line, i, 1); t = substr(line, i, 2)
+                if (inblock) {
+                    if (t == "*/") { inblock = 0; i += 2 } else i++
+                    continue
+                }
+                if (t == "/*") { inblock = 1; i += 2; continue }
+                if (t == "//") break
+                out = out c; i++
+            }
+            printf "%s ", out
+        }' "$f" \
+    | grep -o 'xpost_dict_get(ctx, *ud, *xpost_name_cons(ctx, *"[A-Za-z0-9_]*")' \
+    | sed 's/.*"\([A-Za-z0-9_]*\)")$/\1/' \
+    | while read -r o; do echo "$o $d" >> "$work/tune.derived"; done
+done < "$work/made"
+sort -u "$work/tune.derived" -o "$work/tune.derived"
+
+awk '{ print $1 }' "$work/tune.derived" | sort -u > "$work/tune.keys"
+guard_held=0
+guard_hold "$work/tune.keys" "$work/keys.tune" \
+    "read out of userdict by a device driver and not classified by
+      tests/device-facts. A knob one member of the family grew is a
+      question the rest have been asked; say what it tunes and which
+      devices read it." \
+    "classified as a tuning option and read by no driver. The knob is
+      gone or renamed; the line excusing it is cover for the next one."
+[ "$guard_held" -eq 0 ] || fail=1
+
+while read -r t; do
+    want=$(awk -v t="$t" '$1 == t { for (i = 2; i <= NF; i++) print $i }' \
+           "$work/reg.carry" | sort -u | tr '\n' ' ')
+    got=$(awk -v t="$t" '$1 == t { print $2 }' "$work/tune.derived" \
+          | sort -u | tr '\n' ' ')
+    if [ "$want" != "$got" ]; then
+        echo "FAIL: the tuning option $t is read by a different set of devices"
+        echo "      than the register names."
+        echo "        register: ${want:-(none)}"
+        echo "        the tree: ${got:-(none)}"
+        echo "      An option is read from the driver body, so every device"
+        echo "      that body makes carries it, asked for or not."
+        fail=1
+    fi
+done < "$work/keys.tune"
+
 # ---- the slots of the page codec
 #
 # Carrying a codec is one bit, and the register held only that bit. A
@@ -528,7 +600,7 @@ done < "$work/codecgap.reg"
 # differing about anything. method is not asked yet, and the entry for
 # that is below.
 awk '$3 == "question" || $3 == "elsewhere" || $3 == "open" ||
-     $3 == "part" || $3 == "trait" { print $2 }' \
+     $3 == "part" || $3 == "trait" || $3 == "tune" { print $2 }' \
     "$work/reg.kind" | sort > "$work/needdisp"
 while read -r k; do
     n=$(awk -v k="$k" '$1 == k { c++ } END { print c + 0 }' "$work/reg.disp")

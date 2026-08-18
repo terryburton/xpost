@@ -108,6 +108,10 @@ typedef struct
     unsigned char *ground;
     unsigned int interlaced : 1;
     unsigned int alpha : 1;
+    /* the row filters the codec may choose between, as the library
+       spells the set; 0 is the whole menu, which is the library's own
+       default and so asks it for nothing */
+    unsigned char filters;
     /* the device allocated buf and has not handed it to the client
        through OutputBufferOut, so Destroy frees it */
     unsigned int bufowned : 1;
@@ -241,6 +245,53 @@ int _create_cont(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("PNG interlacing: %s",
                    (private.interlaced == PNG_INTERLACE_ADAM7) ? "Adam7" : "none");
+
+    /* Which row filters the codec may choose between. Choosing is a
+       walk of every row under each candidate, so the choice is paid per
+       row written and a page of flat runs buys nothing with it; a
+       caller who knows its pages can narrow the menu. The default is
+       the whole menu, which is what the library does unasked, so a run
+       that says nothing gets today's bytes.
+
+       The vocabulary is closed, and a word outside it is refused the
+       way a device refuses a mode it does not take: a value that fell
+       back to the default silently would leave a misspelling choosing
+       the dearest filters and reporting nothing. */
+    private.filters = 0;
+    {
+        Xpost_Object filter_o = xpost_dict_get(ctx, ud,
+                                               xpost_name_cons(ctx, "png_filter"));
+
+        if (xpost_object_get_type(filter_o) != invalidtype)
+        {
+            Xpost_Object str = filter_o;
+            const char *t = NULL;
+            unsigned int tn = 0;
+
+            if (xpost_object_get_type(str) == nametype)
+                str = xpost_name_get_string(ctx, str);
+            if (xpost_object_get_type(str) == stringtype)
+            {
+                t = xpost_string_get_pointer(ctx, str);
+                tn = str.comp_.sz;
+            }
+            if (t && tn == 8 && memcmp(t, "adaptive", 8) == 0)
+                private.filters = 0;
+            else if (t && tn == 11 && memcmp(t, "none-sub-up", 11) == 0)
+                private.filters = PNG_FILTER_NONE | PNG_FILTER_SUB
+                                | PNG_FILTER_UP;
+            else if (t && tn == 4 && memcmp(t, "none", 4) == 0)
+                private.filters = PNG_FILTER_NONE;
+            else
+            {
+                XPOST_LOG_ERR("%d the png device takes no filter \"%.*s\";"
+                              " the filters it takes are: adaptive,"
+                              " none-sub-up, none", rangecheck,
+                              t ? (int)tn : 0, t ? t : "");
+                return rangecheck;
+            }
+        }
+    }
 
     /* The run of the page's rows this device is to hold. It is held
        whole where no row of it can be given up before the page is
@@ -693,6 +744,10 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
     png_set_sBIT(p->png, p->info, &sig_bit);
 
     png_set_compression_level(p->png, compression_level);
+    /* the whole menu is the library's own default: asked for nothing,
+       nothing is asked, and the bytes are the bytes it always wrote */
+    if (p->filters)
+        png_set_filter(p->png, PNG_FILTER_TYPE_BASE, p->filters);
     png_write_info(p->png, p->info);
     if (!p->alpha)
         /* rows carry a fourth byte per pixel; skip it when writing RGB */

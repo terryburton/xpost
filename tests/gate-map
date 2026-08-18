@@ -178,6 +178,7 @@ device test oversize-page
 device test page-*
 device test pdf-*
 device test pngalpha-device
+device test png-filter-vocabulary
 device test raster-*
 device test render-*
 device test setpagedevice-failure

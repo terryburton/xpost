@@ -2415,6 +2415,17 @@ test('pngalpha-device',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# png row filters: a closed vocabulary naming which filters the codec
+# may choose between per row. Saying nothing and saying adaptive are the
+# same bytes, every word yields the same pixels, narrowing to none costs
+# size on the flat-run page the option exists for, and a word outside
+# the vocabulary is refused by name with the roster.
+test('png-filter-vocabulary',
+  find_program('tests/run-png-filter-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Save/restore VM: drive the entity count past 65536 and require dicts and
 # arrays to revert exactly -- guards the saverec entity-width truncation.
 test('save-restore',

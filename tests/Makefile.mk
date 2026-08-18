@@ -444,6 +444,7 @@ tests/run-pdf-consumer-test.sh \
 tests/run-pdf-global-vm-test.sh \
 tests/run-pdf-pipe-test.sh \
 tests/run-pdf-test.sh \
+tests/run-png-filter-test.sh \
 tests/run-pngalpha-test.sh \
 tests/run-ppm-test.sh \
 tests/run-profile.sh \
