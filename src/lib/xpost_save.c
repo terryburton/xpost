@@ -69,12 +69,13 @@ int xpost_save_init(Xpost_Memory_File *mem)
     Xpost_Memory_Table *tab;
     int ret;
 
-    ret = xpost_memory_table_alloc(mem, 0, 0, &ent); /* allocate an entry of zero length */
+    ret = xpost_memory_table_alloc_special(mem, 0, 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK,
+                                           &ent); /* an entry of zero length */
     if (!ret)
     {
         return 0;
     }
-    assert(ent == XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK);
 
     if (!xpost_stack_init(mem, &t))
     {

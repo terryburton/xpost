@@ -140,14 +140,14 @@ int xpost_free_init(Xpost_Memory_File *mem)
        allocate additional 1k "scratch" space to protect
        interpreter data from NULL writes
      */
-    ret = xpost_memory_table_alloc(mem, 1024, 0, &ent);
+    ret = xpost_memory_table_alloc_special(mem, 1024, 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_FREE, &ent);
     if (!ret)
     {
         return 0;
     }
 
     /* make sure this is the correct ent */
-    assert (ent == XPOST_MEMORY_TABLE_SPECIAL_FREE);
 
     /* set all bucket heads to zero (== NULL == end of list) */
     {

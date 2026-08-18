@@ -215,20 +215,20 @@ int xpost_name_init(Xpost_Context *ctx)
 
     mode = ctx->vmmode;
     ctx->vmmode = GLOBAL;
-    ret = xpost_memory_table_alloc(ctx->gl, 0, 0, &ent); //gl:NAMES
+    ret = xpost_memory_table_alloc_special(ctx->gl, 0, 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK,
+                                           &ent);
     if (!ret)
     {
         return 0;
     }
-    if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)
-        XPOST_LOG_ERR("Warning: name stack is not in special position");
-    ret = xpost_memory_table_alloc(ctx->gl, 0, 0, &ent); //gl:NAMET
+    ret = xpost_memory_table_alloc_special(ctx->gl, 0, 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE,
+                                           &ent);
     if (!ret)
     {
         return 0;
     }
-    if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE)
-        XPOST_LOG_ERR("Warning: name tree is not in special position");
 
     if (!xpost_stack_init(ctx->gl, &t))
     {
@@ -240,23 +240,32 @@ int xpost_name_init(Xpost_Context *ctx)
     xpost_memory_set_name_tree(ctx->gl, 0, 0);
     nstk = xpost_memory_name_stack_adr(ctx->gl);
     xpost_stack_push(ctx->gl, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
-    assert (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->gl, nstk, 0)) == XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME);
+    /* The name no program can spell takes the slot after the tree's. It is
+       not allocated through the table allocator -- it is the first string
+       pushed on the name stack -- so it is held to its slot here, for the
+       reason given where that allocator's own check is defined. */
+    if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->gl, nstk, 0))
+        != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
+    {
+        XPOST_LOG_ERR("%d the bogus name is not in its special position", VMerror);
+        return 0;
+    }
 
     ctx->vmmode = LOCAL;
-    ret = xpost_memory_table_alloc(ctx->lo, 0, 0, &ent); //lo:NAMES
+    ret = xpost_memory_table_alloc_special(ctx->lo, 0, 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK,
+                                           &ent);
     if (!ret)
     {
         return 0;
     }
-    if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)
-        XPOST_LOG_ERR("Warning: name stack is not in special position");
-    ret = xpost_memory_table_alloc(ctx->lo, 0, 0, &ent); //lo:NAMET
+    ret = xpost_memory_table_alloc_special(ctx->lo, 0, 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE,
+                                           &ent);
     if (!ret)
     {
         return 0;
     }
-    if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE)
-        XPOST_LOG_ERR("Warning: name tree is not in special position");
 
     if (!xpost_stack_init(ctx->lo, &t))
     {
@@ -268,8 +277,12 @@ int xpost_name_init(Xpost_Context *ctx)
     xpost_memory_set_name_tree(ctx->lo, 0, 0);
     nstk = xpost_memory_name_stack_adr(ctx->lo);
     xpost_stack_push(ctx->lo, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
-    if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0)) != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
-        XPOST_LOG_ERR("Warning: bogus name not in special position");
+    if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0))
+        != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
+    {
+        XPOST_LOG_ERR("%d the bogus name is not in its special position", VMerror);
+        return 0;
+    }
 
     ctx->vmmode = mode;
 

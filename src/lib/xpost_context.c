@@ -87,12 +87,12 @@ int xpost_context_init_ctxlist(Xpost_Memory_File *mem)
     unsigned int ent;
     int ret;
 
-    ret = xpost_memory_table_alloc(mem, MAXCONTEXT * sizeof(unsigned int), 0, &ent);
+    ret = xpost_memory_table_alloc_special(mem, MAXCONTEXT * sizeof(unsigned int), 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST, &ent);
     if (!ret)
     {
         return 0; /* was unregistered error */
     }
-    assert(ent == XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST);
     memset(xpost_vm_ptr(mem, xpost_memory_context_list_adr(mem)), 0,
            MAXCONTEXT * sizeof(unsigned int));
 

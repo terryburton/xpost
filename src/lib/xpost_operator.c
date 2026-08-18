@@ -352,13 +352,14 @@ int xpost_operator_init_optab(Xpost_Context *ctx)
     Xpost_Memory_Table *tab;
     int ret;
 
-    ret = xpost_memory_table_alloc(ctx->gl, MAXOPS * sizeof(Xpost_Operator), 0, &ent);
+    ret = xpost_memory_table_alloc_special(ctx->gl, MAXOPS * sizeof(Xpost_Operator), 0,
+                                           XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
+                                           &ent);
     if (!ret)
     {
         return 0;
     }
     tab = &ctx->gl->table;
-    assert(ent == XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE);
     (void)tab;
     /* The row keeps the size the table really occupies. The collector
        does not reach this entity because of where it sits: its domain

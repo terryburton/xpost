@@ -19,7 +19,7 @@
 # shrank says so with a number that went down -- a diff dropping a name
 # and its mark together otherwise reads as a tidy-up.
 
-entries 25
+entries 26
 
 xpost_array_put
 xpost_array_put_memory
@@ -38,6 +38,7 @@ xpost_memory_file_init
 xpost_memory_get
 xpost_memory_put
 xpost_memory_table_alloc
+xpost_memory_table_alloc_special
 xpost_memory_table_init
 xpost_stack_bottomup_replace
 xpost_stack_init

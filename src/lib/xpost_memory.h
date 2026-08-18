@@ -850,6 +850,37 @@ XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_alloc(Xpost_Memory_Fi
                                         unsigned int *entity);
 
 /**
+ * @brief Allocate the entity a special is required to occupy.
+ *
+ * The special entities are reached by number: every accessor above
+ * subscripts the table with an enumerator, and the collector's domain
+ * begins one past the last of them. Both of those read the number rather
+ * than search for the entity, so a special that did not land on its own
+ * slot is not a cosmetic problem -- an accessor hands back another
+ * entity's storage, and the boundary the collector starts at falls in the
+ * wrong place, putting a root inside its domain.
+ *
+ * Nothing arranges the numbering except the order the constructors run
+ * in, so it is checked here, once, on the way out of the allocator. A
+ * mismatch is refused rather than asserted: an interpreter that cannot be
+ * built is a failure the caller can report, where an abort takes down a
+ * process that only embedded this library, and an assertion is not there
+ * at all in a build configured without them.
+ *
+ * @param[in] mem The memory file.
+ * @param[in] sz Bytes the entity is to hold.
+ * @param[in] tag The type tag to record.
+ * @param[in] want The slot this entity has to land on.
+ * @param[out] entity Where the entity number is written.
+ * @return 1 on success, 0 if the allocation or the slot was refused.
+ */
+XPOST_MUST_CHECK int xpost_memory_table_alloc_special(Xpost_Memory_File *mem,
+                                                      unsigned int sz,
+                                                      unsigned int tag,
+                                                      unsigned int want,
+                                                      unsigned int *entity);
+
+/**
  * @brief Get the address from an entity.
  *
  * @param[in] mem The memory file.

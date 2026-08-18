@@ -1227,6 +1227,29 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
     return ret;
 }
 
+int
+xpost_memory_table_alloc_special(Xpost_Memory_File *mem,
+                                 unsigned int sz,
+                                 unsigned int tag,
+                                 unsigned int want,
+                                 unsigned int *entity)
+{
+    unsigned int ent;
+
+    if (!xpost_memory_table_alloc(mem, sz, tag, &ent))
+        return 0;
+    if (ent != want)
+    {
+        XPOST_LOG_ERR("%d special entity %u landed on slot %u: the slots are "
+                      "filled in the order the constructors run and one has "
+                      "run out of turn", VMerror, want, ent);
+        return 0;
+    }
+    *entity = ent;
+    return 1;
+}
+
+
 
 #define CHECK_VALID_ENT(ent,mem,ret) \
     if (!xpost_ent_valid(mem, ent)) \
