@@ -568,6 +568,15 @@ static int _collection_wanted(Xpost_Context *ctx)
    property the collection above relies on and the reason it is taken in
    the same place.
 
+   The outermost loop is the only place that will do. A procedure is run
+   by a nested call that holds the storage of the array it is running,
+   and the calls below that hold theirs, so a rearrangement anywhere
+   inside the nest leaves every frame but the innermost reading bytes
+   that have moved. Only here is the nest empty. A reclaim asked for deep
+   inside a procedure therefore waits until the procedure has finished,
+   which costs nothing: the request is a request, not a promise about
+   when.
+
    Closing the arena up hands the pages back itself, since gathering the
    free storage into one run above the cursor is what lets them go in a
    single call. The request is cleared whether or not a bank moved
@@ -754,17 +763,6 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             if (ctx->lo->garbage_collect_is_installed
                 && ctx->lo->garbage_collect(ctx->lo, xpost_garbage_auto_banks(ctx), 1) < 0)
                 return VMerror;
-            EVALARRAY_RECHECK_BASES();
-        }
-
-        /* A rearrangement asked for by a reclaim, which asks for no
-           collection of its own: the operator has already had one. The
-           array being run is moved by it like everything else, so its
-           storage is found again before the next element is read. */
-        if ((ctx->lo && ctx->lo->compact_pending)
-            || (ctx->gl && ctx->gl->compact_pending))
-        {
-            _compaction_wanted(ctx);
             EVALARRAY_RECHECK_BASES();
         }
 
@@ -2183,7 +2181,6 @@ int xpost_interpreter_run_nested(Xpost_Context *ctx, Xpost_Object P)
                 continue;
             }
         }
-        _compaction_wanted(ctx);
         ret = eval(ctx);
         if (ret)
         {

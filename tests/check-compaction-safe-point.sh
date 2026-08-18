@@ -93,4 +93,49 @@ if ! grep -q . "$work/callers"; then
     exit 1
 fi
 
-echo "SUCCESS (the arena is closed up only from $allowed_fn in $allowed_file)"
+# And the safe point itself is reached from the outermost loop only.
+#
+# "Inside the interpreter" is not the rule and was not enough. A procedure
+# is run by a nested call that holds the storage of the array it is
+# running, and the calls below it hold theirs, so a rearrangement anywhere
+# inside that nest leaves every frame but the innermost reading bytes that
+# have moved. Calling it from the array runner and from the nested runner
+# passed every test in the suite and still broke a real render at the
+# first page boundary, because nothing in the suite runs a reclaim from
+# inside a procedure several levels down. Only the outermost loop has an
+# empty nest.
+allowed_caller=mainloop
+
+awk -v want="$allowed_fn" '
+    /^[A-Za-z_].*\(/ { fn = $0
+                       sub(/\(.*/, "", fn)
+                       sub(/[ \t]+$/, "", fn)
+                       sub(/^.*[ \t*]/, "", fn)
+                       if (fn != "") cur = fn }
+    $0 ~ (want "[ \t]*\\(") {
+        if ($0 ~ /^[ \t]*[*#]/) next
+        if ($0 ~ ("static.*" want) || $0 ~ ("^" want)) next   # its definition
+        printf "%s\n", (cur == "" ? "@NOFN@" : cur)
+    }' "$src/src/lib/$allowed_file" | sort -u > "$work/reached"
+
+if ! grep -q . "$work/reached"; then
+    echo "FAIL: nothing reaches $allowed_fn, so the request a reclaim"
+    echo "      leaves is never acted on and the arena is never closed up."
+    exit 1
+fi
+printf '%s\n' "$allowed_caller" > "$work/allowed-caller"
+comm -23 "$work/reached" "$work/allowed-caller" > "$work/extra-caller"
+if [ -s "$work/extra-caller" ]; then
+    echo "FAIL: $allowed_fn is reached from somewhere other than the"
+    echo "      outermost loop. A nested runner holds the storage of what"
+    echo "      it is running, and so does everything below it, so a"
+    echo "      rearrangement there leaves those frames reading bytes that"
+    echo "      have moved:"
+    sed 's/^/      /' "$work/extra-caller"
+    echo "      Leave the request pending instead; the outermost loop will"
+    echo "      reach it when the nest is empty."
+    exit 1
+fi
+
+echo "SUCCESS (the arena is closed up only from $allowed_fn in $allowed_file,"
+echo "         reached only from $allowed_caller)"
