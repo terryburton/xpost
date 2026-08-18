@@ -207,6 +207,7 @@ font test op-fontcache
 font test op-glyphcontext
 font test outline-font
 font test record-glyph
+font test check-glyph-render-route
 font test check-type42-charstrings
 font width witness
 

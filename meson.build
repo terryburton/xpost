@@ -5120,6 +5120,18 @@ test('check-font-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# Where the glyph render may be reached from. The cache keys a raster on
+# the transform and size _face_setup records for the face, and nothing on
+# the way down records anything, so a route into the render that skips
+# the setup rasterizes -- and caches -- a glyph under a key nobody
+# installed. That is a wrong page, not an error, which is why the routes
+# are held rather than the result.
+test('check-glyph-render-route',
+  find_program('tests/check-glyph-render-route.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things
 # have to be true of it -- it applies, it replaces rather than composes,
