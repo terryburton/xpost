@@ -299,6 +299,17 @@ int main(void)
     memset(nodeback, 0, sizeof nodeback);
     check(xpost_memory_get(&mem, node, 0, NODE_SZ, nodeback) == 1,
           "the node reads once it has been handed back out");
+    /* Storage handed back out is marked as holding nothing yet, and the
+       copy above carries that over into this buffer, so the comparison
+       below reads as a decision taken on bytes nobody has written. That
+       marking is a promise to callers -- write before you read -- and
+       this is not acting as one: it wrote the fill itself, released the
+       entity, took it back, and is asking whether its own bytes survived.
+       So the buffer is declared to hold what it holds, for this
+       comparison and nothing wider. It takes no strength out of the
+       assertion: a byte that differs still fails the compare, since this
+       says only that the bytes may be read, never what they are. */
+    XPOST_VG_REOPEN_RANGE(nodeback, 0, NODE_SZ);
     check(memcmp(nodeback, nodefill, NODE_SZ) == 0,
           "a release leaves the storage it releases exactly as it was");
 
