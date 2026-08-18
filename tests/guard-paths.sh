@@ -482,8 +482,9 @@ guard_hold_count() {    # <register> <keyword> <how many were derived>
 # the guard reports whatever an empty answer means to it. That has been
 # mistaken here for a flaky gate.
 guard_require_interpreter() {   # <path to the interpreter>
-    if [ ! -x "$1" ]; then
-        echo "FAILURES: the interpreter is not an executable: $1"
+    # A directory is executable too, so being a file is asked for as well.
+    if [ ! -f "$1" ] || [ ! -x "$1" ]; then
+        echo "FAILURES: the interpreter is missing or not an executable: $1"
         exit 1
     fi
     case $1 in

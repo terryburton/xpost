@@ -44,10 +44,7 @@ builddir=${3:?usage: check-type42-charstrings.sh <xpost> <probe.ps> <builddir>}
 # The one thing here that is genuinely a skip is a host with no face of
 # the kind under test, which is the environment answering rather than
 # the run being wired up wrongly.
-if [ ! -f "$xpost" ] || [ ! -x "$xpost" ]; then
-    echo "FAILURES: the interpreter is missing or not executable: $xpost"
-    exit 1
-fi
+guard_require_interpreter "$xpost"
 if [ ! -f "$probe" ]; then
     echo "FAILURES: the probe is not a file: $probe"
     exit 1

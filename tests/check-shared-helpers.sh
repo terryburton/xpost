@@ -81,6 +81,46 @@ _hold() {           # $1 glob . $2 helper file . $3 what the family is
 _hold "$src/tests/run-*.sh"   verdict.sh     "a test wrapper"
 _hold "$src/tests/check-*.sh" guard-paths.sh "a guard"
 
+# Sourcing the shared file is not the whole of it. A script that sources
+# it and then does the thing itself anyway has put a second implementation
+# back, and the second one is the one nobody maintains. So each act that
+# now has exactly one implementation is named here by what a script would
+# have to write to do it another way.
+#
+# A script may still make a directory of its own beyond the one the helper
+# gives it -- a second tree for a library run, a per-case directory inside
+# the first -- and this does not forbid that. What it forbids is taking
+# the first one from somewhere else, because the first one is the one
+# whose removal the helper arranges.
+tr -d '\r' < "$src/tests/one_implementation.exempt" | sed 's/#.*//' \
+    | awk 'NF { print $1, $2 }' > "$work/only"
+
+_only() {           # $1 glob . $2 the act . $3 the helper . $4 what the act is
+    for f in $1; do
+        [ -e "$f" ] || continue
+        b=$(basename "$f")
+        grep -q "$2" "$f" || continue
+        grep -q "$3" "$f" && continue
+        if [ -n "$(awk -v n="$b" '$1 == n { print "yes"; exit }' "$work/only")" ]; then
+            exempted=$((exempted + 1))
+            continue
+        fi
+        echo "FAILURES: $b $4 rather than calling $3, so there are two"
+        echo "      implementations of it and the shared one is not the"
+        echo "      one this script uses"
+        fails=$((fails + 1))
+    done
+}
+
+_only "$src/tests/check-*.sh" 'mktemp -d'  guard_workdir \
+      "makes its scratch directory"
+_only "$src/tests/run-*.sh"   'mktemp -d'  verdict_workdir \
+      "makes its scratch directory"
+_only "$src/tests/check-*.sh" 'awk -v K='  guard_hold_count \
+      "reads a register's declared count"
+_only "$src/tests/check-*.sh" '! -x "\$xpost"' guard_require_interpreter \
+      "refuses a path that is not an interpreter"
+
 # A register entry naming nothing in the tree.
 while read -r name rest; do
     [ -n "$name" ] || continue
@@ -90,6 +130,16 @@ while read -r name rest; do
         fails=$((fails + 1))
     fi
 done < "$work/exempt"
+
+# The same, for the register that excuses a script from the one-place rule.
+while read -r name rest; do
+    [ -n "$name" ] || continue
+    if [ ! -e "$src/tests/$name" ]; then
+        echo "FAILURES: tests/one_implementation.exempt excuses $name, which"
+        echo "      is not in tests/ -- the exemption has outlived its file"
+        fails=$((fails + 1))
+    fi
+done < "$work/only"
 
 # A register entry with no reason excuses nothing: the reason is the
 # whole value of writing the exemption down rather than leaving the file

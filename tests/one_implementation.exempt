@@ -1,0 +1,21 @@
+# Scripts that do for themselves something the shared files now do once,
+# and why each is entitled to.
+#
+# Held by the second half of tests/check-shared-helpers.sh. Sourcing the
+# shared file is not the whole of the rule: a script that sources it and
+# then writes the thing out again anyway has put a second implementation
+# back, and the second one is the one nobody maintains.
+#
+# This register is separate from tests/shared_helpers.exempt because the
+# two rules excuse different things. A script may be excused from writing
+# its own copy of an act while still being required to source the file the
+# act lives in, and one register serving both would read either exemption
+# as both.
+#
+#   script  reason
+
+run-glyph-page-test.sh  it works two directories deep, one for the run and one for each case inside it. The shared call names the inner one, which is the directory the cases are written into, so the outer is made here and removed with it
+
+run-job-page-test.sh  the same two-deep layout, made and removed the same way and for the same reason
+
+run-profile.sh  it does not source verdict.sh at all, for the reason given in tests/shared_helpers.exempt -- it drives the runner rather than being run by it -- so the call is not available to it

@@ -158,6 +158,7 @@ tests/counters.golden \
 tests/vm_growth.golden \
 tests/shared_helpers.exempt \
 tests/raster_reading.exempt \
+tests/one_implementation.exempt \
 tests/direct_comm.exempt \
 tests/device_destroy_test.ps \
 tests/device_dictstack_test.ps \

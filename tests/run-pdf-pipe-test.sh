@@ -20,8 +20,7 @@ xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
 
-dir=$(mktemp -d)
-trap 'rm -rf "$dir"' EXIT INT TERM
+verdict_workdir
 
 # A shell that emulates named pipes for its own programs can make one
 # that a native program cannot open: mkfifo succeeding says the shell has
@@ -32,11 +31,11 @@ case "$(uname -s 2>/dev/null)" in
         exit 77 ;;
 esac
 
-fifo=$dir/pipe.pdf
+fifo=$work/pipe.pdf
 mkfifo "$fifo" || { echo "SKIP: no named pipe support"; exit 77; }
 
 # drain the pipe while the interpreter fills it, or the writer blocks
-cat "$fifo" > "$dir/frompipe.pdf" &
+cat "$fifo" > "$work/frompipe.pdf" &
 drain=$!
 
 out=$("$xpost" -q --no-sandbox -d pdfwrite -o "$fifo" "$script" </dev/null 2>&1)
@@ -45,11 +44,11 @@ wait "$drain"
 
 verdict_run "$status" "$out" "the interpreter" || exit 1
 
-head -c 8 "$dir/frompipe.pdf" | LC_ALL=C grep -q '%PDF-1' || {
+head -c 8 "$work/frompipe.pdf" | LC_ALL=C grep -q '%PDF-1' || {
     echo "FAIL: no PDF header -- nothing reached the pipe"
     exit 1
 }
-tail -c 16 "$dir/frompipe.pdf" | LC_ALL=C grep -q '%%EOF' || {
+tail -c 16 "$work/frompipe.pdf" | LC_ALL=C grep -q '%%EOF' || {
     echo "FAIL: no EOF trailer -- the document was cut short"
     exit 1
 }
@@ -59,23 +58,23 @@ tail -c 16 "$dir/frompipe.pdf" | LC_ALL=C grep -q '%%EOF' || {
 # are told to work in bytes: one that decodes its input as characters
 # stops at the first byte that is not one, and reports nothing found
 # rather than saying why.
-xoff=$(LC_ALL=C tr -d '\000' < "$dir/frompipe.pdf" \
+xoff=$(LC_ALL=C tr -d '\000' < "$work/frompipe.pdf" \
     | LC_ALL=C sed -n '/^startxref$/{n;p;}' | tail -1)
 case "$xoff" in
     ''|*[!0-9]*) echo "FAIL: no startxref offset in the trailer"; exit 1 ;;
 esac
-found=$(tail -c "+$((xoff + 1))" "$dir/frompipe.pdf" | head -c 4)
+found=$(tail -c "+$((xoff + 1))" "$work/frompipe.pdf" | head -c 4)
 [ "$found" = "xref" ] || {
     echo "FAIL: startxref says $xoff, which holds '$found' and not the table"
     exit 1
 }
 
 # and the same document sent to a regular file must come out identical
-out=$("$xpost" -q --no-sandbox -d pdfwrite -o "$dir/tofile.pdf" "$script" </dev/null 2>&1)
+out=$("$xpost" -q --no-sandbox -d pdfwrite -o "$work/tofile.pdf" "$script" </dev/null 2>&1)
 status=$?
 verdict_run "$status" "$out" "the interpreter writing to a file" || exit 1
 
-cmp -s "$dir/tofile.pdf" "$dir/frompipe.pdf" || {
+cmp -s "$work/tofile.pdf" "$work/frompipe.pdf" || {
     echo "FAIL: the pipe and the file disagree on the document"
     exit 1
 }
