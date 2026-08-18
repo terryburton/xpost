@@ -98,6 +98,27 @@ typedef struct
    starting point to double from rather than an estimate of the total. */
 #define TSTTAB_FIRST 64u
 
+/* How many times a string has been offered to the name mechanism and had
+   to be looked up. A name already interned still costs a walk of the
+   tree -- two, when it is a global name, since the local bank is
+   searched first and misses -- so this is the measure of whether a
+   caller is resolving a name once or resolving it again for every unit
+   of work it does. It saturates rather than wrapping: a count that
+   restarted would read as a caller that had stopped looking anything
+   up. */
+static unsigned int _name_lookups;
+
+unsigned int xpost_name_lookups(void)
+{
+    return _name_lookups;
+}
+
+static void _name_lookup_charge(void)
+{
+    if (_name_lookups != (unsigned int)-1)
+        _name_lookups++;
+}
+
 /* The table's head, and a node in it. Both are derived afresh at every use: an
    allocation may grow the memory file, which moves it, so a pointer taken
    before one is stale after it. */
@@ -438,6 +459,8 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
     unsigned int tstk;
     int ret;
 
+    _name_lookup_charge();
+
     /* LOCAL IS SEARCHED FIRST, AND THE ORDER IS LOAD-BEARING.
        The same characters can be interned in both banks: a name is
        interned into whichever bank is current when its token is first
@@ -526,6 +549,8 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx,
     Xpost_Object o = { 0 };
     unsigned int tstk;
     int ret;
+
+    _name_lookup_charge();
 
     tstk = _tsttab_root(ctx->gl);
     u = tstsearch(ctx->gl, tstk, s, (unsigned int)strlen(s));

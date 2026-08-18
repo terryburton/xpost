@@ -359,6 +359,7 @@ tests/page_semantics_test.c \
 tests/path_bounds_test.ps \
 tests/path_confine_test.c \
 tests/path_recycle_test.ps \
+tests/name_lookup_cost_test.ps \
 tests/path_walk_cost_test.ps \
 tests/pattern_phase_test.ps \
 tests/pattern_space_test.ps \

@@ -69,6 +69,18 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx, const char *s);
 Xpost_Object xpost_name_get_string(Xpost_Context *ctx, Xpost_Object n);
 
 /**
+ * @brief How many times a string has been offered to the name mechanism
+ * and had to be looked up in the tree.
+ *
+ * A name already interned still costs a walk, and a global name costs
+ * two -- the local bank is searched first and misses. So this counts
+ * the work of resolving names, not the names that exist: a caller that
+ * resolves the same name once per unit of work it does is the shape
+ * this number is read for. It saturates rather than wrapping.
+ */
+unsigned int xpost_name_lookups(void);
+
+/**
  * @}
  */
 

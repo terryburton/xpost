@@ -323,6 +323,21 @@ int debugloadoff(Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .namelookups  int
+   The number of times a string has been offered to the name mechanism
+   and had to be looked up, saturating rather than wrapping. Resolving
+   a name costs a walk of the tree whether or not it is already
+   interned, so this is the measure of whether a caller resolves a name
+   once or resolves it again for every unit of work it does. */
+static
+int _namelookups(Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((integer)xpost_name_lookups())))
+        return stackoverflow;
+    return 0;
+}
+
 static
 int Odumpnames(Xpost_Context *ctx)
 {
@@ -530,6 +545,8 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "debugloadon", (Xpost_Op_Func)debugloadon, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "debugloadoff", (Xpost_Op_Func)debugloadoff, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".namelookups", (Xpost_Op_Func)_namelookups, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "dumpnames", (Xpost_Op_Func)Odumpnames, 0);
     INSTALL;

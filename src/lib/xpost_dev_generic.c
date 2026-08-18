@@ -92,6 +92,9 @@ static Xpost_Object namepdfPrivate;
 static Xpost_Object namedotground;
 static Xpost_Object namedotbandtop;
 static Xpost_Object namedotbandrows;
+static Xpost_Object namedothtcell;
+static Xpost_Object namedothtw;
+static Xpost_Object namedothth;
 
 int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
                               size_t *bytes)
@@ -1458,9 +1461,9 @@ _channel(Xpost_Object v, double max)
 const unsigned char *
 xpost_dev_ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
 {
-    Xpost_Object c = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".htcell"));
-    Xpost_Object wo = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".htw"));
-    Xpost_Object ho = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".hth"));
+    Xpost_Object c = xpost_dict_get(ctx, devdic, namedothtcell);
+    Xpost_Object wo = xpost_dict_get(ctx, devdic, namedothtw);
+    Xpost_Object ho = xpost_dict_get(ctx, devdic, namedothth);
 
     if (xpost_object_get_type(c) != stringtype
      || xpost_object_get_type(wo) != integertype
@@ -4134,6 +4137,12 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((namedotbandtop = xpost_name_cons(ctx, ".bandtop"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namedotbandrows = xpost_name_cons(ctx, ".bandrows"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedothtcell = xpost_name_cons(ctx, ".htcell"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedothtw = xpost_name_cons(ctx, ".htw"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedothth = xpost_name_cons(ctx, ".hth"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;

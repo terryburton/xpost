@@ -314,6 +314,7 @@ xpost_name_cons_global
 xpost_name_cons_n
 xpost_name_get_string
 xpost_name_init
+xpost_name_lookups
 xpost_object_dump
 xpost_object_get_access
 xpost_object_get_interval

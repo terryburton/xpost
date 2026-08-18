@@ -1,0 +1,96 @@
+% What resolving a name costs the work that resolves one, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A name is interned in a ternary search tree, and offering a string to
+% the name mechanism walks that tree whether or not the string is
+% already a name there. There are two banks, local and global, and the
+% local one is searched first, so a name that lives in the global bank
+% costs a walk that misses and then a walk that hits: resolving one is
+% never free and is dearest for exactly the names the interpreter itself
+% installs.
+%
+% That makes a name resolved from a C string a cost, and where it is
+% paid decides whether it is a cost at all. Paid once, when the
+% operators are installed, it is nothing. Paid inside a loop that runs
+% once per unit of work -- once per span of a fill, once per row of a
+% page -- it is the tree walk multiplied by the size of the page, and it
+% does not show on a small one.
+%
+% So the assertion is a count of lookups and not a time: the interpreter
+% carries the count itself, and a bound stated in lookups survives a
+% loaded machine, which a bound stated in seconds does not. The two arms
+% do the same work over a hundred and four hundred rectangles, and what
+% the second costs may not be four times what the first does -- that is
+% the whole property, and it is what the count can say and a wall clock
+% cannot.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
+/.namelookups 1183615869 internaldict /.namelookups get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/SMALL 100 def
+/LARGE 400 def
+
+% The lookups a run of rectangle fills may cost between its arms. The
+% names the fill needs are resolved when the device operators are
+% installed, so a fill resolves none; what this leaves room for is the
+% measurement itself, which runs a procedure and reads a counter. A
+% lookup charged per rectangle lands three hundred above this on the
+% larger arm, not a few.
+/SLACK 16 def
+
+% The raster a compiled rectangle fill writes: the array of row strings
+% the grey base classes keep a page in. Four rows is enough -- what is
+% being counted is the calls, not the pixels.
+/mkdev { 2 dict dup /ImgData [ 4 { 64 string } repeat ] put } def
+
+% Fill one row-wide rectangle n times, answering the name lookups it
+% took. The rectangle is the whole of a row, so every call reaches the
+% row and writes it; a call clipped away would reach less of the fill
+% than a real span does.
+/measure { % int  .  int
+    /n exch def
+    /dev mkdev def
+    .namelookups
+    1 1 n { pop 0.5 0 0 63 0 dev .fillrectgray } for
+    .namelookups exch sub
+} def
+
+% Warm first: the very first fill of a run may resolve names nothing has
+% asked for yet, and that is a cost paid once and not per rectangle.
+10 measure pop
+
+/small SMALL measure def
+/large LARGE measure def
+
+% A counter stuck at one number would satisfy every bound below by
+% saying nothing, so require first that it moves for something that does
+% resolve a name. cvn offers a string to the name mechanism, which is
+% the one thing here that must be charged.
+/before .namelookups def
+(namelookupcostprobe) cvn pop
+.namelookups before gt
+    (the interpreter reports the names it looked up) assert
+
+% The property: four times the rectangles, and no more lookups between
+% them than the measurement itself accounts for. A lookup charged per
+% rectangle makes the difference three hundred.
+large small sub SLACK le
+    (filling more rectangles does not resolve more names) assert
+
+% And the same thing said from the other end, so that a fill which
+% resolved names on every call could not pass by resolving few: the
+% whole of the larger arm is bounded by what the measurement costs.
+large SLACK le
+    (a rectangle fill resolves no names of its own) assert
+
+checks 3 eq (every check was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse

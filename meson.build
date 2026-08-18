@@ -1280,6 +1280,21 @@ test('path-walk-cost',
   suite: cost_fast,
   timeout: 300)
 
+# What resolving a name costs the work that resolves one. A name is
+# found by walking a ternary search tree, and the local bank is searched
+# before the global one, so a name the interpreter installed costs a
+# walk that misses and then a walk that hits. Paid once at installation
+# that is nothing; paid once per span of a fill it is the tree walk
+# multiplied by the size of the page, and it does not show on a small
+# one. So the interpreter counts the lookups, and the assertion is that
+# count over two runs of different sizes.
+test('name-lookup-cost',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/name_lookup_cost_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # What restore costs when it has to look for a file on the stacks. A
 # file opened above the level being rewound to is closed unless a stack
 # still names it, so the sweep reads every stack; a read that asks for
