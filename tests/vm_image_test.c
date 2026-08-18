@@ -340,7 +340,14 @@ static unsigned int _signatures(const Bank *g, Signature *sig,
     if (extent == 0 || base + extent > _bank_used(g))
         return 0;
 
-    nops = extent / (unsigned int)sizeof(Xpost_Operator);
+    /* The entity holds the rows and then what they point at, so its size
+       is not a count of rows. Reading it as one walks off the end of the
+       rows and into the signatures, which then read as further rows. The
+       rows are a fixed number and the ones no operator uses are zero, so
+       the loop below skips them. */
+    nops = MAXOPS;
+    if (extent / (unsigned int)sizeof(Xpost_Operator) < nops)
+        nops = extent / (unsigned int)sizeof(Xpost_Operator);
     for (k = 0; k < nops && n < max; k++)
     {
         unsigned int at = base + k * (unsigned int)sizeof(Xpost_Operator);
@@ -356,7 +363,10 @@ static unsigned int _signatures(const Bank *g, Signature *sig,
             continue;
         for (s = 0; s < count && n < max; s++)
         {
-            unsigned int one = adr + (unsigned int)s
+            /* the row names its signatures by their offset within this
+               entity, so the entity's own address is added to reach them
+               in the bank */
+            unsigned int one = base + adr + (unsigned int)s
                                      * (unsigned int)sizeof(Xpost_Signature);
 
             if (one + sizeof(Xpost_Signature) > _bank_used(g))

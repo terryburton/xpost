@@ -60,10 +60,9 @@ done
 # thought to name here.
 #
 # What is left out is not a byte buffer.
-#   *sizeof              an array of typed elements
-#   xpost_free_realloc   the virtual memory allocator's own growth, which
-#                        moves objects inside the memory file rather than
-#                        bytes inside a buffer
+#   *sizeof              an array of typed elements, which moves objects
+#                        inside the memory file rather than bytes inside
+#                        a buffer
 #   xpost_memory.c       the memory file itself, the allocation every
 #                        object in virtual memory lives inside
 #   xpost_compat.c       the glob() shim's result block. It is not a byte
@@ -74,7 +73,6 @@ done
 #                        its own
 hits=$(grep -n 'realloc(' "$lib"/*.c "$src"/src/bin/*.c 2>/dev/null \
        | grep -v 'sizeof' | grep -v 'write_capacity' \
-       | grep -v 'xpost_free_realloc' \
        | grep -v 'xpost_memory\.c:' \
        | grep -v 'xpost_compat\.c:' || true)
 if [ -n "$hits" ]; then

@@ -624,6 +624,34 @@ xpost_memory_operator_table_adr(Xpost_Memory_File *mem)
 }
 
 /**
+ * @brief bytes the operator table's entity holds.
+ *
+ * The rows come first and what they point at follows them, so the entity
+ * is larger than the rows and grows as operators are installed.
+ */
+static inline unsigned int
+xpost_memory_operator_table_size(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE].sz;
+}
+
+/**
+ * @brief give the operator table different storage.
+ *
+ * Its entity number is fixed, so what is replaced is the storage under
+ * that row. Everything the rows point at is an offset from the start of
+ * that storage, so none of it is disturbed by the move.
+ */
+static inline void
+xpost_memory_set_operator_table(Xpost_Memory_File *mem,
+                                unsigned int adr,
+                                unsigned int sz)
+{
+    mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE].adr = adr;
+    mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE].sz = sz;
+}
+
+/**
  * @brief exchange the storage identity of two entities.
  *
  * An ent's (adr, sz, used) travel together: a composite that GREW under

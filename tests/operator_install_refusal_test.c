@@ -67,12 +67,24 @@
 
 static unsigned int held_used;
 static unsigned int held_max;
+static unsigned int held_optab;
 
-/* Decline every allocation in mem until released. */
+/* Decline every allocation in mem until released.
+ *
+ * Two things are moved, because an operator's signatures are not taken
+ * off the memory file one at a time any more: they are cut from storage
+ * the operator table already holds, and only reach the file when that
+ * storage runs out. Leaving the high-water mark alone would refuse
+ * nothing until the table happened to want more room, so the table is
+ * told it holds nothing and the file is told it is full: the first
+ * signature then asks the file for room and is refused. */
 static void refuse_allocation(Xpost_Memory_File *mem)
 {
     held_used = mem->high_water;
     held_max = mem->max;
+    held_optab = xpost_memory_operator_table_size(mem);
+    xpost_memory_set_operator_table(mem,
+                                    xpost_memory_operator_table_adr(mem), 0);
     mem->high_water = 0xfffffff8u;
     mem->max = 0xfffffff8u;
 }
@@ -81,6 +93,9 @@ static void allow_allocation(Xpost_Memory_File *mem)
 {
     mem->high_water = held_used;
     mem->max = held_max;
+    xpost_memory_set_operator_table(mem,
+                                    xpost_memory_operator_table_adr(mem),
+                                    held_optab);
 }
 
 static void register_ops(int refused)

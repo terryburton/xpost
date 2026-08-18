@@ -424,7 +424,8 @@ static int _capture_operators(Xpost_Context *ctx, _Host_Table *t)
         }
         t->row[k].n = optab[k].n;
         t->row[k].first = total;
-        sig = xpost_vm_ptr(ctx->gl, optab[k].sigadr);
+        sig = (Xpost_Signature *)(void *)((unsigned char *)optab
+                                          + optab[k].sigadr);
         for (s = 0; s < t->row[k].n; s++)
         {
             t->sig[total + (unsigned int)s].fp = sig[s].fp;
@@ -608,7 +609,11 @@ static int _put_arena(_Writer *w, Xpost_Context *ctx, Xpost_Memory_File *mem,
     for (k = 0; k < nops; k++)
     {
         Xpost_Operator *optab = xpost_operator_table(ctx->gl);
-        unsigned int adr = optab[k].sigadr;
+        /* the rows name what they point at by its offset within their own
+           entity, and this walks a copy of the whole arena, so the two are
+           added to reach the same bytes */
+        unsigned int adr = xpost_memory_operator_table_adr(ctx->gl)
+                           + optab[k].sigadr;
         int n = optab[k].n;
         int s;
 
@@ -1118,7 +1123,11 @@ static int _check_operators(const _Image_Row *image, unsigned int nimage,
    because everything an image says is checked before any of it is
    installed: a table found wanting after the install is one there is no
    way back from. */
-static const unsigned char *_image_optab(const _Bank *g, unsigned int rows)
+/* `room` takes the bytes the table's entity holds, which is what bounds
+   the offsets its rows carry -- the rows name what they point at by its
+   place within this entity, not within the arena. */
+static const unsigned char *_image_optab(const _Bank *g, unsigned int rows,
+                                         unsigned int *room)
 {
     Xpost_Memory_File view;
     unsigned int used = g->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
@@ -1149,6 +1158,12 @@ static const unsigned char *_image_optab(const _Bank *g, unsigned int rows)
     adr = xpost_memory_operator_table_adr(&view);
     if (adr > used || (size_t)rows * sizeof(Xpost_Operator) > used - adr)
         return NULL;
+    if (room)
+    {
+        *room = xpost_memory_operator_table_size(&view);
+        if (*room > used - adr)
+            return NULL;   /* the entity claims more than the bank holds */
+    }
     return g->arena + adr;
 }
 
@@ -1161,8 +1176,8 @@ static const unsigned char *_image_optab(const _Bank *g, unsigned int rows)
 static int _check_operator_rows(const _Bank *g, const _Host_Table *t,
                                 unsigned int nimage)
 {
-    const unsigned char *rows = _image_optab(g, nimage);
-    unsigned int used = g->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
+    unsigned int room = 0;
+    const unsigned char *rows = _image_optab(g, nimage, &room);
     unsigned int k;
 
     if (!rows)
@@ -1196,11 +1211,15 @@ static int _check_operator_rows(const _Bank *g, const _Host_Table *t,
         }
         if (op.n == 0)
             continue;
-        if (op.sigadr == 0 || op.sigadr > used ||
-            (size_t)op.n * sizeof(Xpost_Signature) > used - op.sigadr)
+        /* the offset is within the operator table's own entity, so what
+           bounds it is that entity rather than the whole arena -- a run
+           reaching past the entity is one the image does not hold, even
+           where the arena happens to go on beyond it */
+        if (op.sigadr == 0 || op.sigadr > room ||
+            (size_t)op.n * sizeof(Xpost_Signature) > room - op.sigadr)
         {
             XPOST_LOG_INFO("operator %s of the image states %d operand shapes "
-                           "at %u, which the image does not hold",
+                           "at %u, which its operator table does not hold",
                            t->row[k].name, op.n, op.sigadr);
             return 0;
         }
@@ -1224,7 +1243,8 @@ static void _rebuild_operators(Xpost_Context *ctx, const _Host_Table *t)
 
         if (optab[k].n == 0)
             continue;
-        sig = xpost_vm_ptr(ctx->gl, optab[k].sigadr);
+        sig = (Xpost_Signature *)(void *)((unsigned char *)optab
+                                          + optab[k].sigadr);
         for (s = 0; s < optab[k].n; s++)
         {
             sig[s].fp = t->sig[t->row[k].first + (unsigned int)s].fp;

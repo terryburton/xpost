@@ -39,8 +39,6 @@ address  xpost_memory.h:Xpost_Memory_File   free_substack            a parked sa
 address  xpost_memory.h:Xpost_Memory_File   high_water               the offset one past the last byte handed out, which a rearrangement would set to its new value rather than move
 address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
 address  xpost_object.h                     stk                      the record stack a save object owns, reached with xpost_stack_at and so a place rather than a number
-address  xpost_operator.h:Xpost_Operator    sigadr                   the array of an operator's signatures, in global virtual memory
-address  xpost_operator.h:Xpost_Signature   t                        the array of argument types one of those signatures names, likewise
 address  xpost_stack.h                      nextseg                  the next segment of a chained stack, so a moved segment would orphan the rest of the chain
 address  xpost_stack.h                      prevseg                  the previous segment, and on the root segment the top one; same
 count    xpost_context.h:_Xpost_Context     batch
@@ -179,6 +177,8 @@ count    xpost_object.h                     sign_exp
 count    xpost_object.h                     src
 count    xpost_object.h                     sz
 count    xpost_object.h                     tag
+count    xpost_operator.h:Xpost_Operator   sigadr
+count    xpost_operator.h:Xpost_Signature  t
 count    xpost_operator.h                   in
 count    xpost_operator.h:Xpost_Operator    n
 count    xpost_operator.h:Xpost_Operator    name

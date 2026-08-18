@@ -89,7 +89,8 @@ typedef struct Xpost_Signature
 {
     Xpost_Op_Func fp;  /* function-pointer which implements the operator action */
     int in;       /* number of argument objects */
-    unsigned t;   /* memory address of array of ints representing argument types */
+    unsigned t;   /* the argument types, as an offset within the operator
+                     table's own entity rather than a place in the arena */
     int (*checkstack)(Xpost_Context *ctx);  /* stack-checking function to bypass generic type-check loop */
 } Xpost_Signature;
 
@@ -104,7 +105,8 @@ typedef struct Xpost_Operator
 {
     unsigned name;   /* name-stack index of operator's name */
     int n;           /* number of signatures */
-    unsigned sigadr; /* memory address of array of signatures */
+    unsigned sigadr; /* the run of signatures, as an offset within the
+                        operator table's own entity */
     Xpost_Object proc; /* procedure a wrapped operator runs (n == 0);
                           the null object otherwise */
 } Xpost_Operator;

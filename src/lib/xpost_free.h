@@ -242,18 +242,5 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
 XPOST_MUST_CHECK int xpost_free_memory_ent(Xpost_Memory_File *mem,
                           unsigned int ent);
 
-/**
- * @brief reallocate data, preserving original contents
-
- * Use the free-list and tables to now provide a realloc for
- * "raw" vm addresses (mem->base offsets rather than ents).
- * Assumes new size is larger than old size.
-
- * Allocate new entry, copy data, steal its adr, stash old adr, free it.
- */
-unsigned int xpost_free_realloc(Xpost_Memory_File *mem,
-                                unsigned int oldadr,
-                                unsigned int oldsize,
-                                unsigned int newsize);
 
 #endif

@@ -45,7 +45,7 @@
 #include "xpost_memory.h"  // accesses mfile
 #include "xpost_object.h"  // operators are objects
 #include "xpost_stack.h"  // uses a stack for argument passing
-#include "xpost_free.h"  // grow signatures using xpost_free_realloc
+#include "xpost_free.h"  // give the old storage back when the table grows
 #include "xpost_context.h"
 #include "xpost_error.h"  // operator functions may throw errors
 #include "xpost_string.h"  // uses string function to dump operator name
@@ -345,6 +345,118 @@ Xpost_Check_Stack _check_stack_funcs[] = {
 };
 
 
+/* What the operator rows point at lives after them in the same entity,
+ * and is reached by its offset from the start of that entity.
+ *
+ * A signature and the array of argument types it names each held their
+ * own allocation before, taken straight off the memory file with no table
+ * row to describe them, and the rows named them by address into the
+ * arena. Nothing could find such a block: not its size, not its tag, and
+ * not the row pointing at it. There are several hundred of them and they
+ * sit scattered through global virtual memory, so a pass that walked the
+ * table to rearrange the arena would have written a live entity over one.
+ *
+ * Following the rows in the entity the rows already have, they need no
+ * row of their own: the entity's one row covers all of it, and an offset
+ * from its start survives the storage moving. So sigadr and t are no
+ * longer places in the arena. The entity's row is, and it is the single
+ * thing a rearrangement rewrites.
+ *
+ * Storage is handed out by moving a cursor and is not given back. An
+ * operator that gains a second signature has its run of signatures
+ * allocated afresh and copied, and the run it had before is left where it
+ * is with nothing naming it -- so the waste is one abandoned run per
+ * regrowth. Every operator is installed while the interpreter starts, so
+ * that is a bounded cost paid once and never during a program; it is
+ * still waste, and it is the price of not keeping a free list for storage
+ * that is never otherwise released.
+ *
+ * Offset 0 cannot be one of these, since the rows themselves begin there,
+ * so it goes on meaning "this operator states nothing".
+ */
+
+/* the rows, then the cursor, then what the rows point at */
+#define OPTAB_ROWS_BYTES ((unsigned int)(MAXOPS * sizeof(Xpost_Operator)))
+#define OPTAB_CURSOR     OPTAB_ROWS_BYTES
+#define OPTAB_FIRST      (OPTAB_ROWS_BYTES + 8u)
+
+/* The arena address of a byte of the entity, named by its offset within
+   it. An address rather than a pointer, so that what turns it into one
+   is xpost_vm_ptr, the same call as everywhere else -- a second way of
+   reaching virtual memory would be a second thing for everything that
+   reads how virtual memory is reached to know about.
+
+   Derived afresh at every use: an allocation may grow the memory file,
+   which moves it, so an address taken before one still stands but a
+   pointer does not. */
+static unsigned int _optab_adr(Xpost_Memory_File *gl, unsigned int off)
+{
+    return xpost_memory_operator_table_adr(gl) + off;
+}
+
+static unsigned int _optab_cursor(Xpost_Memory_File *gl)
+{
+    unsigned int c;
+    memcpy(&c, xpost_vm_ptr(gl, _optab_adr(gl, OPTAB_CURSOR)), sizeof c);
+    return c;
+}
+
+static void _optab_set_cursor(Xpost_Memory_File *gl, unsigned int c)
+{
+    memcpy(xpost_vm_ptr(gl, _optab_adr(gl, OPTAB_CURSOR)), &c, sizeof c);
+}
+
+/* Take `sz` bytes after the rows, growing the entity when they will not
+   fit. The offset is 8-aligned because a signature carries function
+   pointers, which on some hosts may not be read at any lesser alignment. */
+static int _optab_alloc(Xpost_Memory_File *gl, unsigned int sz,
+                        unsigned int *off)
+{
+    unsigned int at, end, have;
+
+    at = (_optab_cursor(gl) + 7u) & ~7u;
+    if (sz > 0xffffffffu - at)
+    {
+        XPOST_LOG_ERR("%d the operator table cannot address that much", VMerror);
+        return 0;
+    }
+    end = at + sz;
+    have = xpost_memory_operator_table_size(gl);
+    if (end > have)
+    {
+        Xpost_Memory_Table *tab;
+        unsigned int tmp, oldadr, oldsz, want;
+
+        want = have * 2;
+        if (want < end)
+            want = end;
+        /* the entity keeps its number and takes different storage: a
+           fresh entity is allocated, the contents copied across, the two
+           rows exchange what they describe, and the temporary -- now
+           holding the old storage -- is given back */
+        if (!xpost_memory_table_alloc(gl, want, 0, &tmp))
+        {
+            XPOST_LOG_ERR("%d cannot grow the operator table", VMerror);
+            return 0;
+        }
+        tab = &gl->table;
+        oldadr = xpost_memory_operator_table_adr(gl);
+        oldsz = xpost_memory_operator_table_size(gl);
+        memcpy(xpost_vm_ptr(gl, tab->tab[tmp].adr),
+               xpost_vm_ptr(gl, oldadr), oldsz);
+        xpost_memory_set_operator_table(gl, tab->tab[tmp].adr, tab->tab[tmp].sz);
+        tab->tab[tmp].adr = oldadr;
+        tab->tab[tmp].sz = oldsz;
+        /* allocated moments ago in this same function and carrying no
+           tag, so the free list has nothing to object to */
+        XPOST_REFUSAL_IMPOSSIBLE(xpost_free_memory_ent(gl, tmp));
+    }
+    memset(xpost_vm_ptr(gl, _optab_adr(gl, at)), 0, sz);
+    _optab_set_cursor(gl, end);
+    *off = at;
+    return 1;
+}
+
 /* allocate the OPTAB structure in VM */
 int xpost_operator_init_optab(Xpost_Context *ctx)
 {
@@ -352,7 +464,7 @@ int xpost_operator_init_optab(Xpost_Context *ctx)
     Xpost_Memory_Table *tab;
     int ret;
 
-    ret = xpost_memory_table_alloc_special(ctx->gl, MAXOPS * sizeof(Xpost_Operator), 0,
+    ret = xpost_memory_table_alloc_special(ctx->gl, OPTAB_FIRST, 0,
                                            XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
                                            &ent);
     if (!ret)
@@ -370,6 +482,7 @@ int xpost_operator_init_optab(Xpost_Context *ctx)
        the arena holds -- and a block the table does not describe is one
        a pass rearranging the arena would write a live entity over. */
     _xpost_noops = 0;
+    _optab_set_cursor(ctx->gl, OPTAB_FIRST);
 
     return 1;
 }
@@ -393,7 +506,7 @@ void xpost_operator_dump(Xpost_Context *ctx,
     o.mark_.padw = op.name;
     str = xpost_name_get_string(ctx, o);
     s = xpost_string_get_pointer(ctx, str);
-    sig = xpost_vm_ptr(ctx->gl, op.sigadr);
+    sig = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, op.sigadr));
     memcpy(&fp, &sig[0].fp, sizeof fp);
     /*
     printf("<operator %d %d:%*s %p>",
@@ -481,7 +594,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                 XPOST_LOG_ERR("operator %s NOT installed", name);
                 return null;
             }
-            if (!xpost_memory_file_alloc(ctx->gl, sizeof(Xpost_Signature), &adr))
+            if (!_optab_alloc(ctx->gl, sizeof(Xpost_Signature), &adr))
             {
                 XPOST_LOG_ERR("cannot allocate signature block");
                 XPOST_LOG_ERR("operator %s NOT installed", name);
@@ -504,15 +617,34 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
         }
         else
         { /* increase sig table by 1 */
-            t = xpost_free_realloc(ctx->gl,
-                                   optab[opcode].sigadr,
-                                   optab[opcode].n * sizeof(Xpost_Signature),
-                                   (optab[opcode].n + 1) * sizeof(Xpost_Signature));
-            if (!t)
+            /* the run of signatures is taken afresh and copied; what it
+               had before is left where it is, for the reason given where
+               the storage after the rows is described */
             {
-                XPOST_LOG_ERR("cannot allocate new sig table");
-                XPOST_LOG_ERR("operator %s NOT installed", name);
-                return null;
+                unsigned int oldoff = optab[opcode].sigadr;
+                unsigned int oldn = (unsigned int)optab[opcode].n;
+
+                if (!_optab_alloc(ctx->gl,
+                                  (oldn + 1u) * (unsigned int)sizeof(Xpost_Signature),
+                                  &t))
+                {
+                    XPOST_LOG_ERR("cannot allocate new sig table");
+                    XPOST_LOG_ERR("operator %s NOT installed", name);
+                    return null;
+                }
+                memcpy(xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, t)),
+                       xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, oldoff)),
+                       oldn * sizeof(Xpost_Signature));
+                /* and the run it came from is cleared as it is left. A
+                   signature carries two host function addresses, and an
+                   abandoned run is storage no operator names any longer:
+                   the writer of a memory image zeroes the addresses in
+                   the runs the rows point at, and would pass over these.
+                   An image is meant to be readable by another process,
+                   so a copy of this one's code left anywhere in it is a
+                   copy that gets read as a function there. */
+                memset(xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, oldoff)), 0,
+                       oldn * sizeof(Xpost_Signature));
             }
             optab = xpost_operator_table(ctx->gl); // recalc
             optab[opcode].sigadr = t;
@@ -520,22 +652,22 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
             si = optab[opcode].n++; /* index of last sig */
         }
 
-        sp = xpost_vm_ptr(ctx->gl, optab[opcode].sigadr);
+        sp = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, optab[opcode].sigadr));
         {
             unsigned int ad;
-            if (!xpost_memory_file_alloc(ctx->gl, in, &ad))
+            if (!_optab_alloc(ctx->gl, (unsigned int)in, &ad))
             {
                 XPOST_LOG_ERR("cannot allocate type block");
                 XPOST_LOG_ERR("operator %s NOT installed", name);
                 return null;
             }
             optab = xpost_operator_table(ctx->gl); // recalc
-            sp = xpost_vm_ptr(ctx->gl, optab[opcode].sigadr); // recalc
+            sp = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, optab[opcode].sigadr)); // recalc
             sp[si].t = ad;
         }
         {
             va_list args;
-            byte *b = xpost_vm_ptr(ctx->gl, sp[si].t);
+            byte *b = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, sp[si].t));
             va_start(args, in);
             for (i = in-1; i >= 0; i--) {
                 b[i] = va_arg(args, int);
@@ -666,8 +798,8 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
         unsigned int sigadr;
         int s;
 
-        if (!xpost_memory_file_alloc(ctx->gl,
-                                     nsig * sizeof(Xpost_Signature), &sigadr))
+        if (!_optab_alloc(ctx->gl,
+                          (unsigned int)(nsig * sizeof(Xpost_Signature)), &sigadr))
         {
             XPOST_LOG_ERR("cannot allocate signature block for %s", buf);
             return null;
@@ -680,16 +812,16 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
             int in = sigs[s].in;
             int k;
 
-            if (!xpost_memory_file_alloc(ctx->gl,
-                                         (unsigned int)(in ? in : 1), &tadr))
+            if (!_optab_alloc(ctx->gl,
+                              (unsigned int)(in ? in : 1), &tadr))
             {
                 XPOST_LOG_ERR("cannot allocate type block for %s", buf);
                 return null;
             }
             /* an allocation moves the file, so every pointer into it is
                taken afresh from its address */
-            sig = xpost_vm_ptr(ctx->gl, sigadr);
-            b = xpost_vm_ptr(ctx->gl, tadr);
+            sig = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, sigadr));
+            b = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, tadr));
             for (k = 0; k < in; k++)
                 b[k] = sigs[s].types[k];
             sig[s].in = in;
@@ -990,7 +1122,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
 
     optab = xpost_operator_table(ctx->gl);
     op = optab[opcode];
-    sp = xpost_vm_ptr(ctx->gl, op.sigadr);
+    sp = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, op.sigadr));
 
     /* a signature states at most XPOST_OPERATOR_MAX_SIG operands, so ct
        only needs to reach that many; no full segment walk is needed. The
@@ -1050,7 +1182,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
 
         /* check type-pattern against stack */
         pass = 1;
-        t = xpost_vm_ptr(ctx->gl, sp[i].t);
+        t = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, sp[i].t));
         for (j=0; j < sp[i].in; j++)
         {
             Xpost_Object el = (j < (int)os_top->top)
