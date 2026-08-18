@@ -101,6 +101,7 @@ typedef struct fontdata
    again for every string it painted. The table is what the installer
    walks; the statics are what the operators read. */
 static Xpost_Object name_dotemunits;
+static Xpost_Object name_dotfacecache;
 static Xpost_Object name_dotgraphicsdict;
 static Xpost_Object name_dotmarked;
 static Xpost_Object name_dotnotdef;
@@ -140,6 +141,7 @@ static Xpost_Object name_colorcomp2;
 static Xpost_Object name_colorcomp3;
 static Xpost_Object name_colorcomp4;
 static Xpost_Object name_colorspace;
+static Xpost_Object name_csreal;
 static Xpost_Object name_currfont;
 static Xpost_Object name_currgstate;
 static Xpost_Object name_currmatrix;
@@ -164,6 +166,7 @@ static Xpost_Object name_width;
 static struct { Xpost_Object *slot; const char *spelling; } _op_font_names[] =
 {
     { &name_dotemunits, ".emunits" },
+    { &name_dotfacecache, ".facecache" },
     { &name_dotgraphicsdict, ".graphicsdict" },
     { &name_dotmarked, ".marked" },
     { &name_dotnotdef, ".notdef" },
@@ -203,6 +206,7 @@ static struct { Xpost_Object *slot; const char *spelling; } _op_font_names[] =
     { &name_colorcomp3, "colorcomp3" },
     { &name_colorcomp4, "colorcomp4" },
     { &name_colorspace, "colorspace" },
+    { &name_csreal, "csreal" },
     { &name_currfont, "currfont" },
     { &name_currgstate, "currgstate" },
     { &name_currmatrix, "currmatrix" },
@@ -993,7 +997,13 @@ out:
 
    A name is interned into whichever bank the allocation mode selects, so
    the same text asked for under different modes is two different name
-   objects and answers as two different keys. */
+   objects and answers as two different keys.
+
+   What arrives here is a face name, interned when that name is first
+   asked for. The machinery's own spellings are not built here: those
+   are resolved once as the operators are installed (_op_font_names), so
+   asking for a face the cache already holds interns nothing -- whichever
+   branch first cached the face's derived objects. */
 static
 Xpost_Object _face_key(Xpost_Context *ctx, const char *text)
 {
@@ -1033,8 +1043,7 @@ Xpost_Object _face_entry(Xpost_Context *ctx, const char *facename, int create)
     if (xpost_object_get_type(ctx->globalprivatedict) != dicttype)
         return null;
 
-    faces = xpost_dict_get(ctx, ctx->globalprivatedict,
-                           _face_key(ctx, ".facecache"));
+    faces = xpost_dict_get(ctx, ctx->globalprivatedict, name_dotfacecache);
     if (xpost_object_get_type(faces) != dicttype)
         return null;
 
@@ -1055,26 +1064,26 @@ Xpost_Object _face_entry(Xpost_Context *ctx, const char *facename, int create)
 
 static
 void _face_put(Xpost_Context *ctx, const char *facename,
-               const char *what, Xpost_Object o)
+               Xpost_Object what, Xpost_Object o)
 {
     Xpost_Object ent = _face_entry(ctx, facename, 1);
 
     if (xpost_object_get_type(ent) != dicttype)
         return;
-    if (xpost_dict_put(ctx, ent, _face_key(ctx, what), o) != 0)
-        XPOST_LOG_ERR("cannot keep a cached face's %s where the collector"
-                      " reaches it", what);
+    if (xpost_dict_put(ctx, ent, what, o) != 0)
+        XPOST_LOG_ERR("cannot keep a cached face's derived object where"
+                      " the collector reaches it");
 }
 
 static
 Xpost_Object _face_get(Xpost_Context *ctx, const char *facename,
-                       const char *what)
+                       Xpost_Object what)
 {
     Xpost_Object ent = _face_entry(ctx, facename, 0);
 
     if (xpost_object_get_type(ent) != dicttype)
         return null;
-    return xpost_dict_get(ctx, ent, _face_key(ctx, what));
+    return xpost_dict_get(ctx, ent, what);
 }
 
 /* Give up the objects held against a name. Called where the name's
@@ -1089,8 +1098,7 @@ void _face_drop(Xpost_Context *ctx, const char *facename)
 
     if (xpost_object_get_type(ctx->globalprivatedict) != dicttype)
         return;
-    faces = xpost_dict_get(ctx, ctx->globalprivatedict,
-                           _face_key(ctx, ".facecache"));
+    faces = xpost_dict_get(ctx, ctx->globalprivatedict, name_dotfacecache);
     if (xpost_object_get_type(faces) != dicttype)
         return;
     (void)xpost_dict_undef(ctx, faces, _face_key(ctx, facename));
@@ -1306,7 +1314,7 @@ int _findfont(Xpost_Context *ctx,
         if (istt)
         {
             if (slot >= 0)
-                sfnts_obj = _face_get(ctx, fname, "sfnts");
+                sfnts_obj = _face_get(ctx, fname, name_sfnts);
             if (xpost_object_get_type(sfnts_obj) != arraytype && ffile)
             {
                 int ferrcode = 0;
@@ -1353,7 +1361,7 @@ int _findfont(Xpost_Context *ctx,
                         {
                             sfnts_obj = arr;
                             if (slot >= 0)
-                                _face_put(ctx, fname, "sfnts", arr);
+                                _face_put(ctx, fname, name_sfnts, arr);
                         }
                         ctx->vmmode = oldmode;
                     }
@@ -1364,7 +1372,7 @@ int _findfont(Xpost_Context *ctx,
                 istt = 0;
         }
 
-        cs_cached = slot >= 0 ? _face_get(ctx, fname, "CharStrings") : null;
+        cs_cached = slot >= 0 ? _face_get(ctx, fname, name_CharStrings) : null;
         if (xpost_object_get_type(cs_cached) == dicttype)
         {
             /* whether the held dictionary is the program's own
@@ -1372,7 +1380,7 @@ int _findfont(Xpost_Context *ctx,
                held beside it rather than in the entry: the entry may
                be given up and the name asked for again while the
                objects are still held here */
-            Xpost_Object csr = _face_get(ctx, fname, "csreal");
+            Xpost_Object csr = _face_get(ctx, fname, name_csreal);
 
             if (xpost_object_get_type(csr) == booleantype && csr.int_.val
                 && xpost_font_face_is_cff(data.face))
@@ -1399,8 +1407,8 @@ int _findfont(Xpost_Context *ctx,
                 {
                     if (slot >= 0)
                     {
-                        _face_put(ctx, fname, "CharStrings", cs);
-                        _face_put(ctx, fname, "csreal", xpost_bool_cons(1));
+                        _face_put(ctx, fname, name_CharStrings, cs);
+                        _face_put(ctx, fname, name_csreal, xpost_bool_cons(1));
                     }
                     ret = xpost_dict_put(ctx, fontdict,
                                        name_CharStrings, cs);
@@ -1418,8 +1426,8 @@ int _findfont(Xpost_Context *ctx,
                 {
                     if (slot >= 0)
                     {
-                        _face_put(ctx, fname, "CharStrings", cs);
-                        _face_put(ctx, fname, "csreal", xpost_bool_cons(1));
+                        _face_put(ctx, fname, name_CharStrings, cs);
+                        _face_put(ctx, fname, name_csreal, xpost_bool_cons(1));
                     }
                     cffreal = 1;
                     ret = xpost_dict_put(ctx, fontdict,
@@ -1508,7 +1516,7 @@ int _findfont(Xpost_Context *ctx,
                         csdict = sealed;
                 }
                 if (slot >= 0)
-                    _face_put(ctx, fname, "CharStrings", csdict);
+                    _face_put(ctx, fname, name_CharStrings, csdict);
                 ret = xpost_dict_put(ctx, fontdict, name_CharStrings,
                                    csdict);
                 if (ret)
@@ -1578,7 +1586,7 @@ int _findfont(Xpost_Context *ctx,
                         csdict = sealed;
                 }
                 if (slot >= 0)
-                    _face_put(ctx, fname, "CharStrings", csdict);
+                    _face_put(ctx, fname, name_CharStrings, csdict);
                 ret = xpost_dict_put(ctx, fontdict,
                                      name_CharStrings,
                                      csdict);
