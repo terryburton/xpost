@@ -20,7 +20,13 @@ option('large-object',
 option('mmap',
   type: 'boolean',
   value: true,
-  description: 'back virtual memory with a mapping that grows in place, where the host offers both mmap and mremap, rather than with the allocator'
+  description: 'back virtual memory with a mapping rather than with the allocator, where the host offers mmap'
+)
+
+option('mremap',
+  type: 'boolean',
+  value: true,
+  description: 'grow a mapped arena in place where the host offers mremap; turning this off takes the reservation the hosts without mremap take, which is how that arrangement is exercised on a host that has it'
 )
 
 option('valgrind',

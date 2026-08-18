@@ -402,6 +402,7 @@ m_dep = cc.find_library('m', required : false)
 # allocator. Windows reaches its own arrangement from inside the memory
 # file and does not consult this; elsewhere it is answered below.
 have_mmap = false
+have_mremap = false
 
 if sys_windows
   bcrypt_dep = cc.find_library('bcrypt')
@@ -506,41 +507,60 @@ else
 
 # memory backing
 #
-# A mapped arena grows by extending its mapping, and that is what makes
-# it worth taking: the storage a geometric growth leaves spare is never
-# written, so it costs nothing until the file reaches it. Where the
-# mapping cannot be extended the file is copied between two mappings and
-# both are held at once, which costs more than the allocator it would
-# stand in for. So both functions are asked for and the arena is mapped
-# only where both answer; a host offering just the first takes the
-# allocator, and the memory file refuses to compile on the pair being
-# split.
+# What an arena wants is to grow without moving, and the two functions
+# are asked for separately because they answer two different halves of
+# that. mremap extends a mapping where it stands. Without it a mapping
+# can still be reserved whole and committed by the piece, which reaches
+# the same place -- no copy, no move -- so a host with mmap and no
+# mremap reserves rather than falling back to the allocator, as Win64
+# already did. Only a host with neither takes the allocator, and only
+# there is the arena storage the file borrows rather than owns, which is
+# what decides whether it can be given back.
+  # The BSD-derived systems put the mmap flags behind their own
+  # feature-test macro, and the level this build compiles at hides them:
+  # a mapping backed by nothing is spelled MAP_ANON there and is not
+  # declared at all without this. It goes on before the checks below, so
+  # that what configure asks is asked under the flags the build uses --
+  # a check made without them answers for a translation unit that does
+  # not exist.
+  if host_machine.system() == 'darwin'
+    add_project_arguments('-D_DARWIN_C_SOURCE', language: 'c')
+    mmap_args = [ '-D_DARWIN_C_SOURCE' ]
+  else
+    mmap_args = []
+  endif
+
   if get_option('mmap')
     if cc.has_header('sys/mman.h') and cc.has_function('mmap',
-        prefix: '#include <sys/mman.h>')
-      if cc.has_function('mremap',
+        prefix: '#include <sys/mman.h>', args: mmap_args)
+      have_mmap = true
+      # asked for separately, and refusable separately: a host with
+      # mremap can be put on the reservation the hosts without it take,
+      # which is the only way that arrangement is run by this suite on a
+      # machine that has the other one
+      have_mremap = get_option('mremap') and cc.has_function('mremap',
           prefix: [ '#define _GNU_SOURCE 1', '#include <sys/mman.h>' ],
           args: [ '-D_GNU_SOURCE' ])
-        have_mmap = true
-      else
-        message('mremap() is absent: virtual memory is backed by the allocator')
-      endif
     else
       message('mmap() is absent: virtual memory is backed by the allocator')
     endif
   endif
 
   if have_mmap
-    # mremap is a GNU extension, and the library has to be compiled at
-    # the feature-test level the check found it at. The definition goes
-    # on the command line, where every translation unit sees it ahead of
-    # any header, rather than into a generated header that a file might
-    # include after one.
-    add_project_arguments('-D_GNU_SOURCE', language: 'c')
     config_h.set10('HAVE_SYS_MMAN_H', true)
     config_h.set10('HAVE_MMAP', true)
-    config_h.set10('HAVE_MREMAP', true)
-    message('virtual memory is backed by a mapping grown with mremap()')
+    if have_mremap
+      # mremap is a GNU extension, and the library has to be compiled at
+      # the feature-test level the check found it at. The definition goes
+      # on the command line, where every translation unit sees it ahead of
+      # any header, rather than into a generated header that a file might
+      # include after one.
+      add_project_arguments('-D_GNU_SOURCE', language: 'c')
+      config_h.set10('HAVE_MREMAP', true)
+      message('virtual memory is backed by a mapping grown with mremap()')
+    else
+      message('mremap() is absent: virtual memory is a reservation committed by the piece')
+    endif
   endif
 
 endif
@@ -5465,15 +5485,17 @@ pkgmod.generate(
 )
 
 # What actually backs a memory file, which is not the same question as
-# whether this host has mmap. Windows never reaches the POSIX arms: it
-# reserves the range a file can address and commits more of it as the file
-# fills, which is a mapping it owns and can give back, and reporting that
-# as the allocator would send a reader looking for a weakness that is not
-# there.
+# Which of the three ways this build backs an arena, named as the memory
+# file names them. Windows never reaches the POSIX arms and reserves in
+# its own way; a POSIX host reserves too where its mapping cannot be
+# extended. Reporting either as the allocator would send a reader looking
+# for a weakness that is not there.
 if host_os == 'windows'
   backing_desc = 'mapped (reserve/commit)'
+elif have_mmap
+  backing_desc = have_mremap ? 'mapped (mmap/mremap)' : 'mapped (reserve/commit)'
 else
-  backing_desc = have_mmap.to_string('mapped (mmap/mremap)', 'allocator')
+  backing_desc = 'allocator'
 endif
 
 summary({'OS': host_os,

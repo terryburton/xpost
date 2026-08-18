@@ -44,16 +44,39 @@
 
 #ifdef HAVE_SYS_MMAN_H
 # include <sys/mman.h> /* mmap munmap mremap */
+/* Two spellings for a mapping backed by nothing, and one flag that does
+   not exist everywhere. MAP_ANON is the older name and the only one the
+   BSD-derived systems declare by default; MAP_NORESERVE asks a host that
+   accounts for commit up front not to, and where it is absent nothing is
+   being asked for -- a reservation is made unreadable and unwritable, so
+   there is nothing to account for until part of it is committed. */
+# if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
+#  define MAP_ANONYMOUS MAP_ANON
+# endif
+# ifndef MAP_NORESERVE
+#  define MAP_NORESERVE 0
+# endif
 #endif
 
-/* A mapped arena grows by extending its mapping, and that is the whole
-   of what it is worth: where the mapping cannot be extended the file has
-   to be copied between two mappings, which holds both at once and costs
-   more than the allocator it would be standing in for. The two names are
-   defined together or not at all. */
-#if defined(HAVE_MMAP) && !defined(HAVE_MREMAP)
-# error "HAVE_MMAP without HAVE_MREMAP: a mapped arena needs both, or neither"
-#endif
+/* THE THREE WAYS AN ARENA IS BACKED, and what decides between them.
+
+   What an arena wants is to grow without moving: objects address it by
+   offset, so a base that moves is only bearable because every pointer is
+   derived afresh, and a grow that copies pays for the whole file each
+   time it doubles.
+
+     a mapping extended in place   mmap with mremap
+     a reservation committed by
+       the piece                   mmap without mremap, and Win64
+     the host allocator            everything else
+
+   The middle one is what a host without mremap does instead of copying
+   between two mappings: the range an offset can address is reserved
+   without being charged for, and more of it is committed as the file
+   fills. The base never moves, no copy is made, and only what is in use
+   is charged -- the same arrangement as the first, reached differently.
+   It is also what makes storage returnable, since the file then owns
+   pages rather than borrowing them from an allocator. */
 
 #ifdef _WIN32
 # ifndef WIN32_LEAN_AND_MEAN
@@ -86,18 +109,24 @@
 size_t xpost_memory_page_size;
 size_t xpost_memory_return_grain;
 
-#if defined(_WIN64)
-/* A pagefile-backed section charges its whole nominal size against the
-   system commit limit the moment it is created, where an anonymous
-   mmap only reserves address space and charges a page when the page is
-   touched. A memory file grows geometrically and leaves most of the
-   growth untouched, so backing it with sections asks the system to
-   commit gigabytes that are never written -- and asks for the old and
-   the new size at once, because the contents have to be copied across.
-   Reserving the range the file can address, and committing more of it
-   as the file fills, is the same arrangement the mmap path has: the
-   base never moves, no copy is made, and only what is in use is
-   charged. */
+/* Reserve and commit: taken on Win64, and on a POSIX host whose mapping
+   cannot be extended.
+
+   On Win64 it is taken in preference to a section, because a
+   pagefile-backed section charges its whole nominal size against the
+   system commit limit the moment it is created, where a reservation
+   charges a page when the page is touched. A memory file grows
+   geometrically and leaves most of the growth untouched, so sections
+   would ask the system to commit gigabytes that are never written --
+   and ask for the old and the new size at once, the contents having to
+   be copied across.
+
+   On POSIX it is taken in preference to the host allocator, which is
+   what a host without mremap had before: a reservation grows without
+   copying and without moving, and the file owns the pages under it
+   rather than borrowing them, which is what lets storage be given
+   back. */
+#if defined(_WIN64) || (defined(HAVE_MMAP) && !defined(HAVE_MREMAP))
 # define XPOST_MEMORY_RESERVED_VM 1
 /* an object addresses the file through an unsigned int offset, so the
    file cannot exceed 4G and a reservation of that size always covers it */
@@ -105,6 +134,53 @@ size_t xpost_memory_return_grain;
 /* capacity is committed in steps of this size, so a file that fills
    byte by byte does not make a system call per allocation */
 # define XPOST_MEMORY_COMMIT_STEP ((size_t)0x100000)
+
+/* The three steps, each named once so that the two hosts differ in what
+   they call and in nothing else. A reservation is address space the
+   process has claimed and is not charged for; committing part of it
+   makes that part readable and writable, and a freshly committed page
+   reads as zero, which is what the caller of a new memory file is
+   promised. */
+static unsigned char *_xpost_memory_reserve(size_t len)
+{
+# ifdef _WIN32
+    return (unsigned char *)VirtualAlloc(NULL, len, MEM_RESERVE, PAGE_READWRITE);
+# else
+    void *p = mmap(NULL, len, PROT_NONE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+
+    return (p == MAP_FAILED) ? NULL : (unsigned char *)p;
+# endif
+}
+
+static int _xpost_memory_commit(unsigned char *base, size_t len)
+{
+# ifdef _WIN32
+    return VirtualAlloc(base, len, MEM_COMMIT, PAGE_READWRITE) != NULL;
+# else
+    return mprotect(base, len, PROT_READ | PROT_WRITE) == 0;
+# endif
+}
+
+static void _xpost_memory_unreserve(unsigned char *base, size_t len)
+{
+# ifdef _WIN32
+    (void)len;
+    VirtualFree((void *)base, 0, MEM_RELEASE);
+# else
+    munmap((void *)base, len);
+# endif
+}
+
+/* what the last of those said went wrong, as a number the log can carry */
+static unsigned long _xpost_memory_reserve_error(void)
+{
+# ifdef _WIN32
+    return (unsigned long)GetLastError();
+# else
+    return (unsigned long)errno;
+# endif
+}
 #endif
 
 /*
@@ -217,18 +293,16 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
 #ifdef XPOST_MEMORY_RESERVED_VM
     if (fd == -1)
     {
-        mem->base = (unsigned char *)VirtualAlloc(NULL, XPOST_MEMORY_RESERVE,
-                                                  MEM_RESERVE, PAGE_READWRITE);
-        if (mem->base &&
-            !VirtualAlloc(mem->base, sz, MEM_COMMIT, PAGE_READWRITE))
+        mem->base = _xpost_memory_reserve(XPOST_MEMORY_RESERVE);
+        if (mem->base && !_xpost_memory_commit(mem->base, sz))
         {
-            VirtualFree((void *)mem->base, 0, MEM_RELEASE);
+            _xpost_memory_unreserve(mem->base, XPOST_MEMORY_RESERVE);
             mem->base = NULL;
         }
         if (!mem->base)
         {
-            XPOST_LOG_ERR("%d failed to reserve memory-file data (%ld)",
-                          VMerror, GetLastError());
+            XPOST_LOG_ERR("%d failed to reserve memory-file data (%lu)",
+                          VMerror, _xpost_memory_reserve_error());
             return 0;
         }
         mem->used = 0;
@@ -270,7 +344,12 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
     CloseHandle(fm);
     if (!mem->base)
     {
-#elif defined (HAVE_MMAP)
+#elif defined (HAVE_MREMAP)
+    /* Reached only where the mapping can be extended in place. A file
+       backed by a descriptor and a host without mremap have no way to
+       grow this without copying between two mappings, and take the
+       allocator below instead -- the reservation above is for the
+       anonymous case, which is the only one anything makes. */
     mem->base = (unsigned char *)mmap(NULL,
                                       sz,
                                       PROT_READ | PROT_WRITE,
@@ -321,9 +400,7 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
    WHICH CALL. What is wanted is a call that gives the storage up and
    leaves the range writable, so that nothing has to be asked for before
    the range is used again: an allocator that had to ask would be asking
-   on the path every allocation takes. Two systems have one, and it
-   behaves the same way on both -- the storage goes, the range stays
-   addressable, and it reads as zero until it is written again.
+   on the path every allocation takes.
 
      Linux      madvise MADV_DONTNEED
      Windows    DiscardVirtualMemory, from Windows 8.1
@@ -332,18 +409,13 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
    per call, but a decommitted range faults on the next write and would
    put a system call on every handout to prevent it. The discard is taken
    instead: it costs about ten times as much, and it costs it here, where
-   a program has asked for a collection, rather than in the allocator.
-
-   The other POSIX systems answer their calls and keep the storage, so an
-   arena there is left alone rather than told to do something that would
-   report a figure it did not deliver. */
+   a program has asked for a collection, rather than in the allocator. */
 unsigned int
 xpost_memory_file_release_range(Xpost_Memory_File *mem,
                                 unsigned int adr,
                                 unsigned int len)
 {
-#if (defined(HAVE_MMAP) && defined(__linux__) && defined(MADV_DONTNEED)) \
-    || defined(XPOST_MEMORY_RESERVED_VM)
+#if defined(HAVE_MMAP) || defined(XPOST_MEMORY_RESERVED_VM)
     size_t ps = xpost_memory_return_grain;
     size_t from;
     size_t to;
@@ -359,13 +431,12 @@ xpost_memory_file_release_range(Xpost_Memory_File *mem,
     if (to <= from)
         return 0;
 
-    /* a range of bytes rather than anything with a shape: what the call
-       below is told is where the storage is and how much of it there is */
+    /* a range of bytes rather than anything with a shape: what the calls
+       below are told is where the storage is and how much of it there is */
     {
         void *bytes = xpost_vm_ptr(mem, (unsigned int)from);
 
-# ifdef XPOST_MEMORY_RESERVED_VM
-    {
+# if defined(_WIN32)
         /* Named through the module rather than linked to, so that a
            build of this runs on the Windows that predate the call: where
            it is absent nothing is handed back, which is the same answer
@@ -386,15 +457,20 @@ xpost_memory_file_release_range(Xpost_Memory_File *mem,
                           (unsigned long)ret);
             return 0;
         }
-    }
+# elif defined(__linux__) && defined(MADV_DONTNEED)
+        if (madvise(bytes, to - from, MADV_DONTNEED) != 0)
+        {
+            XPOST_LOG_ERR("cannot hand back %lu bytes at %lu (error: %s)",
+                          (unsigned long)(to - from), (unsigned long)from,
+                          strerror(errno));
+            return 0;
+        }
 # else
-    if (madvise(bytes, to - from, MADV_DONTNEED) != 0)
-    {
-        XPOST_LOG_ERR("cannot hand back %lu bytes at %lu (error: %s)",
-                      (unsigned long)(to - from), (unsigned long)from,
-                      strerror(errno));
+        /* No call here yet that gives the storage up and leaves the
+           range writable, so nothing is handed back and the figure says
+           so. */
+        (void)bytes;
         return 0;
-    }
 # endif
     }
     return (unsigned int)(to - from);
@@ -427,12 +503,16 @@ xpost_memory_file_exit(Xpost_Memory_File *mem)
 
 #if defined(XPOST_MEMORY_RESERVED_VM)
     if (mem->fd == -1)
-        VirtualFree((void *)mem->base, 0, MEM_RELEASE);
+        _xpost_memory_unreserve(mem->base, XPOST_MEMORY_RESERVE);
     else
+# ifdef _WIN32
         UnmapViewOfFile(mem->base);
+# else
+        munmap((void *)mem->base, mem->max);
+# endif
 #elif defined(_WIN32)
     UnmapViewOfFile(mem->base);
-#elif defined (HAVE_MMAP)
+#elif defined (HAVE_MREMAP)
     munmap((void *)mem->base, mem->max);
 #else
     if (mem->fd != -1)
@@ -534,13 +614,14 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         if (want <= mem->max)
             return 1;
 
-        XPOST_LOG_INFO("commit memory file%s%s (old: %d  new: %d)",
+        XPOST_LOG_INFO("commit memory file%s%s (old: %lu  new: %lu)",
                        mem->fname[0] ? " for " : "", mem->fname[0] ? mem->fname : "",
-                       mem->max, want);
+                       (unsigned long)mem->max, (unsigned long)want);
 
-        if (!VirtualAlloc(mem->base, want, MEM_COMMIT, PAGE_READWRITE))
+        if (!_xpost_memory_commit(mem->base, want))
         {
-            XPOST_LOG_ERR("%d unable to commit memory (%ld)", VMerror, GetLastError());
+            XPOST_LOG_ERR("%d unable to commit memory (%lu)", VMerror,
+                          _xpost_memory_reserve_error());
             return 0;
         }
         mem->max = want;
@@ -629,7 +710,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     }
     else
     { /* hanging error case */
-#elif defined (HAVE_MMAP)
+#elif defined (HAVE_MREMAP)
     if (mem->fd != -1)
     {
         if (ftruncate(mem->fd, sz) == -1)
