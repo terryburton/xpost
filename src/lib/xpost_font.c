@@ -110,6 +110,7 @@ static long gcache_blimit = 32768;
 static struct { const void *face; long m[4]; long size; }
     gcache_state[GCACHE_FACES];
 static int gcache_nstate = 0;
+static int gcache_rr = 0;         /* next slot displaced when all are live */
 
 static const Xpost_Glyph_Entry *gcache_serving = NULL;
 
@@ -137,10 +138,30 @@ gcache_state_set(const void *face, const long *m, const long *size)
             { slot = i; break; }
     if (slot < 0)
     {
+        /* a slot a freed face gave back is taken before the table
+           grows, so the table's population is the live faces and not
+           every face there has ever been */
+        for (i = 0; i < gcache_nstate; i++)
+            if (!gcache_state[i].face)
+                { slot = i; break; }
+    }
+    if (slot < 0)
+    {
         if (gcache_nstate < GCACHE_FACES)
             slot = gcache_nstate++;
         else
-            slot = 0;
+        {
+            /* every slot holds a live face: displace them in rotation,
+               so no one face's state is the standing casualty. The
+               displaced face keeps its cached rasters -- they are keyed
+               by its address -- but declines the cache until its state
+               is recorded again. */
+            slot = gcache_rr;
+            gcache_rr = (gcache_rr + 1) % GCACHE_FACES;
+        }
+    }
+    if (gcache_state[slot].face != face)
+    {
         gcache_state[slot].face = face;
         gcache_state[slot].m[0] = 65536; gcache_state[slot].m[1] = 0;
         gcache_state[slot].m[2] = 0;     gcache_state[slot].m[3] = 65536;
@@ -367,6 +388,7 @@ gcache_clear(void)
        again for a different face */
     memset(gcache_state, 0, sizeof(gcache_state));
     gcache_nstate = 0;
+    gcache_rr = 0;
     gcache_serving = NULL;
 }
 
@@ -811,6 +833,10 @@ xpost_font_face_free(void *face)
     for (i = 0; i < gcache_nstate; i++)
         if (gcache_state[i].face == face)
             gcache_state[i].face = NULL;
+    /* trailing slots given back shrink the population, so the count
+       bounds the live faces rather than every face there has ever been */
+    while (gcache_nstate > 0 && !gcache_state[gcache_nstate - 1].face)
+        gcache_nstate--;
 
     /* the face reads its program until it is closed, so the program is
        taken off the list while the face is still a face, and given up
@@ -1534,14 +1560,17 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 {
     FT_Error err;
     long m[4], size;
+    int keyed;
 
     _strike_scaled.valid = 0;
 
     /* a cached raster stands in for the rasterization whole: the key
        carries every input the rasterizer would see, so the replay is
-       the same bytes */
-    gcache_state_get(face, m, &size);
-    gcache_serving = gcache_find(face, glyph_index, m, size);
+       the same bytes. A face with no recorded transform and size has no
+       such key, so it declines the cache -- served fresh from the slot
+       below -- rather than being keyed on state nobody installed */
+    keyed = gcache_state_get(face, m, &size);
+    gcache_serving = keyed ? gcache_find(face, glyph_index, m, size) : NULL;
     if (gcache_serving)
     {
         gcache_bump((Xpost_Glyph_Entry *)gcache_serving);
@@ -1565,7 +1594,7 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
             long ax, ay;
 
             _glyph_linear_advance((FT_Face)face, &ax, &ay);
-            if (!FT_IS_SCALABLE((FT_Face)face)
+            if (!FT_IS_SCALABLE((FT_Face)face) && keyed
              && _strike_resample((FT_Face)face, m, ax, ay))
                 gcache_serving = gcache_insert(face, glyph_index, m, size,
                                                _strike_scaled.bits,
@@ -1576,7 +1605,7 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
                                                _strike_scaled.left,
                                                _strike_scaled.top,
                                                ax, ay);
-            else
+            else if (keyed)
                 gcache_serving = gcache_insert(face, glyph_index, m, size,
                                                slot->bitmap.buffer,
                                                (int)slot->bitmap.rows,
