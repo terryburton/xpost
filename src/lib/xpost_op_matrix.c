@@ -61,7 +61,18 @@
 /* full precision: a truncated literal skewed rotate off the axis angles */
 #define RAD_PER_DEG (M_PI / 180.0)
 
-// TODO Factor out name_cons() calls.
+/* The names the coordinate operators reach the current transformation
+   through. Every one of them walks from the private dictionary to the
+   graphics state to the matrix, and a name built from characters walks
+   the name tree to get there -- twice for a name in the global bank,
+   since the local one is searched first and misses. These operators run
+   once per coordinate a program converts, so the names are resolved
+   where the operators are installed and not where they are used. */
+static Xpost_Object namedotgraphicsdict;
+static Xpost_Object namecurrgstate;
+static Xpost_Object namecurrmatrix;
+static Xpost_Object namedevice;
+static Xpost_Object namedefaultmatrix;
 
 static
 Xpost_Object _get_ctm(Xpost_Context *ctx)
@@ -70,9 +81,9 @@ Xpost_Object _get_ctm(Xpost_Context *ctx)
     Xpost_Object gs;
     Xpost_Object psctm;
 
-    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
-    gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
-    psctm = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, namedotgraphicsdict);
+    gs = xpost_dict_get(ctx, gd, namecurrgstate);
+    psctm = xpost_dict_get(ctx, gs, namecurrmatrix);
 
     return psctm;
 }
@@ -232,22 +243,22 @@ int _default_matrix(Xpost_Context *ctx,
     Xpost_Object devdic;
     Xpost_Object defmat;
 
-    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, namedotgraphicsdict);
     if (xpost_object_get_type(gd) == invalidtype)
         return undefined;
     XPOST_LOG_INFO("loaded graphicsdict");
 
-    gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
+    gs = xpost_dict_get(ctx, gd, namecurrgstate);
     if (xpost_object_get_type(gs) == invalidtype)
         return undefined;
     XPOST_LOG_INFO("loaded gstate");
 
-    devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
+    devdic = xpost_dict_get(ctx, gs, namedevice);
     if (xpost_object_get_type(devdic) == invalidtype)
         return undefined;
     XPOST_LOG_INFO("loaded device");
 
-    defmat = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "defaultmatrix"));
+    defmat = xpost_dict_get(ctx, devdic, namedefaultmatrix);
     if (xpost_object_get_type(defmat) == invalidtype)
         return undefined;
     XPOST_LOG_INFO("loaded defaultmatrix");
@@ -609,6 +620,22 @@ int xpost_oper_init_matrix_ops(Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
+
+    if (xpost_object_get_type((namedotgraphicsdict =
+            xpost_name_cons(ctx, ".graphicsdict"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namecurrgstate =
+            xpost_name_cons(ctx, "currgstate"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namecurrmatrix =
+            xpost_name_cons(ctx, "currmatrix"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedevice =
+            xpost_name_cons(ctx, "device"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedefaultmatrix =
+            xpost_name_cons(ctx, "defaultmatrix"))) == invalidtype)
+        return VMerror;
 
     op = xpost_operator_cons(ctx, "matrix", (Xpost_Op_Func)_matrix, 0);
     INSTALL;

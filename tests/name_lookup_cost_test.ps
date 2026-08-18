@@ -32,6 +32,15 @@
     /checks checks 1 add store
 } def
 
+% the same verdict, for a check that names which member of a family
+% failed rather than only that one did
+/assertn { % bool (label) (name)  .  -
+    /nm exch def /lb exch def
+    { }{ (FAIL: ) print lb print nm print (\n) print
+         /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
 /.namelookups 1183615869 internaldict /.namelookups get def
 /.fillrectgray 1183615869 internaldict /.fillrectgray get def
 
@@ -91,6 +100,56 @@ large small sub SLACK le
 large SLACK le
     (a rectangle fill resolves no names of its own) assert
 
-checks 3 eq (every check was reached) assert
+% The same property, for the operators that convert a coordinate. Each
+% of these walks from the private dictionary to the graphics state to
+% the matrix it needs, and a program converting a path's worth of points
+% calls one per point. What is asserted is the shape and not a number:
+% four times the calls, and no more lookups between the two arms than
+% the measurement itself accounts for.
+%
+% They are asked as a family rather than one at a time because that is
+% how the cost arrives -- one helper reaches the matrix for all of them,
+% so one of them regressing is all of them regressing, and a list of
+% names is what makes the failure say which.
+/PROBES [
+    [ (transform)     { 1 2 transform pop pop } ]
+    [ (itransform)    { 1 2 itransform pop pop } ]
+    [ (dtransform)    { 1 2 dtransform pop pop } ]
+    [ (idtransform)   { 1 2 idtransform pop pop } ]
+    [ (translate)     { 0 0 translate } ]
+    [ (scale)         { 1 1 scale } ]
+    [ (rotate)        { 0 rotate } ]
+    [ (concat)        { MAT concat } ]
+    [ (currentmatrix) { MAT currentmatrix pop } ]
+    [ (defaultmatrix) { MAT defaultmatrix pop } ]
+    [ (currentpoint)  { 1 1 moveto currentpoint pop pop } ]
+    [ (rectfill)      { 0 0 1 1 rectfill } ]
+    [ (stroke)        { newpath 0 0 moveto 2 2 lineto stroke } ]
+] def
+/MAT [ 1 0 0 1 0 0 ] def
+
+% A procedure reached by name is run by the name, so the one being
+% measured is kept in a one-element array and fetched from it: what is
+% counted has to be the procedure's own lookups and not a lookup of the
+% procedure.
+/repeatcost { % proc int  .  int
+    /n exch def /pr 1 array def pr 0 3 -1 roll put
+    5 { pr 0 get exec } repeat
+    .namelookups
+    n { pr 0 get exec } repeat
+    .namelookups exch sub
+} def
+
+initgraphics
+0 1 PROBES length 1 sub {
+    /pi exch def
+    /pn PROBES pi get 0 get def
+    /c1 PROBES pi get 1 get SMALL repeatcost def
+    /c2 PROBES pi get 1 get LARGE repeatcost def
+    c2 c1 sub SLACK le
+        (this operator resolves a name per call: ) pn assertn
+} for
+
+checks 3 PROBES length add eq (every check was reached) assert
 
 failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse
