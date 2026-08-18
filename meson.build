@@ -5002,10 +5002,15 @@ test('check-halftone-facts',
 # subdivision one painter reads off the device and the other holds
 # constant. The register carries each difference with the measurement
 # that found it and what is to become of it.
+# The limit is named rather than left to the default: this crosses seven
+# shading types with the operators that take them, and each cell is a
+# process. It comes in comfortably under the default where a process is
+# cheap and does not on Windows, where starting one is not.
 test('check-shading-facts',
   find_program('tests/check-shading-facts.sh'),
   suite: cost_fast,
-  args: [ meson.current_source_dir(), xpost_exe ])
+  args: [ meson.current_source_dir(), xpost_exe ],
+  timeout: 240)
 
 # PLRM 4.7 defines one form type, so this family has one member -- which
 # is where nobody thinks to ask whether the member was ever held to
