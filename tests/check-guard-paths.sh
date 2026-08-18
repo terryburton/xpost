@@ -63,7 +63,6 @@ guard_require_srcroot "$src"
 guard_require_file "$src/meson.build" "the build description"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # ---- the decoys ----
 # a directory that is emphatically not a source root, and looks like the

@@ -65,7 +65,6 @@ golden="$src/tests/library_statics.golden"
 guard_require_file "$golden" "the register of library-lifetime statics"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 guard_mirror_tree "$src"
 tree=$mirror
 

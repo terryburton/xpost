@@ -37,7 +37,6 @@ guard_require_dir "$src/src/bin" "the program source directory"
 guard_require_file "$src/src/lib/xpost_file.c" "the file layer"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 # Read a tree whose lines end where the scans below expect them to.
 guard_mirror_tree "$src"
 src=$mirror

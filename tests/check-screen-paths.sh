@@ -53,7 +53,6 @@ guard_require_srcroot "$src"
 guard_require_file "$src/data/pbmimage.ps" "the bilevel device"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # a cell holding every threshold value there is
 thresholds=$(awk 'BEGIN { for (i = 0; i < 256; i++) printf "%02X", i }')

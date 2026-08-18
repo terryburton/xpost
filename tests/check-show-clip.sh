@@ -69,7 +69,6 @@ guard_require_dir "$src/data" "the interpreter's PostScript"
 guard_require_file "$src/src/lib/xpost_op_font.c" "the font module"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 guard_mirror_tree "$src"
 tree=$mirror
 guard_mirror register "$golden"

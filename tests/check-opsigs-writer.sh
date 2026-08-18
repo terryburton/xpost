@@ -23,7 +23,6 @@ src=${1:?usage: check-opsigs-writer.sh <srcroot>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
 # every mention of the statement dictionary, comments stripped

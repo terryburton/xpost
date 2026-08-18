@@ -38,7 +38,6 @@ guard_require_dir "$build" "the build directory"
 guard_require_file "$build/config.h" "the generated configuration header"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # The compiler the tree was built with is the one that has already had
 # its say. What is wanted here is the other one.

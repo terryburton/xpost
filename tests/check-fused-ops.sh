@@ -50,7 +50,6 @@ fi
 
 # The cases: a PostScript string on its own line, followed by `same`.
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 sed -nE 's/^[[:space:]]*(\(.*\))[[:space:]]+same[[:space:]]*$/\1/p' "$testps" \
     > "$work/cases"
 ncases=$(grep -c . "$work/cases" || true)

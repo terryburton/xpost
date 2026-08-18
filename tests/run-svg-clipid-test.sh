@@ -30,7 +30,7 @@ xpost=$1
 # interpreter runs, and a native interpreter under a POSIX shell need not
 # share the shell's view of an absolute path
 tmp=svgclipid-$$
-trap 'rm -rf "$tmp"' 0
+trap 'rm -rf "$tmp"' EXIT INT TERM
 mkdir -p "$tmp"
 
 # Three clips that are not rectangles, so each is written as a clipPath.

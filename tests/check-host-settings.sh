@@ -73,7 +73,6 @@ guard_require_file "$golden" "the register of what a run settles"
 guard_require_file "$src/src/lib/xpost_interpreter.c" "the interpreter core"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 fail=0
 cr=$(printf '\r')
 

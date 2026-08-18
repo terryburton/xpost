@@ -42,7 +42,6 @@ guard_require_file "$src/tests/halftone-facts" "the halftone register"
 guard_require_file "$src/data/gstate.ps" "the halftone machinery"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
 # ---- what the register says

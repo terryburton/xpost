@@ -34,7 +34,6 @@ golden="$src/tests/graphicsdict_slots.golden"
 [ -s "$golden" ] || { echo "FAILURES: no usable register at $golden"; exit 1; }
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
 # comments are not code, and a % inside a string is not a comment

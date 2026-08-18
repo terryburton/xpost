@@ -37,7 +37,6 @@ guard_require_file "$src/data/gstate.ps" "the halftone machinery"
 guard_require_file "$src/data/paint.ps" "the painting machinery"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
 ht='<< /HalftoneType 3 /Width 4 /Height 4

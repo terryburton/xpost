@@ -107,7 +107,6 @@ guard_require_srcroot "$src"
 guard_require_file "$src/meson.build" "the build description"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror cost "$src/meson.build"
 meson="$mirror/meson.build"
 

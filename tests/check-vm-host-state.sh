@@ -72,7 +72,6 @@ src=${1:?usage: check-vm-host-state.sh <source root>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror_tree "$src"
 src=$mirror
 

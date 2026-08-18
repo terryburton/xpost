@@ -203,7 +203,7 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
     echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
     exit 1
 fi
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work"' EXIT INT TERM
 
 # Read the suites off each line and apply the predicate. What a line
 # says and how it says it is tests/listing.awk, which every reader of a

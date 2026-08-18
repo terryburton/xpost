@@ -29,7 +29,6 @@ reg="$src/tests/raster_reading.exempt"
 guard_require_file "$reg" "the register of scripts that read a page themselves"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 
 fail=0
 

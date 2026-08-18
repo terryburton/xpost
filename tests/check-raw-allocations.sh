@@ -27,7 +27,6 @@ src=${1:?usage: check-raw-allocations.sh <srcroot>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 
 # Read with carriage returns taken out, for the reason given where
 # guard_mirror is defined: a call site is found by what starts a line, and

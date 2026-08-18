@@ -29,7 +29,6 @@ src=${1:?usage: check-compaction-safe-point.sh <srcroot>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 
 # The one function permitted to close the arena up. Held as a pair, so
 # that moving the safe point to another file is as visible as adding a

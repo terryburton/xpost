@@ -39,7 +39,7 @@ pdf=$(mktemp)
 # a program built for another environment need not read one absolute path
 # the same way.
 discard=./discard-$$.pdf
-trap 'rm -f "$pdf" "$discard"' EXIT
+trap 'rm -f "$pdf" "$discard"' EXIT INT TERM
 
 run_xpost "the pdfwrite run" -d pdfwrite -o "$pdf" "$script"
 
@@ -105,7 +105,7 @@ xrefwidth "the single-file PDF" "$pdf" || exit 1
 # rule held at one of them is a rule held nowhere in particular. A %d in
 # the name puts each page in its own file, which is the other writer.
 perpdf=./page-$$-1.pdf
-trap 'rm -f "$pdf" "$discard" "$perpdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf"' EXIT INT TERM
 run_xpost "the per-page pdfwrite run" -d pdfwrite -o "./page-$$-%d.pdf" "$script"
 [ -f "$perpdf" ] || { echo "FAIL: the per-page run wrote no first page"; exit 1; }
 xrefwidth "the per-page PDF" "$perpdf" || exit 1
@@ -115,7 +115,7 @@ echo "xref entry width OK"
 # Info dictionary, readable by the consumer
 infops=$(mktemp)
 infopdf=$(mktemp)
-trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf"' EXIT INT TERM
 cat > "$infops" <<'EOF'
 [ /Creator (pdf-device check) /DOCINFO pdfmark
 100 100 moveto 200 100 lineto 200 200 lineto closepath fill
@@ -217,7 +217,7 @@ sepps=$(mktemp)
 # interpreter, which is embedded in the program below and need not share the
 # shell's view of an absolute path (e.g. a native binary under a POSIX shell).
 seppdf=./sep-$$.pdf
-trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT INT TERM
 cat > "$sepps" <<EOF
 << /OutputDevice /pdfwrite /OutputFile ($seppdf) /PageSize [100 100] >> setpagedevice
 [/Separation (Spot A) /DeviceCMYK {dup 0 exch dup 0.5 mul exch 0.25 mul}] setcolorspace
@@ -271,7 +271,7 @@ echo "separation colour spaces OK"
 # it.
 mpps=$(mktemp)
 mppdf=./mp-$$.pdf
-trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT INT TERM
 cat > "$mpps" <<EOF
 << /OutputDevice /pdfwrite /OutputFile ($mppdf) /PageSize [80 80] >> setpagedevice
 save

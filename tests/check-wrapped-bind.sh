@@ -38,7 +38,6 @@ golden=${3:?usage: check-wrapped-bind.sh <xpost> <srcroot> <golden>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 
 # Walk every operator body systemdict publishes and report each executable

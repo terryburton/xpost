@@ -22,7 +22,7 @@ script=$2
 . "$(dirname "$0")/verdict.sh"
 
 pdf=$(mktemp)
-trap 'rm -f "$pdf"' EXIT
+trap 'rm -f "$pdf"' EXIT INT TERM
 
 # -o gives the vector writers somewhere to put their documents, so stdout
 # carries only the report

@@ -40,7 +40,6 @@ register="$src/tests/op_lookups.golden"
 guard_require_file "$register" "the run-time operator lookup register"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 fail=0
 
 # Rules 1 and 2 and half of rule 3 are scans of the library's sources for

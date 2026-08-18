@@ -21,7 +21,7 @@ script=$2
 . "$(dirname "$0")/verdict.sh"
 
 dir=$(mktemp -d)
-trap 'rm -rf "$dir"' EXIT
+trap 'rm -rf "$dir"' EXIT INT TERM
 
 # A shell that emulates named pipes for its own programs can make one
 # that a native program cannot open: mkfifo succeeding says the shell has

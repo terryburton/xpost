@@ -136,7 +136,6 @@ golden="$src/tests/vm_growth.golden"
 guard_require_file "$golden" "the register of second-run costs"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 
 XPOST_DATA_DIR="$src/data"
 export XPOST_DATA_DIR

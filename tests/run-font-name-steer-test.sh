@@ -42,7 +42,7 @@ prog="$src/tests/font_name_steer_test.ps"
 [ -r "$prog" ] || { echo "FAILURES: not readable: $prog"; exit 1; }
 
 verdict_workdir
-trap 'rm -rf "$work" "$libwork"' EXIT
+trap 'rm -rf "$work" "$libwork"' EXIT INT TERM
 
 # The combined program goes in a directory of its own: these runners set up a
 # scratch tree the suite itself looks at.

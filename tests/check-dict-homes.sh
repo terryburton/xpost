@@ -54,7 +54,6 @@ guard_require_file "$golden" "the register of private-namespace homes"
 guard_require_file "$src/data/gstate.ps" "the graphics state module"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 fail=0
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 

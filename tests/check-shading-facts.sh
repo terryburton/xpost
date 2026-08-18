@@ -70,7 +70,6 @@ case $src in
 esac
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror_tree "$src"
 src=$mirror
 

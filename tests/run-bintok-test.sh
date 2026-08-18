@@ -17,7 +17,7 @@ golden=$3
 scratch=bintok_scratch_$$
 job=$(mktemp)
 out=$(mktemp)
-trap 'rm -f "$scratch" "$job" "$out"' EXIT
+trap 'rm -f "$scratch" "$job" "$out"' EXIT INT TERM
 
 { echo "/SCRATCH ($scratch) def"; cat "$corpus"; echo quit; } > "$job"
 

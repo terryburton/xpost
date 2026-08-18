@@ -43,7 +43,6 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
     echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
     exit 1
 fi
-trap 'rm -rf "$work"' EXIT
 
 fail=0
 pairs=0

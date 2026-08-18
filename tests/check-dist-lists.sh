@@ -24,7 +24,6 @@ src=${1:?usage: check-dist-lists.sh <source tree root>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror_tree "$src"
 tree=$mirror
 

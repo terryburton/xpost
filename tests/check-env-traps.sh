@@ -74,7 +74,6 @@ guard_require_dir "$src/src/lib" "the library source directory"
 guard_require_dir "$src/src/bin" "the program source directory"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 fail=0
 
 # The names an ending is written with. abort is in the list twice over:

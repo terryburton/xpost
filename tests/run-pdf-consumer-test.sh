@@ -58,7 +58,6 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
     echo "SKIP: could not make a scratch directory (is TMPDIR writable?)"
     exit 77
 fi
-trap 'rm -rf "$work"' EXIT
 
 fail=0
 

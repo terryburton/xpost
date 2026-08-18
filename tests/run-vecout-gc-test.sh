@@ -14,7 +14,7 @@ script=$2
 . "$(dirname "$0")/verdict.sh"
 
 pdf=$(mktemp)
-trap 'rm -f "$pdf"' EXIT
+trap 'rm -f "$pdf"' EXIT INT TERM
 
 out=$("$xpost" -q --no-sandbox -d pdfwrite -o "$pdf" "$script" </dev/null 2>&1)
 status=$?

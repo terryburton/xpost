@@ -20,7 +20,7 @@ xpost=$1
 ps=$(mktemp)
 outa=$(mktemp)
 outrgb=$(mktemp)
-trap 'rm -f "$ps" "$outa" "$outrgb"' EXIT
+trap 'rm -f "$ps" "$outa" "$outrgb"' EXIT INT TERM
 
 cat > "$ps" <<'EOF'
 newpath 20 20 moveto 100 20 lineto 100 60 lineto 20 60 lineto closepath fill

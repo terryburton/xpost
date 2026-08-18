@@ -11,7 +11,7 @@ set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
 tmp=${TMPDIR:-/tmp}/errfmt-$$
-trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps "$tmp".badreport.ps "$tmp".vmerror.ps' 0
+trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps "$tmp".badreport.ps "$tmp".vmerror.ps' EXIT INT TERM
 
 # 1. a top-level undefined error: the error line (with its trailing space)
 #    and then the flush notice

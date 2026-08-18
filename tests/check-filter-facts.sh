@@ -41,7 +41,6 @@ guard_require_file "$src/src/lib/xpost_op_file.c" "the filter operator"
 guard_require_file "$src/tests/filter-facts" "the filter register"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 
 # ---- membership, and what each name is, read from the source

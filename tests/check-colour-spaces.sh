@@ -43,7 +43,6 @@ guard_require_srcroot "$src"
 guard_require_file "$src/data/color.ps" "the colour machinery"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror colourspaces "$src/data/color.ps"
 color="$mirror/color.ps"
 

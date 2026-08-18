@@ -50,7 +50,6 @@ guard_require_srcroot "$src"
 guard_require_dir "$src/tests" "the test directory"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 fail=0
 
 # A file reads virtual memory if it names one of the operators that

@@ -57,7 +57,6 @@ guard_require_file "$iso" "the isolation test"
 guard_require_file "$nog" "the no-graphics test"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 
 # ---- the register: what a real interpreter holds ----

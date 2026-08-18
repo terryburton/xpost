@@ -46,7 +46,6 @@ case $xpost in /*) ;; *) xpost=$(cd "$(dirname "$xpost")" && pwd)/$(basename "$x
 case $src in /*) srcdata=$src/data ;; *) srcdata=$(cd "$src" && pwd)/data ;; esac
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror_tree "$src"
 src=$mirror
 

@@ -78,7 +78,6 @@ if [ "$nps" -lt 50 ] || [ "$nrun" -lt 15 ] || [ "$ncheck" -lt 15 ] \
 fi
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 fail=0
 

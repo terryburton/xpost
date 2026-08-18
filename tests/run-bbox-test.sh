@@ -20,7 +20,7 @@ verdict_run "$status" "$out" "the bbox job" || exit 1
 printf '%s\n' "$out" | grep -qx "$expect" || exit 1
 
 tmp=${TMPDIR:-/tmp}/bbox-wio-$$.ps
-trap 'rm -f "$tmp"' 0
+trap 'rm -f "$tmp"' EXIT INT TERM
 cat > "$tmp" <<'PSEOF'
 << /OutputDevice /bbox /PageSize [200 200] /HWResolution [72 72] >> setpagedevice
 0 setgray newpath 10 10 moveto 40 0 rlineto 0 40 rlineto -40 0 rlineto closepath fill
@@ -50,7 +50,7 @@ test "$(printf '%s\n' "$out" | grep -c '%%BoundingBox: 10 10 50 50')" = 2 || exi
 # it starts no further left than the pen, the ascender of the capital
 # rises above the baseline and the descender of the g falls below it.
 txt=${TMPDIR:-/tmp}/bbox-text-$$.ps
-trap 'rm -f "$tmp" "$txt"' 0
+trap 'rm -f "$tmp" "$txt"' EXIT INT TERM
 cat > "$txt" <<'PSEOF'
 /Helvetica findfont 24 scalefont setfont
 20 40 moveto (Ag) show

@@ -101,7 +101,6 @@ guard_require_file "$golden" "the register of device Destroy methods"
 guard_require_file "$src/src/lib/xpost_dev_driver.h" "the device driver contract"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 guard_mirror_tree "$src"
 tree=$mirror
 guard_mirror register "$golden"

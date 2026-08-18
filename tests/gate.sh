@@ -143,7 +143,7 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
     echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
     exit 1
 fi
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work"' EXIT INT TERM
 
 # A tab, as the character itself. The table below is tab-separated and
 # awk is told so between the files it is handed, and an assignment among

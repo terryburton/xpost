@@ -31,7 +31,6 @@ guard_require_dir "$datadir" "the PostScript data directory"
 guard_require_file "$golden" "the register of doubly-implemented names"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # every scan below is line-anchored, so read the inputs with their line
 # endings taken out

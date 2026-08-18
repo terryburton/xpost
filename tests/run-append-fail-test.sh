@@ -46,7 +46,7 @@ fi
 # that the shell and a program built for another environment need not
 # read one absolute path the same way.
 out=./append-fail-$$.out
-trap 'rm -f "$out"' EXIT
+trap 'rm -f "$out"' EXIT INT TERM
 result=$(
     ulimit -v "$limitkb"
     "$xpost" -q -d "$device" -o "$out" "$script" </dev/null 2>/dev/null

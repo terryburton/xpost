@@ -52,7 +52,6 @@ guard_require_file "$golden" "the register of part-unit counters"
 guard_require_file "$src/src/lib/xpost_file.c" "the file and filter module"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 guard_mirror_tree "$src"
 tree=$mirror
 guard_mirror register "$golden"

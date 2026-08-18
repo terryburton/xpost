@@ -32,7 +32,6 @@ src=${1:?usage: check-device-skeleton.sh <source root>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 # read a tree whose lines end where the scans below expect them to
 guard_mirror_tree "$src"
 src=$mirror

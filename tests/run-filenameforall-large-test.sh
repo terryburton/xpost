@@ -35,7 +35,7 @@ if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
     exit 77
 fi
 libwork=$(mktemp -d 2>/dev/null) || libwork=$work
-trap 'rm -rf "$work" "$libwork"' EXIT
+trap 'rm -rf "$work" "$libwork"' EXIT INT TERM
 
 # The combined program goes OUTSIDE $work. The run happens in $work and this
 # suite counts every name it finds there, so a file of ours in that directory

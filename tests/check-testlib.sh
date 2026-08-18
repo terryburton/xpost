@@ -28,7 +28,6 @@ guard_require_file "$src/tests/testlib-facts" "the framework register"
 guard_require_file "$src/tests/run-ps-test.sh" "the test harness"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 fail=0
 

@@ -80,7 +80,6 @@ guard_require_file "$lib" "the library to read"
 guard_require_file "$golden" "the register of exported symbols"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # every defined dynamic symbol, whatever section or linkage it has
 nm -D --defined-only "$lib" 2>/dev/null | tr -d '\r' \

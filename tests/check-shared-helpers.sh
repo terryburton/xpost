@@ -37,7 +37,6 @@ reg="$src/tests/shared_helpers.exempt"
 guard_require_file "$reg" "the register of exempt scripts"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # The register is read with carriage returns taken out, for the reason
 # given where guard_mirror is defined.

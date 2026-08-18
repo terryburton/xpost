@@ -27,7 +27,6 @@ xpost=${1:?usage: check-error-quiet.sh <xpost>}
 guard_require_file "$xpost" "the interpreter"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 # The errors, one per line: a name for the report, then the program.
 cases=$work/cases

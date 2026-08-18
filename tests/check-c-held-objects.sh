@@ -30,7 +30,6 @@ src=${1:?usage: check-c-held-objects.sh <source root>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror_tree "$src"
 src=$mirror
 libdir="$src/src/lib"

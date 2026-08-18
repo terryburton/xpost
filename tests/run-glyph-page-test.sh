@@ -48,7 +48,7 @@ else
 fi
 
 topwork=$(mktemp -d)
-trap 'rm -rf "$topwork"' EXIT
+trap 'rm -rf "$topwork"' EXIT INT TERM
 
 fail=0
 

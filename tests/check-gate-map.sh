@@ -45,7 +45,6 @@ guard_require_file "$build/meson-info/intro-tests.json" \
     "the build's record of the tests it defines"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 guard_mirror gate "$src/tests/gate-map"
 map="$mirror/gate-map"
 

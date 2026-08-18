@@ -28,7 +28,6 @@ src=${1:?usage: check-vm-address-fields.sh <srcroot>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 
 # Read with carriage returns taken out, for the reason given where
 # guard_mirror is defined: a declaration is followed by brace depth and a

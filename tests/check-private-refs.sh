@@ -43,7 +43,6 @@ src=${2:?usage: check-private-refs.sh <xpost> <srcroot>}
 guard_require_srcroot "$src"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 
 # ---- the register: what the namespaces hold in a real interpreter ----

@@ -58,7 +58,6 @@ guard_require_file "$golden" "the register of cursors and their bounds"
 guard_require_dir "$src/src/lib" "the library source directory"
 
 guard_workdir
-trap 'rm -rf "$work"' EXIT INT TERM
 guard_mirror_tree "$src"
 tree=$mirror
 guard_mirror register "$golden"
