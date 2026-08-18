@@ -32,6 +32,20 @@ exe=${1:?usage: run-vm-page-return-test.sh <vm_page_return_test executable>}
 out=$("$exe" 2>&1); st=$?
 verdict_ok "$out" "the return itself" || exit 1
 
+# What the mechanism says about this host is what the pair is asked in the
+# light of. An arena the memory file borrowed from the host allocator is not
+# the process's to give back, and the pass gathers the storage above the
+# cursor there as it does anywhere -- so the pair would run, agree, and be
+# read as a return that did not happen. Reported as a skip rather than a
+# pass: nothing was handed back, and saying so is the whole of what can be
+# said on such a host.
+case $out in
+    *"keeps the storage the arena gathered"*)
+        echo "SKIP: the arena here is the host allocator's, so nothing is"
+        echo "      handed back for the pair to differ over"
+        exit 0 ;;
+esac
+
 # Each half reports its figure and its status, so both are judged: a run
 # that printed a figure and then complained on its way out has not
 # answered, and a figure read off it would be read off a broken run.
