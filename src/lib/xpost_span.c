@@ -15,6 +15,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h> /* memcpy: the merge settles into a scratch array */
 
 #include "xpost.h"
 #include "xpost_log.h"
@@ -26,22 +27,13 @@
 /* marks a subpath separator in a vertex list */
 #define SUBPATH_BREAK XPOST_PATH_BREAK
 
-/* One boundary-chain passage through a pixel-row band: the x extent
-   [lo, hi] the chain covers within the band (row b covers device
-   b <= y < b+1) and the chain's y direction (+1 rising, -1 falling) */
-struct band_span
+/* The one statement of the order (the record itself is stated in
+   xpost_span.h): band, then left edge, then right edge, then direction.
+   The qsort-shaped wrapper below and the merge in xpost_span_sort both
+   read it from here, so there is no second copy to drift. */
+static inline
+int _band_span_order (const struct band_span *lt, const struct band_span *rt)
 {
-    int band;
-    int dirn;
-    real lo, hi;
-};
-
-static
-int _bandspancomp (const void *left, const void *right)
-{
-    const struct band_span *lt = left;
-    const struct band_span *rt = right;
-
     if (lt->band != rt->band)
         return lt->band < rt->band ? -1 : 1;
     if (lt->lo != rt->lo)
@@ -49,6 +41,63 @@ int _bandspancomp (const void *left, const void *right)
     if (lt->hi != rt->hi)
         return lt->hi < rt->hi ? -1 : 1;
     return lt->dirn - rt->dirn;
+}
+
+static
+int _bandspancomp (const void *left, const void *right)
+{
+    return _band_span_order(left, right);
+}
+
+/* A shape's passages are sorted once per scan conversion, and a page of
+   small shapes sorts thousands of times: the comparison is the whole
+   cost, and a library sort takes it through a function pointer it
+   cannot inline. So the merge is written out here with the comparison
+   inlined, over a scratch array of the same length. Where that scratch
+   cannot be had, the library sort does the same work through the same
+   order, only slower.
+
+   Merging never reorders a pair the order calls equal, and the order is
+   total over the fields the walk reads, so the walk sees one arrangement
+   whichever route sorted it. */
+void
+xpost_span_sort (struct band_span *spans, int n)
+{
+    struct band_span *tmp, *src, *dst, *swap;
+    int width, i;
+
+    if (n < 2)
+        return;
+    tmp = malloc((size_t)n * sizeof *tmp);
+    if (!tmp)
+    {
+        qsort(spans, (size_t)n, sizeof *spans, _bandspancomp);
+        return;
+    }
+    src = spans;
+    dst = tmp;
+    for (width = 1; width < n; width <<= 1)
+    {
+        for (i = 0; i < n; i += 2 * width)
+        {
+            int l = i;
+            int m = i + width < n ? i + width : n;
+            int r = i + 2 * width < n ? i + 2 * width : n;
+            int j = m, k = l;
+
+            while (l < m && j < r)
+                dst[k++] = _band_span_order(&src[l], &src[j]) <= 0
+                         ? src[l++] : src[j++];
+            while (l < m)
+                dst[k++] = src[l++];
+            while (j < r)
+                dst[k++] = src[j++];
+        }
+        swap = src; src = dst; dst = swap;
+    }
+    if (src != spans)
+        memcpy(spans, src, (size_t)n * sizeof *spans);
+    free(tmp);
 }
 
 /* Append a boundary passage, growing the array as needed; 0 on
@@ -329,7 +378,7 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
        null pointer to qsort is undefined even for a zero count, and there is
        nothing to order below two spans anyway */
     if (nspans > 1)
-        qsort(spans, nspans, sizeof *spans, _bandspancomp);
+        xpost_span_sort(spans, nspans);
 
     /* Walk each band accumulating winding: a span opens at the first
        extent's left edge and closes where the winding count returns to

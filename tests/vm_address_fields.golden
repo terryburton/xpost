@@ -40,6 +40,8 @@ count    xpost_memory.h:Xpost_Memory_File   free_substack
 address  xpost_memory.h:Xpost_Memory_File   high_water               the offset one past the last byte handed out, which a rearrangement would set to its new value rather than move
 address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
 count    xpost_object.h                     stk
+count    xpost_span.h:band_span             band
+count    xpost_span.h:band_span             dirn
 count    xpost_stack.h                      nextseg
 count    xpost_stack.h                      prevseg
 count    xpost_context.h:_Xpost_Context     batch

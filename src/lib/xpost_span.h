@@ -9,6 +9,7 @@
 #define XPOST_SPAN_H
 
 #include "xpost_object.h" /* real, integer */
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
 
 /*
  * Scan conversion, and the seam between stating a span and taking one.
@@ -35,6 +36,24 @@
  * destination holds are separate questions, and only the consumer knows
  * the second one.
  */
+
+/* One boundary-chain passage through a pixel-row band: the x extent
+   [lo, hi] the chain covers within the band (row b covers device
+   b <= y < b+1) and the chain's y direction (+1 rising, -1 falling).
+   Stated here so that the order the conversion sorts passages into can
+   be held by a test; nothing outside the conversion builds one. */
+struct band_span
+{
+    int band;
+    int dirn;
+    real lo, hi;
+};
+
+/* Order a shape's passages by band, then left edge, then right edge,
+   then direction -- the order the insideness walk below requires. The
+   walk reads its input a band at a time and accumulates winding left to
+   right, so any array in this order is settled identically. */
+XPOST_TEST_VISIBLE void xpost_span_sort(struct band_span *spans, int n);
 
 /* One vertex of the boundary being converted, in device space.
    XPOST_PATH_BREAK in x marks a subpath separator rather than a

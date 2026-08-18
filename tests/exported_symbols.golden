@@ -443,6 +443,7 @@ xpost_scanner_radix_number
 xpost_scanner_rep_number
 xpost_skip_graphics_set
 xpost_span_scanconvert
+xpost_span_sort
 xpost_spill_close
 xpost_spill_open
 xpost_spill_probe

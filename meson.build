@@ -1192,6 +1192,22 @@ test('table-row-reuse',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The conversion's own sort against the order it documents, over sizes
+# meeting every merge-width boundary and inputs dense with equal keys.
+# Two properties -- ordered as documented, and holding exactly the input's
+# records -- state a total-order sort completely, which is what lets the
+# pages stay byte-identical whichever correct sort arranged the spans.
+span_sort_exe = executable('span_sort_test',
+  'tests/span_sort_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('span-sort',
+  span_sort_exe,
+  suite: cost_fast)
+
 # That rearranging the arena moves storage without changing what it
 # holds. The contents are checksummed before and after, since an object
 # read through the table would be read through the very field the pass
