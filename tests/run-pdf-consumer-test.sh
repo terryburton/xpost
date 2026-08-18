@@ -53,7 +53,7 @@ if [ "$have_qpdf" = no ] && [ "$have_poppler" = no ]; then
     exit 77
 fi
 
-work=$(mktemp -d 2>/dev/null) || work=
+verdict_workdir
 if [ -z "$work" ] || [ ! -d "$work" ]; then
     echo "SKIP: could not make a scratch directory (is TMPDIR writable?)"
     exit 77

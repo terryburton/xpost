@@ -42,8 +42,7 @@ xpost=$1
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 echo '(reached the program) print flush' > "$work/job.ps"
 
 # A side whose array of rows is past every machine's memory: two thousand

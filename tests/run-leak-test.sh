@@ -34,8 +34,7 @@ if ! command -v valgrind >/dev/null 2>&1; then
     exit 77
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 # One allocation the workload asks for is meant to be refused: a coding
 # whose buffer is four thousand million bytes, so that a filter fails

@@ -48,8 +48,7 @@ xpost=$1
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 # A path written into a program the interpreter runs is read by the
 # interpreter, so it has to be spelt the way the platform spells it. A

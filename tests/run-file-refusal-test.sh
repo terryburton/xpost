@@ -37,7 +37,7 @@ fi
 prog="$src/tests/file_refusal_test.ps"
 [ -r "$prog" ] || { echo "FAILURES: not readable: $prog"; exit 1; }
 
-work=$(mktemp -d) || { echo "FAILURES: no scratch directory"; exit 1; }
+verdict_workdir
 # 500 is restored before the removal: a directory with no write bit
 # cannot have its contents unlinked, including by the trap.
 trap 'chmod 700 "$work/ro" 2>/dev/null; rm -rf "$work" "$libwork"' EXIT

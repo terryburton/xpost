@@ -59,8 +59,7 @@ fi
 datadir=$(path_anchor "$datadir")
 rundata=$datadir
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 checks=0
 

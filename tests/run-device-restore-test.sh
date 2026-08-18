@@ -22,7 +22,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 devices=$DEVICE_FLEET_LIFETIME
 fail=0
 ran=0

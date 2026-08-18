@@ -86,7 +86,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 plain="$work/pages.ps"
 # three pages, each a stroke at its own position, so the pages differ in content
 printf '%s\n' \

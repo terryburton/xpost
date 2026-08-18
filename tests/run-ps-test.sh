@@ -46,8 +46,7 @@ define=${3:-}
 # list kept over here.
 # The marker is honoured in tests/testlib-prepend.sh, which every runner
 # here goes through -- this one is not the only script that runs a suite.
-work=$(mktemp -d) || exit 1
-trap 'rm -rf "$work"' EXIT INT TERM
+verdict_workdir
 . "$(dirname "$0")/testlib-prepend.sh"
 testlib_prepend "$script" "$work"
 run=$testlib_run

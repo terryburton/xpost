@@ -80,8 +80,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 cat > "$work/marks.body" <<'PSEOF'
 % the box, to the pixel: 100 units square with its corners on the box's

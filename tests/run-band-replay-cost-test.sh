@@ -87,8 +87,7 @@ xpost=$(path_anchor "$xpost")
 script=$(path_anchor "$script")
 self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 note() {

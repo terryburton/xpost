@@ -65,8 +65,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 # The marking roster, plus the window device. The window device is not on
 # the roster because the roster is what can be made without a display,

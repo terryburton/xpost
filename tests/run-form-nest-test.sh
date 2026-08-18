@@ -52,8 +52,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 # The figure: three forms, used fifty-six times between them. Stated

@@ -32,7 +32,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 printf '1 2 add pop\n' > "$work/t.ps"
 printf '%%!PS\nshowpage\n' > "$work/page.ps"
 

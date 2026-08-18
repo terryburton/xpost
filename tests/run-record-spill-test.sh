@@ -48,7 +48,7 @@ if [ -z "$datadir" ]; then
 fi
 datadir=$(path_anchor "$datadir")
 
-work=$(mktemp -d)
+verdict_workdir
 trap 'chmod u+w "$work/shut" 2>/dev/null; rm -rf "$work"' EXIT
 fail=0
 checks=0

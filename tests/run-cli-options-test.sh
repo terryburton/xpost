@@ -27,8 +27,7 @@ xpost=$1
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 printf 'showpage\nquit\n' > "$work/blank.ps"
 
 fail=0

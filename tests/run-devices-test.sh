@@ -35,7 +35,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 prog="$work/page.ps"
 printf 'newpath 10 10 moveto 90 90 lineto stroke showpage\n' > "$prog"
 

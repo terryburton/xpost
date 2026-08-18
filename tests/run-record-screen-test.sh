@@ -49,8 +49,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 # $1 device, $2 output stem, rest: program arguments. Every page is

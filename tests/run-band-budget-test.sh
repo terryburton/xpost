@@ -66,8 +66,7 @@ xpost=$(path_anchor "$xpost")
 script=$(path_anchor "$script")
 data=${XPOST_DATA_DIR:-$(cd "$(dirname "$0")/../data" && pwd)}
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 note() {

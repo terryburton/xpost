@@ -23,7 +23,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 devices=$DEVICE_FLEET_MARKING
 fail=0
 ran=0

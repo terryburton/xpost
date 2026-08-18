@@ -49,8 +49,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 # how many images the page paints, and the most marks a record of it can

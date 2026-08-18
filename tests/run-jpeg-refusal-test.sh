@@ -28,8 +28,7 @@ xpost=$1
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 cat > "$work/page.ps" <<'PSEOF'
 % The page is shown inside stopped, so a refusal is the program's to
 % report; the arithmetic after it is there to be reached.

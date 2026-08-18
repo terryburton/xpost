@@ -29,7 +29,7 @@ case $script in /* | ?:/* | ?:\\*) ;; *) script=$PWD/$script ;; esac
 
 near=65535
 
-work=$(mktemp -d 2>/dev/null) || work=
+verdict_workdir
 if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
     echo "SKIP: could not make a scratch directory (is TMPDIR writable?)"
     exit 77

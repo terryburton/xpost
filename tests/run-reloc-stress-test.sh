@@ -24,7 +24,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 
 . "$(dirname "$0")/testlib-prepend.sh"
 testlib_prepend "$script" "$work"

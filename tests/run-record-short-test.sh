@@ -57,8 +57,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 # $1 the case, $2 the page path; sets out to what the run said

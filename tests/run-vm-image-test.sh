@@ -38,7 +38,7 @@ set -u
 exe=${1:?usage: run-vm-image-test.sh <vm_image_test executable>}
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d 2>/dev/null) || work=
+verdict_workdir
 if [ -z "$work" ] || [ ! -d "$work" ]; then
     echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
     exit 1

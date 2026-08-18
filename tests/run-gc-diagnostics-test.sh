@@ -17,8 +17,7 @@ xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d) || exit 1
-trap 'rm -rf "$work"' EXIT INT TERM
+verdict_workdir
 
 . "$(dirname "$0")/testlib-prepend.sh"
 testlib_prepend "$script" "$work"

@@ -40,8 +40,7 @@ xpost=$1
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 echo showpage > "$work/job.ps"
 
 # A square page whose sides are ordinary numbers and whose area is not:

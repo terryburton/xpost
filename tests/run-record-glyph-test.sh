@@ -57,8 +57,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 fail=0
 
 # The margins the readings are held to. Each is far from what the page

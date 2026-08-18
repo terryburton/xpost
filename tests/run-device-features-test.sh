@@ -23,8 +23,7 @@ script=$2
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 case $script in /* | ?:/* | ?:\\*) ;; *) script=$PWD/$script ;; esac
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 . "$(dirname "$0")/testlib-prepend.sh"
 testlib_prepend "$script" "$work"

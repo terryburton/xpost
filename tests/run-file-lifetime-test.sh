@@ -30,8 +30,7 @@ if ! ( ulimit -n "$allowance" ) 2>/dev/null; then
     exit 77
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 . "$(dirname "$0")/testlib-prepend.sh"
 testlib_prepend "$script" "$work"

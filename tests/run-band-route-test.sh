@@ -90,8 +90,7 @@ self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 # The width every page here is at. An ordinary one, so the height the
 # boundary falls at is an ordinary number of rows rather than a

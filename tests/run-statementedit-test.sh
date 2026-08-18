@@ -20,8 +20,7 @@ xpost=$1
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+verdict_workdir
 
 # The programs name their output by a relative path and the interpreter
 # is run from the directory holding it. A shell and a program built for

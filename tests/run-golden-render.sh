@@ -110,7 +110,7 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
+verdict_workdir
 fail=0
 out_manifest="$work/manifest.sha256"
 

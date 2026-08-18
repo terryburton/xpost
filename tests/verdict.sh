@@ -219,3 +219,21 @@ verdict_ok() {
     fi
     return 0
 }
+
+# A scratch directory for a run, removed however the wrapper ends.
+#
+# Removing it is arranged here rather than left to each wrapper, because
+# a trap on EXIT alone does not run when the shell is killed by a signal
+# and the test runner enforces its time limits by sending one. A wrapper
+# that ran long, or a suite stopped at the keyboard, left its directory
+# behind. Of the wrappers that made one, fifty-one trapped EXIT alone,
+# thirteen removed it on the way out where an early exit would step past
+# the removal, and two had it right.
+verdict_workdir() {
+    work=$(mktemp -d 2>/dev/null) || work=
+    if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
+        echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
+        exit 1
+    fi
+    trap 'rm -rf "$work"' EXIT INT TERM
+}
