@@ -23,167 +23,177 @@
 # place. The exceptions are the stacks and the two arrays an operator record
 # points at, which are named by where they are.
 #
-# disposition  header  member  [reason, for an address]
-address  xpost_context.h        ds                       the dictionary stack, same
-address  xpost_context.h        es                       the execution stack, same
-address  xpost_context.h        hold                     the stack a constructor stashes a new object on until its operator returns, same
-address  xpost_context.h        os                       the operand stack, named by where it is rather than by which entity it is
-address  xpost_memory.h         adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
-address  xpost_memory.h         free_substack            a parked save-record stack, held by where it is because those stacks are raw file allocations rather than table entities
-address  xpost_memory.h         used                     the cursor the arena is handed out from, which a rearrangement would set to the new high-water rather than move
-address  xpost_name.h           eq                       the subtree for a matching character, EXCEPT at a terminator node -- where val is TST_END -- at which it holds the name's index on the name stack instead, so a pass that rewrote it unconditionally would corrupt every name's payload
-address  xpost_name.h           hi                       the subtree of the name tree for keys above this node's, held as an address
-address  xpost_name.h           lo                       the subtree of the name tree for keys below this node's, likewise
-address  xpost_object.h         stk                      the record stack a save object owns, reached with xpost_stack_at and so a place rather than a number
-address  xpost_operator.h       sigadr                   the array of an operator's signatures, in global virtual memory
-address  xpost_operator.h       t                        the array of argument types one of those signatures names, likewise
-address  xpost_stack.h          nextseg                  the next segment of a chained stack, so a moved segment would orphan the rest of the chain
-address  xpost_stack.h          prevseg                  the previous segment, and on the root segment the top one; same
-count    xpost_context.h        batch
-count    xpost_context.h        callback_error
-count    xpost_context.h        device_made
-count    xpost_context.h        ds_over
-count    xpost_context.h        es_over
-count    xpost_context.h        es_run_base
-count    xpost_context.h        globs_size
-count    xpost_context.h        id
-count    xpost_context.h        ignoreinvalidaccess
-count    xpost_context.h        job_snapshots
-count    xpost_context.h        namebind_gen
-count    xpost_context.h        namecache_gen
-count    xpost_context.h        namecache_size
-count    xpost_context.h        nest_depth
-count    xpost_context.h        onerr_run
-count    xpost_context.h        op_restore_n
-count    xpost_context.h        operator_install_refused
-count    xpost_context.h        os_over
-count    xpost_context.h        packing
-count    xpost_context.h        pagedevice_depth
-count    xpost_context.h        quiet
-count    xpost_context.h        quit
-count    xpost_context.h        rand_next
-count    xpost_context.h        run_uncaught
-count    xpost_context.h        scan_proc_depth
-count    xpost_context.h        scanner_defer
-count    xpost_context.h        skip_graphics
-count    xpost_context.h        state
-count    xpost_context.h        sysdict_load_done
-count    xpost_context.h        sysdict_unlocked
-count    xpost_context.h        vmmode
-count    xpost_dev_driver.h     bufrows
-count    xpost_dev_driver.h     c
-count    xpost_dev_driver.h     cend
-count    xpost_dev_driver.h     degenerate
-count    xpost_dev_driver.h     done
-count    xpost_dev_driver.h     done:1
-count    xpost_dev_driver.h     major_is_x
-count    xpost_dev_driver.h     next
-count    xpost_dev_driver.h     open:1
-count    xpost_dev_driver.h     origin
-count    xpost_dev_driver.h     painted
-count    xpost_dev_driver.h     primed:1
-count    xpost_dev_driver.h     rows
-count    xpost_dev_driver.h     step
-count    xpost_dev_driver.h     top
-count    xpost_dev_driver.h     whole:1
-count    xpost_dict.h           hash
-count    xpost_dict.h           nused
-count    xpost_dict.h           pad
-count    xpost_dict.h           sz
-count    xpost_dict.h           tag
-count    xpost_dsc.h            llx
-count    xpost_dsc.h            lly
-count    xpost_dsc.h            nbr
-count    xpost_dsc.h            ordinal
-count    xpost_dsc.h            pages
-count    xpost_dsc.h            urx
-count    xpost_dsc.h            ury
-count    xpost_dsc_ctx.h        BODY_PAGE:1
-count    xpost_dsc_ctx.h        HEADER_BOUNDING_BOX:2
-count    xpost_dsc_ctx.h        HEADER_CREATION_DATE:1
-count    xpost_dsc_ctx.h        HEADER_CREATOR:1
-count    xpost_dsc_ctx.h        HEADER_DOCUMENT_FONTS:2
-count    xpost_dsc_ctx.h        HEADER_DOCUMENT_NEEDED_FONTS:1
-count    xpost_dsc_ctx.h        HEADER_DOCUMENT_PAPER_SIZES:1
-count    xpost_dsc_ctx.h        HEADER_DOCUMENT_SUPPLIED_FONTS:1
-count    xpost_dsc_ctx.h        HEADER_FOR:1
-count    xpost_dsc_ctx.h        HEADER_PAGES:2
-count    xpost_dsc_ctx.h        HEADER_PAGE_ORDER:2
-count    xpost_dsc_ctx.h        HEADER_TITLE:1
-count    xpost_dsc_ctx.h        eof:1
-count    xpost_file.h           closed
-count    xpost_file.h           cpending
-count    xpost_file.h           ent
-count    xpost_file.h           eod
-count    xpost_file.h           input
-count    xpost_file.h           is_malloc
-count    xpost_file.h           is_read
-count    xpost_file.h           npending
-count    xpost_file.h           owned
-count    xpost_file.h           poll_before_read
-count    xpost_file.h           pos
-count    xpost_file.h           pushback
-count    xpost_file.h           refs
-count    xpost_file.h           running
-count    xpost_file.h           started
-count    xpost_interpreter.h    cid
-count    xpost_interpreter.h    in_onerror
-count    xpost_memory.h         end
-count    xpost_memory.h         ent
-count    xpost_memory.h         ent_exhausted
-count    xpost_memory.h         ent_reserve_open
-count    xpost_memory.h         fd
-count    xpost_memory.h         file_birth_max
-count    xpost_memory.h         file_births
-count    xpost_memory.h         free_list_alloc_is_installed
-count    xpost_memory.h         free_scan
-count    xpost_memory.h         garbage_collect_auto
-count    xpost_memory.h         garbage_collect_is_installed
-count    xpost_memory.h         garbage_collect_pending
-count    xpost_memory.h         gc_ent_budget
-count    xpost_memory.h         interpreter_cid_get_context_is_installed
-count    xpost_memory.h         last
-count    xpost_memory.h         mark
-count    xpost_memory.h         max
-count    xpost_memory.h         nextent
-count    xpost_memory.h         nextfree
-count    xpost_memory.h         push_refused
-count    xpost_memory.h         sps
-count    xpost_memory.h         stack_walk
-count    xpost_memory.h         start
-count    xpost_memory.h         steps
-count    xpost_memory.h         sz
-count    xpost_memory.h         tag
-count    xpost_memory.h         threshold
-count    xpost_memory.h         threshold_bytes
-count    xpost_name.h           val
-count    xpost_object.h         cpy
-count    xpost_object.h         ent
-count    xpost_object.h         fraction
-count    xpost_object.h         id
-count    xpost_object.h         lev
-count    xpost_object.h         off
-count    xpost_object.h         pad
-count    xpost_object.h         pad0
-count    xpost_object.h         padw
-count    xpost_object.h         sign_exp
-count    xpost_object.h         src
-count    xpost_object.h         sz
-count    xpost_object.h         tag
-count    xpost_operator.h       in
-count    xpost_operator.h       n
-count    xpost_operator.h       name
-count    xpost_record.h         cmyk
-count    xpost_record.h         height
-count    xpost_record.h         interp
-count    xpost_record.h         mrowb
-count    xpost_record.h         nat
-count    xpost_record.h         ncomp
-count    xpost_record.h         nranges
-count    xpost_record.h         nspan
-count    xpost_record.h         planar
-count    xpost_record.h         rgbrows
-count    xpost_record.h         width
-count    xpost_span.h           hi
-count    xpost_span.h           lo
-count    xpost_stack.h          top
+# A member is keyed by the structure that declares it as well as by the
+# header, because two structures in one header can declare a member of the
+# same name meaning different things -- a size in use in one, the arena
+# cursor in the other -- and one row for both is a row that cannot say
+# which of them a rearrangement has to rewrite. A structure named only
+# after its closing brace keeps the header as its heading.
+#
+# disposition  header[:structure]  member  [reason, for an address]
+address  xpost_context.h:_Xpost_Context     ds                       the dictionary stack, same
+address  xpost_context.h:_Xpost_Context     es                       the execution stack, same
+address  xpost_context.h:_Xpost_Context     hold                     the stack a constructor stashes a new object on until its operator returns, same
+address  xpost_context.h:_Xpost_Context     os                       the operand stack, named by where it is rather than by which entity it is
+address  xpost_memory.h:Xpost_Memory_File   free_substack            a parked save-record stack, held by where it is because those stacks are raw file allocations rather than table entities
+address  xpost_memory.h:Xpost_Memory_File   used                     the cursor the arena is handed out from, which a rearrangement would set to the new high-water rather than move
+address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
+address  xpost_name.h:tst                   eq                       the subtree for a matching character, EXCEPT at a terminator node -- where val is TST_END -- at which it holds the name's index on the name stack instead, so a pass that rewrote it unconditionally would corrupt every name's payload
+address  xpost_name.h:tst                   hi                       the subtree of the name tree for keys above this node's, held as an address
+address  xpost_name.h:tst                   lo                       the subtree of the name tree for keys below this node's, likewise
+address  xpost_object.h                     stk                      the record stack a save object owns, reached with xpost_stack_at and so a place rather than a number
+address  xpost_operator.h:Xpost_Operator    sigadr                   the array of an operator's signatures, in global virtual memory
+address  xpost_operator.h:Xpost_Signature   t                        the array of argument types one of those signatures names, likewise
+address  xpost_stack.h                      nextseg                  the next segment of a chained stack, so a moved segment would orphan the rest of the chain
+address  xpost_stack.h                      prevseg                  the previous segment, and on the root segment the top one; same
+count    xpost_context.h:_Xpost_Context     batch
+count    xpost_context.h:_Xpost_Context     callback_error
+count    xpost_context.h:_Xpost_Context     device_made
+count    xpost_context.h:_Xpost_Context     ds_over
+count    xpost_context.h:_Xpost_Context     es_over
+count    xpost_context.h:_Xpost_Context     es_run_base
+count    xpost_context.h:_Xpost_Context     globs_size
+count    xpost_context.h:_Xpost_Context     id
+count    xpost_context.h:_Xpost_Context     ignoreinvalidaccess
+count    xpost_context.h:_Xpost_Context     job_snapshots
+count    xpost_context.h:_Xpost_Context     namebind_gen
+count    xpost_context.h:_Xpost_Context     namecache_gen
+count    xpost_context.h:_Xpost_Context     namecache_size
+count    xpost_context.h:_Xpost_Context     nest_depth
+count    xpost_context.h:_Xpost_Context     onerr_run
+count    xpost_context.h:_Xpost_Context     op_restore_n
+count    xpost_context.h:_Xpost_Context     operator_install_refused
+count    xpost_context.h:_Xpost_Context     os_over
+count    xpost_context.h:_Xpost_Context     packing
+count    xpost_context.h:_Xpost_Context     pagedevice_depth
+count    xpost_context.h:_Xpost_Context     quiet
+count    xpost_context.h:_Xpost_Context     quit
+count    xpost_context.h:_Xpost_Context     rand_next
+count    xpost_context.h:_Xpost_Context     run_uncaught
+count    xpost_context.h:_Xpost_Context     scan_proc_depth
+count    xpost_context.h:_Xpost_Context     scanner_defer
+count    xpost_context.h:_Xpost_Context     skip_graphics
+count    xpost_context.h:_Xpost_Context     state
+count    xpost_context.h:_Xpost_Context     sysdict_load_done
+count    xpost_context.h:_Xpost_Context     sysdict_unlocked
+count    xpost_context.h:_Xpost_Context     vmmode
+count    xpost_dev_driver.h                 bufrows
+count    xpost_dev_driver.h                 c
+count    xpost_dev_driver.h                 cend
+count    xpost_dev_driver.h                 degenerate
+count    xpost_dev_driver.h                 done
+count    xpost_dev_driver.h                 done:1
+count    xpost_dev_driver.h                 major_is_x
+count    xpost_dev_driver.h                 next
+count    xpost_dev_driver.h                 open:1
+count    xpost_dev_driver.h                 origin
+count    xpost_dev_driver.h                 painted
+count    xpost_dev_driver.h                 primed:1
+count    xpost_dev_driver.h                 rows
+count    xpost_dev_driver.h                 step
+count    xpost_dev_driver.h                 top
+count    xpost_dev_driver.h                 whole:1
+count    xpost_dict.h                       hash
+count    xpost_dict.h                       nused
+count    xpost_dict.h                       pad
+count    xpost_dict.h                       sz
+count    xpost_dict.h                       tag
+count    xpost_dsc.h                        llx
+count    xpost_dsc.h                        lly
+count    xpost_dsc.h                        nbr
+count    xpost_dsc.h                        ordinal
+count    xpost_dsc.h                        pages
+count    xpost_dsc.h                        urx
+count    xpost_dsc.h                        ury
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      BODY_PAGE:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_BOUNDING_BOX:2
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_CREATION_DATE:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_CREATOR:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_DOCUMENT_FONTS:2
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_DOCUMENT_NEEDED_FONTS:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_DOCUMENT_PAPER_SIZES:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_DOCUMENT_SUPPLIED_FONTS:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_FOR:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_PAGES:2
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_PAGE_ORDER:2
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      HEADER_TITLE:1
+count    xpost_dsc_ctx.h:Xpost_Dsc_Ctx      eof:1
+count    xpost_file.h:Xpost_DiskFile        input
+count    xpost_file.h:Xpost_DiskFile        poll_before_read
+count    xpost_file.h:Xpost_File            closed
+count    xpost_file.h:Xpost_File            ent
+count    xpost_file.h:Xpost_File            owned
+count    xpost_file.h:Xpost_File            refs
+count    xpost_file.h:Xpost_MemoryFile      is_malloc
+count    xpost_file.h:Xpost_MemoryFile      is_read
+count    xpost_file.h:Xpost_ProcFile        cpending
+count    xpost_file.h:Xpost_ProcFile        eod
+count    xpost_file.h:Xpost_ProcFile        npending
+count    xpost_file.h:Xpost_ProcFile        pos
+count    xpost_file.h:Xpost_ProcFile        pushback
+count    xpost_file.h:Xpost_ProcFile        running
+count    xpost_file.h:Xpost_ProcFile        started
+count    xpost_interpreter.h                cid
+count    xpost_interpreter.h                in_onerror
+count    xpost_memory.h:Xpost_Memory_File   end
+count    xpost_memory.h:Xpost_Memory_File   ent
+count    xpost_memory.h:Xpost_Memory_File   ent_exhausted
+count    xpost_memory.h:Xpost_Memory_File   ent_reserve_open
+count    xpost_memory.h:Xpost_Memory_File   fd
+count    xpost_memory.h:Xpost_Memory_File   file_birth_max
+count    xpost_memory.h:Xpost_Memory_File   file_births
+count    xpost_memory.h:Xpost_Memory_File   free_list_alloc_is_installed
+count    xpost_memory.h:Xpost_Memory_File   free_scan
+count    xpost_memory.h:Xpost_Memory_File   garbage_collect_auto
+count    xpost_memory.h:Xpost_Memory_File   garbage_collect_is_installed
+count    xpost_memory.h:Xpost_Memory_File   garbage_collect_pending
+count    xpost_memory.h:Xpost_Memory_File   gc_ent_budget
+count    xpost_memory.h:Xpost_Memory_File   interpreter_cid_get_context_is_installed
+count    xpost_memory.h:Xpost_Memory_File   last
+count    xpost_memory.h:Xpost_Memory_File   max
+count    xpost_memory.h:Xpost_Memory_File   push_refused
+count    xpost_memory.h:Xpost_Memory_File   sps
+count    xpost_memory.h:Xpost_Memory_File   stack_walk
+count    xpost_memory.h:Xpost_Memory_File   start
+count    xpost_memory.h:Xpost_Memory_File   steps
+count    xpost_memory.h:Xpost_Memory_File   threshold
+count    xpost_memory.h:Xpost_Memory_File   threshold_bytes
+count    xpost_memory.h:Xpost_Memory_Table  mark
+count    xpost_memory.h:Xpost_Memory_Table  max
+count    xpost_memory.h:Xpost_Memory_Table  nextent
+count    xpost_memory.h:Xpost_Memory_Table  nextfree
+count    xpost_memory.h:Xpost_Memory_Table  sz
+count    xpost_memory.h:Xpost_Memory_Table  tag
+count    xpost_memory.h:Xpost_Memory_Table  used
+count    xpost_name.h:tst                   val
+count    xpost_object.h                     cpy
+count    xpost_object.h                     ent
+count    xpost_object.h                     fraction
+count    xpost_object.h                     id
+count    xpost_object.h                     lev
+count    xpost_object.h                     off
+count    xpost_object.h                     pad
+count    xpost_object.h                     pad0
+count    xpost_object.h                     padw
+count    xpost_object.h                     sign_exp
+count    xpost_object.h                     src
+count    xpost_object.h                     sz
+count    xpost_object.h                     tag
+count    xpost_operator.h                   in
+count    xpost_operator.h:Xpost_Operator    n
+count    xpost_operator.h:Xpost_Operator    name
+count    xpost_operator.h:Xpost_Signature   in
+count    xpost_record.h                     cmyk
+count    xpost_record.h                     height
+count    xpost_record.h                     interp
+count    xpost_record.h                     mrowb
+count    xpost_record.h                     nat
+count    xpost_record.h                     ncomp
+count    xpost_record.h                     nranges
+count    xpost_record.h                     nspan
+count    xpost_record.h                     planar
+count    xpost_record.h                     rgbrows
+count    xpost_record.h                     width
+count    xpost_span.h                       hi
+count    xpost_span.h                       lo
+count    xpost_stack.h                      top

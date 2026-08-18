@@ -68,9 +68,31 @@ for f in "$lib"/*.h; do
         # for one latches on to the next brace anywhere below and collects
         # that other function parameters as though they were members.
         if (depth == 0 && index(code, ";")) opening = 0
-        if (depth == 0 && code ~ /(^|[^A-Za-z0-9_])struct([[:blank:]]|$)/ && code !~ /\)/ && !index(code, ";")) opening = 1
+        if (depth == 0 && code ~ /(^|[^A-Za-z0-9_])struct([[:blank:]]|$)/ && code !~ /\)/ && !index(code, ";")) {
+            opening = 1
+            # The name the structure is opened with, where it has one. Two
+            # structures in one header can declare a member of the same
+            # name meaning different things -- a size in one and the arena
+            # cursor in the other -- and a register keyed by the header
+            # alone gives them one row and one disposition, which is a
+            # register that cannot say which of them a rearrangement has
+            # to rewrite.
+            sname = code
+            sub(/^.*[^A-Za-z0-9_]struct/, "", sname)
+            sub(/^struct/, "", sname)
+            sub(/^[[:blank:]]+/, "", sname)
+            sub(/[^A-Za-z0-9_].*/, "", sname)
+        }
         if (opening && index(code, "{")) { opening = 0; depth = 1; base = FILENAME
-             sub(/^.*\//, "", base); tag = base; next }
+             sub(/^.*\//, "", base)
+             # A structure opened without a name -- named after its closing
+             # brace, as a typedef -- keeps the header as its tag. Its
+             # members are still every one of them derived; they are only
+             # gathered under a coarser heading. A nested structure does
+             # not reach here, so its members are attributed to the named
+             # one that encloses them, which is where a reader looks.
+             tag = (sname != "" ? base ":" sname : base)
+             sname = ""; next }
 
         if (depth > 0) {
             # A declaration is gathered until its semicolon rather than
@@ -158,8 +180,16 @@ grep -hoE "xpost_(stack_[a-z_]+|vm_ptr|ent_ptr)[[:blank:]]*\([^,()]*,[[:blank:]]
   | grep -oE "[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z_][A-Za-z0-9_]*$" \
   | sed -E 's/^.*(->|\.)//' | sort -u > "$work/used-as-address"
 
+# A name filed as a count somewhere and as an address somewhere else is
+# two members that share a spelling, and the call the cross-check found
+# belongs to the one already filed as an address. Only a name filed as a
+# count and nowhere as an address can be the miscounted one; matching on
+# the spelling alone would report the pair every time, which is a check
+# that has to be ignored and so is not a check.
 awk '$1 == "count" { print $3 }' "$golden" | sort -u > "$work/filed-as-count"
-comm -12 "$work/used-as-address" "$work/filed-as-count" > "$work/miscounted"
+awk '$1 == "address" { print $3 }' "$golden" | sort -u > "$work/filed-as-address"
+comm -23 "$work/filed-as-count" "$work/filed-as-address" > "$work/only-a-count"
+comm -12 "$work/used-as-address" "$work/only-a-count" > "$work/miscounted"
 if [ -s "$work/miscounted" ]; then
     echo "FAIL: filed as a count, but reaches the offset argument of a call"
     echo "      that turns it into a pointer, so it names a place in the"
