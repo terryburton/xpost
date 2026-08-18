@@ -37,26 +37,10 @@ src=${1:?usage: check-device-roster.sh <srcroot> <xpost>}
 xpost=${2:?usage: check-device-roster.sh <srcroot> <xpost>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
-if [ ! -x "$xpost" ]; then
-    echo "FAILURES: the interpreter is not an executable: $xpost"
-    exit 1
-fi
-# named from wherever the caller stood, and the run below stands
-# somewhere else
-case $xpost in
-    /*) ;;
-    *) xpost=$(cd "$(dirname "$xpost")" && pwd)/$(basename "$xpost") ;;
-esac
-# Where the interpreter reads its boot files from, named from the tree
-# this guard was handed. Without it the interpreter answers from the tree
-# its binary was built against, and the two halves of the comparison come
-# from different trees: the roster is read here and the devices are asked
-# there. Taken before the mirror below moves src, and named absolutely
-# because the run stands in the scratch directory.
-case $src in
-    /*) srcdata=$src/data ;;
-    *) srcdata=$(cd "$src" && pwd)/data ;;
-esac
+guard_require_interpreter "$xpost"
+# Taken before the mirror below moves src, so that the roster read here
+# and the devices asked for there come from the one tree.
+guard_srcdata "$src"
 
 guard_workdir
 # read a tree whose lines end where the scans below expect them to

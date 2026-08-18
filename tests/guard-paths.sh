@@ -471,3 +471,36 @@ guard_hold_count() {    # <register> <keyword> <how many were derived>
     esac
     return 0
 }
+
+# The interpreter a guard was handed, refused if it is not one and made
+# absolute if it is.
+#
+# The test runner names it relative to the build directory, and a guard
+# that runs it does so from inside its own scratch directory, where that
+# name reaches nothing. Forgetting this does not read as forgetting it:
+# the interpreter simply cannot be found, every case answers nothing, and
+# the guard reports whatever an empty answer means to it. That has been
+# mistaken here for a flaky gate.
+guard_require_interpreter() {   # <path to the interpreter>
+    if [ ! -x "$1" ]; then
+        echo "FAILURES: the interpreter is not an executable: $1"
+        exit 1
+    fi
+    case $1 in
+        /*) xpost=$1 ;;
+        *)  xpost=$(cd "$(dirname "$1")" && pwd)/$(basename "$1") ;;
+    esac
+}
+
+# Where the interpreter reads its boot files from: the tree this guard was
+# handed, named absolutely for the same reason.
+#
+# Without it the interpreter answers out of the tree its binary was built
+# against, so a guard comparing the tree it was given against a run of the
+# interpreter is comparing two different trees and finding they agree.
+guard_srcdata() {   # <source tree root>
+    case $1 in
+        /*) srcdata=$1/data ;;
+        *)  srcdata=$(cd "$1" && pwd)/data ;;
+    esac
+}

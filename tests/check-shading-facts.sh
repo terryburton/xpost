@@ -56,18 +56,8 @@ src=${1:?usage: check-shading-facts.sh <srcroot> <xpost>}
 xpost=${2:?usage: check-shading-facts.sh <srcroot> <xpost>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
-if [ ! -x "$xpost" ]; then
-    echo "FAILURES: the interpreter is not an executable: $xpost"
-    exit 1
-fi
-case $xpost in
-    /*) ;;
-    *) xpost=$(cd "$(dirname "$xpost")" && pwd)/$(basename "$xpost") ;;
-esac
-case $src in
-    /*) srcdata=$src/data ;;
-    *) srcdata=$(cd "$src" && pwd)/data ;;
-esac
+guard_require_interpreter "$xpost"
+guard_srcdata "$src"
 
 guard_workdir
 guard_mirror_tree "$src"
