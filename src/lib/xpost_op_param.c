@@ -159,13 +159,15 @@ int vmentcount (Xpost_Context *ctx)
    recovered, still inside the arena, waiting for an allocation the size
    suits.
    It is the half of the account vmstatus cannot give. The used figure
-   vmstatus reports is a cursor into the arena and does not fall when
-   memory comes back, and the maximum figure is the arena the bank
-   holds, which only ever grows -- so between them they say how much has
-   been taken and how much is held, and nothing says how much of what is
-   held is in use. That is this number: held, less free, is what the
-   bank is actually using, and a large figure here is a context sitting
-   on a peak it has finished with. */
+   vmstatus reports is the high-water mark of the arena, which comes back
+   only where a program asks for a reclaim and the pass closes the gaps
+   between the live entities; it does not move for a collection alone,
+   which puts blocks on a free list and leaves them where they are. The
+   maximum figure is the arena the bank holds. So between them they say
+   how much has been taken and how much is held, and nothing says how
+   much of what is held is in use. That is this number: held, less free,
+   is what the bank is actually using, and a large figure here is a
+   context sitting on a peak it has finished with. */
 static
 int vmfreebytes (Xpost_Context *ctx)
 {
