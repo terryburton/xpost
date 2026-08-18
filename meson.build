@@ -1343,6 +1343,24 @@ test('gc-marking',
 # one refuses in the same place, so a run whose safe points discard the
 # answer allocates on until the entity numbers run out and reports that
 # against whichever operator was allocating at the time.
+# That each special entity sits on the slot its enumerator names. They are
+# reached by number and never searched for -- every accessor subscripts the
+# table with an enumerator, and the band the collector owns begins one past
+# the last of them -- so one that landed elsewhere is an accessor handing
+# back another entity's storage. Nothing arranges the numbering but the
+# order the constructors run in.
+special_entity_slots_exe = executable('special_entity_slots_test',
+  'tests/special_entity_slots_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('special-entity-slots',
+  special_entity_slots_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 gc_mark_failure_exe = executable('gc_mark_failure_test',
   'tests/gc_mark_failure_test.c',
   c_args: '-DHAVE_CONFIG_H',

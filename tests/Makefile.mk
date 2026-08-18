@@ -103,6 +103,7 @@ tests/check-vm-address.sh \
 tests/check-vm-address-fields.sh \
 tests/vm_address_fields.golden \
 tests/check-raw-allocations.sh \
+tests/special_entity_slots_test.c \
 tests/raw_allocations.golden \
 tests/check-vm-host-state.sh \
 tests/span_window_test.c \

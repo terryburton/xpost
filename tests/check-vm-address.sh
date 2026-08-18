@@ -60,8 +60,9 @@ guard_require_file "$header" "the header holding the accessors"
 
 fail=0
 
-# The five constructors, each of which allocates its entity and asserts it
-# landed in the slot the enumerator names. Nothing else may name one.
+# The five constructors, each of which allocates its entity through the one
+# allocator that holds it to the slot the enumerator names. Nothing else may
+# name one, and none of them may go back to checking it by hand.
 cat > "$work/permitted" <<'EOF'
 xpost_context.c xpost_context_init_ctxlist
 xpost_free.c xpost_free_init
@@ -115,6 +116,52 @@ while read -r file fn ln; do
         fail=1
     fi
 done < "$work/found" > "$work/strays"
+
+# Naming the enumerator in the right function is half of it. The other half
+# is that the constructor asks for the slot rather than taking whatever it
+# is given: the numbering is what every accessor subscripts by and what the
+# collector's domain begins one past, and nothing arranges it except the
+# order these run in. It was once ten checks in two minds -- five that
+# aborted, five that wrote a warning and carried on -- so a constructor that
+# writes its own check again is the state this returns to.
+for f in "$lib"/*.c; do
+    [ -e "$f" ] || continue
+    awk '
+    {
+        line = $0; code = ""
+        while (length(line)) {
+            if (incomment) {
+                i = index(line, "*/")
+                if (i == 0) { line = ""; break }
+                line = substr(line, i + 2); incomment = 0; continue
+            }
+            i = index(line, "/*"); j = index(line, "//")
+            if (j > 0 && (i == 0 || j < i)) { code = code substr(line, 1, j - 1); break }
+            if (i == 0) { code = code line; break }
+            code = code substr(line, 1, i - 1)
+            line = substr(line, i + 2); incomment = 1
+        }
+        if (code ~ /^[A-Za-z_][A-Za-z0-9_ \t*]*\(/) {
+            sig = code; sub(/\(.*/, "", sig); sub(/[ \t]*$/, "", sig)
+            n = split(sig, parts, /[ \t*]+/); pending = parts[n]
+        }
+        if (code ~ /^\{/) curfn = pending
+        if (code ~ /^\}/) curfn = ""
+        if (code ~ /xpost_memory_table_alloc_special[ \t]*\(/ && curfn != "")
+            printf "%s %s\n", FILENAME, curfn
+    }' "$f"
+done | sed "s|^$lib/||" | sort -u > "$work/asks"
+
+while read -r file fn; do
+    [ -n "${file:-}" ] || continue
+    if ! grep -qx "$file $fn" "$work/asks"; then
+        echo "FAIL: $fn in $file builds a special entity without asking for"
+        echo "      its slot. Allocate it with xpost_memory_table_alloc_special,"
+        echo "      which refuses one that landed elsewhere, rather than"
+        echo "      checking the number afterwards:"
+        fail=1
+    fi
+done < "$work/permitted"
 
 if [ -s "$work/strays" ]; then
     echo "FAIL: a special entity is named outside its constructor:"
