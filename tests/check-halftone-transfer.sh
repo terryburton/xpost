@@ -61,32 +61,10 @@ run_case() {
         fail=1
         return
     fi
-    _got=$(od -An -v -tu1 "$work/case.out" | awk -v dev="$_dev" '
-        BEGIN { started = 0; ink = 0; seen = 0 }
-        { for (i = 1; i <= NF; i++) v[seen++] = $i }
-        END {
-            # step over the header: three whitespace-separated tokens for
-            # a bilevel page, four for a grey one, with a comment line
-            # allowed among them
-            need = (dev == "pbm") ? 3 : 4
-            n = 0; i = 0
-            while (n < need && i < seen) {
-                while (i < seen && (v[i] == 32 || v[i] == 10 || v[i] == 9 || v[i] == 13)) i++
-                if (v[i] == 35) { while (i < seen && v[i] != 10) i++; continue }
-                while (i < seen && !(v[i] == 32 || v[i] == 10 || v[i] == 9 || v[i] == 13)) i++
-                n++
-            }
-            i++
-            if (dev == "pbm") {
-                for (; i < seen; i++) {
-                    b = v[i]
-                    for (k = 0; k < 8; k++) { if (int(b / 2^k) % 2) ink++ }
-                }
-            } else {
-                for (; i < seen; i++) if (v[i] < 128) ink++
-            }
-            print ink
-        }')
+    _got=$(guard_pnm_pixels "$work/case.out" | awk -v dev="$_dev" '
+        dev == "pbm" { for (k = 0; k < 8; k++) if (int($1 / 2^k) % 2) ink++; next }
+        $1 < 128     { ink++ }
+        END          { print ink+0 }')
     if [ "$_got" != "$_want" ]; then
         echo "FAIL: $_name inked $_got places and the two implementations"
         echo "      this was measured against ink $_want."

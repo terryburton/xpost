@@ -170,21 +170,7 @@ run() {             # <body> -> "<errorname>" or "ink <n>"
           "$xpost" -q --no-sandbox -d pgm -o case.pgm case.ps </dev/null 2>/dev/null \
           | awk '$1 == "E" { print $2; exit }' )
     [ "${_e:-}" = none ] || { printf '%s' "${_e:-noanswer}"; return; }
-    od -An -v -tu1 "$work/case.pgm" 2>/dev/null | awk '
-        { for (i = 1; i <= NF; i++) v[n++] = $i }
-        END {
-            t = 0; i = 0
-            while (t < 4 && i < n) {
-                while (i < n && (v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
-                while (i < n && !(v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                t++
-            }
-            i++
-            ink = 0
-            for (; i < n; i++) if (v[i] != 255) ink++
-            print "ink " ink
-        }'
+    guard_pnm_ink "$work/case.pgm"
 }
 
 # how many components the space is entered holding, which is how many
@@ -224,7 +210,7 @@ while read -r fam kind comps verdict; do
             continue ;;
     esac
     case $(run "$sp setcolorspace $(colour "$fam") setcolor 5 5 30 30 rectfill") in
-        ink\ 0) v=mute ;;
+        blank) v=mute ;;
         ink\ *) v=paints ;;
         *)      v=$(run "$sp setcolorspace $(colour "$fam") setcolor 5 5 30 30 rectfill") ;;
     esac
@@ -264,7 +250,7 @@ while read -r fam kase verdict; do
         i=0; while [ "$i" -lt "${n:-3}" ]; do printf '0.2 '; i=$((i+1)); done
         ) setcolor 5 5 30 30 rectfill")
     case $ans in
-        ink\ 0) echo "$fam $kase mute" >> "$work/got.table" ;;
+        blank) echo "$fam $kase mute" >> "$work/got.table" ;;
         ink\ *) echo "$fam $kase takes" >> "$work/got.table" ;;
         *)      echo "$fam $kase refuses" >> "$work/got.table" ;;
     esac
@@ -296,7 +282,7 @@ while read -r fam verdict; do
         matrix makepattern $comps $((${n:-1} + 1)) -1 roll setcolor
         5 5 30 30 rectfill")
     case $ans in
-        ink\ 0) echo "$fam mute" >> "$work/got.base" ;;
+        blank) echo "$fam mute" >> "$work/got.base" ;;
         ink\ *) echo "$fam paints" >> "$work/got.base" ;;
         *)      echo "$fam $ans" >> "$work/got.base" ;;
     esac
@@ -339,7 +325,7 @@ identity=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
 [ "${identity:-}" = REBUILT ] && echo space-array-rebuilt >> "$work/got.diverge"
 case $(run "[ /DeviceN [ /None ] /DeviceGray { } ] setcolorspace
             0.5 setcolor 5 5 30 30 rectfill") in
-    ink\ 0) ;;
+    blank) ;;
     ink\ *) echo special-names-in-devicen >> "$work/got.diverge" ;;
 esac
 # ---- the None colorant, asked of every painting operator
@@ -393,7 +379,7 @@ for op in fill eofill stroke rectfill rectstroke \
     ctl=$(run "0 setgray
                $body")
     case $ctl in
-        ink\ 0|ink\ )
+        blank)
             echo "FAIL: the $op control laid no ink in an ordinary colour, so"
             echo "      this cannot report on what the None colorant does to it"
             fail=1
@@ -404,7 +390,7 @@ for op in fill eofill stroke rectfill rectstroke \
             continue ;;
     esac
     case $got in
-        ink\ 0) verdict=silent ;;
+        blank) verdict=silent ;;
         ink\ *) verdict=marks ;;
         *)      verdict=$got ;;
     esac

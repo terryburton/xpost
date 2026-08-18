@@ -92,21 +92,7 @@ paint() {           # <PatternType literal> -> "<errorname>" or "ink <n>"
           "$xpost" -q --no-sandbox -d pgm -o case.pgm case.ps </dev/null 2>/dev/null \
           | awk '$1 == "E" { print $2; exit }' )
     [ "${_e:-}" = none ] || { printf '%s' "${_e:-noanswer}"; return; }
-    od -An -v -tu1 "$work/case.pgm" 2>/dev/null | awk '
-        { for (i = 1; i <= NF; i++) v[n++] = $i }
-        END {
-            t = 0; i = 0
-            while (t < 4 && i < n) {
-                while (i < n && (v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
-                while (i < n && !(v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                t++
-            }
-            i++
-            ink = 0
-            for (; i < n; i++) if (v[i] != 255) ink++
-            print "ink " ink
-        }'
+    guard_pnm_ink "$work/case.pgm"
 }
 
 # run a body and report only whether and how it failed

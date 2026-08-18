@@ -101,21 +101,8 @@ centres() {         # <body> -> "<errorname>" or "v v v v v v v v"
           "$xpost" -q --no-sandbox -d pgm -o c.pgm c.ps </dev/null 2>/dev/null \
           | awk '$1 == "E" { print $2; exit }' )
     [ "${_e:-}" = none ] || { printf '%s' "${_e:-noanswer}"; return; }
-    od -An -v -tu1 "$work/c.pgm" 2>/dev/null | awk '
-        { for (i = 1; i <= NF; i++) v[n++] = $i }
-        END {
-            t = 0; i = 0
-            while (t < 4 && i < n) {
-                while (i < n && (v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
-                while (i < n && !(v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                t++
-            }
-            i++
-            s = ""
-            for (k = 0; k < 8; k++) s = s (k ? " " : "") v[i + k * 8 + 4]
-            print s
-        }'
+    guard_pnm_pixels "$work/c.pgm" |
+        awk 'NR % 8 == 5 && k < 8 { s = s (k++ ? " " : "") $1 } END { print s }'
 }
 
 img() {             # <ImageType> <bits> <hex> -> a dictionary

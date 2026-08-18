@@ -94,22 +94,8 @@ for g in $levels; do
         continue
     fi
     compared=$((compared + 1))
-    ink=$(od -An -v -tu1 "$work/fill.pbm" | awk '
-        { for (i = 1; i <= NF; i++) v[n++] = $i }
-        END {
-            t = 0; i = 0
-            while (t < 3 && i < n) {
-                while (i < n && (v[i] == 32 || v[i] == 10 || v[i] == 9)) i++
-                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
-                while (i < n && !(v[i] == 32 || v[i] == 10 || v[i] == 9)) i++
-                t++
-            }
-            i++
-            ink = 0
-            for (; i < n; i++)
-                for (k = 0; k < 8; k++) if (int(v[i] / 2^k) % 2) ink++
-            print ink
-        }')
+    ink=$(guard_pnm_pixels "$work/fill.pbm" |
+          awk '{ for (k = 0; k < 8; k++) if (int($1 / 2^k) % 2) ink++ } END { print ink+0 }')
     varied="$varied $ink"
 
     if ! cmp -s "$work/fill.pbm" "$work/image.pbm"; then

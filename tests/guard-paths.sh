@@ -360,3 +360,78 @@ _gh_show() {
         sed 's/^/      /'
     fi
 }
+
+# The raster bytes of a binary PNM file, one to a line, with the header
+# stepped over.
+#
+# A guard that wants to know what reached the page renders one and counts
+# what it finds, and to reach the pixels it must first pass a header: a
+# magic number, the two dimensions, and -- for every format except the
+# bilevel one -- a maximum value, separated by any whitespace and
+# interruptible by a comment running to the end of its line. How many
+# tokens that is depends on the format, so it is read here from the magic
+# number rather than taken from the caller. A caller that named the count
+# itself would still be handed a raster when it named the wrong one, just
+# one shifted by a few bytes, and every figure taken from it would be
+# quietly wrong rather than refused -- which is the way a guard goes
+# green while measuring the wrong thing.
+#
+# What to ask of the bytes is the caller's own business and stays there:
+# a bilevel page carries eight pixels to the byte, a grey one is counted
+# as marked against the ground by some callers and as dark by others, and
+# those are different questions rather than one written several ways.
+guard_pnm_pixels() {    # <file> -> the raster bytes, one to a line
+    od -An -v -tu1 "$1" | awk '
+        { for (i = 1; i <= NF; i++) v[n++] = $i }
+        END {
+            if (n < 2 || v[0] != 80) {
+                print "the file does not open with a PNM magic number" > "/dev/stderr"
+                exit 1
+            }
+            f = v[1] - 48
+            if (f == 4) want = 3
+            else if (f == 5 || f == 6) want = 4
+            else {
+                printf "P%d is not a binary PNM format\n", f > "/dev/stderr"
+                exit 1
+            }
+
+            t = 0; i = 0
+            while (t < want && i < n) {
+                while (i < n && (v[i] == 32 || v[i] == 10 || v[i] == 9 || v[i] == 13)) i++
+                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
+                while (i < n && !(v[i] == 32 || v[i] == 10 || v[i] == 9 || v[i] == 13)) i++
+                t++
+            }
+            i++     # the one whitespace byte that closes the header
+
+            for (; i < n; i++) print v[i]
+        }'
+}
+
+# How much ink a rendered page carries: "ink <n>", or "blank" for a page
+# that carries none.
+#
+# The distinction is the point. A guard asking whether an operator painted
+# reads the answer as "did it produce a page rather than an error", and a
+# page with no marks on it answers a count like any other -- so a construct
+# that runs cleanly and paints nothing is recorded as painting, which is
+# the one behaviour PLRM 4.8.5 requires of a Separation named None and
+# forbids of most other things. Naming the empty page rather than counting
+# it to zero puts that case in front of the caller instead of leaving it to
+# be pattern-matched by whoever remembers.
+#
+# The ground is the format's own: a grey or colour page is marked wherever
+# a byte is not white, and a bilevel page wherever a bit is set.
+guard_pnm_ink() {   # <file> -> "ink <n>" or "blank"
+    guard_pnm_pixels "$1" | awk -v bilevel="$(guard_pnm_bilevel "$1")" '
+        bilevel == "yes" { for (k = 0; k < 8; k++) if (int($1 / 2^k) % 2) ink++; next }
+        $1 != 255        { ink++ }
+        END              { print (ink ? "ink " ink : "blank") }'
+}
+
+# Whether a PNM file is the bilevel format, whose ground and marks are bits
+# rather than bytes.
+guard_pnm_bilevel() {   # <file> -> "yes" or "no"
+    od -An -v -tu1 -N2 "$1" | awk '{ print ($2 == 52) ? "yes" : "no" }'
+}

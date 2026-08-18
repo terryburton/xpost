@@ -250,22 +250,8 @@ paint() {           # <dictionary body> -> "<errorname>" or "ink <n> of <m>"
         printf '%s' "${_e:-noanswer}"
         return
     fi
-    od -An -v -tu1 "$work/case.pgm" 2>/dev/null | awk '
-        { for (i = 1; i <= NF; i++) v[n++] = $i }
-        END {
-            # four whitespace-separated header tokens, a comment allowed
-            t = 0; i = 0
-            while (t < 4 && i < n) {
-                while (i < n && (v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
-                while (i < n && !(v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                t++
-            }
-            i++
-            ink = 0; tot = 0
-            for (; i < n; i++) { tot++; if (v[i] != 255) ink++ }
-            print "ink " ink " of " tot
-        }'
+    guard_pnm_pixels "$work/case.pgm" |
+        awk '{ tot++; if ($1 != 255) ink++ } END { print (ink ? "ink " ink " of " tot : "blank of " tot) }'
 }
 
 # The same measurement for a painted path, so that a shading's coverage
@@ -278,21 +264,8 @@ paintpath() {       # <path and paint operators> -> "ink <n> of <m>"
     rm -f "$work/case.pgm"
     ( cd "$work" && XPOST_DATA_DIR="$srcdata" \
       "$xpost" -q --no-sandbox -d pgm -o case.pgm case.ps </dev/null ) >/dev/null 2>&1
-    od -An -v -tu1 "$work/case.pgm" 2>/dev/null | awk '
-        { for (i = 1; i <= NF; i++) v[n++] = $i }
-        END {
-            t = 0; i = 0
-            while (t < 4 && i < n) {
-                while (i < n && (v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                if (v[i] == 35) { while (i < n && v[i] != 10) i++; continue }
-                while (i < n && !(v[i]==32||v[i]==10||v[i]==9||v[i]==13)) i++
-                t++
-            }
-            i++
-            ink = 0; tot = 0
-            for (; i < n; i++) { tot++; if (v[i] != 255) ink++ }
-            print "ink " ink " of " tot
-        }'
+    guard_pnm_pixels "$work/case.pgm" |
+        awk '{ tot++; if ($1 != 255) ink++ } END { print (ink ? "ink " ink " of " tot : "blank of " tot) }'
 }
 
 # ---- every registered type paints
