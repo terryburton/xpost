@@ -70,7 +70,7 @@ static void
 _xpost_view_usage(const char *progname)
 {
     printf("Usage: %s [options] file.ps\n\n", progname);
-    printf("Postscript level 2 interpreter\n\n");
+    printf("PostScript level 3 interpreter\n\n");
     printf("Options:\n");
     printf("  -q, --quiet            suppress interpreter messages (default)\n");
     printf("  -v, --verbose          do not go quiet into that good night\n");

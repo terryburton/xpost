@@ -5,7 +5,7 @@
 ## Xpost
 
 Xpost is a cross-platform interpreter for the PostScript Language
-written in C. It implements LanguageLevel 2, graphics included, and is
+written in C. It implements LanguageLevel 3, graphics included, and is
 built and tested on Linux, Windows and macOS.
 
 The whole interpreter is a library, `libxpost`. The `xpost` program is a
@@ -71,10 +71,9 @@ To build the Doxygen documentation, into `builddir/doc`:
 `meson compile -C builddir splint` runs splint, where splint is
 installed; the target does not exist in a build configured without it.
 
-The tree also carries an autotools build (`./autogen.sh`, `make`). It is
-not what CI builds, and at present `make` does not run to completion
-where xcb is installed: `src/bin/xpost_view` is compiled against xcb and
-linked without it. Build with meson.
+The tree also carries an autotools build (`./autogen.sh`, `make`). It
+builds the same programs, but it is not what CI builds and not what the
+tree is developed against, so meson is the one to reach for.
 
 ## The test suite
 

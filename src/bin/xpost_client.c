@@ -155,7 +155,7 @@ _xpost_client_usage(const char *filename)
     int i;
 
     printf("Usage: %s [options] [file.png]\n\n", filename);
-    printf("Postscript level 2 interpreter\n\n");
+    printf("PostScript level 3 interpreter\n\n");
     printf("Options:\n");
     printf("  -d, --device=[STRING]  device name (see below) [default=raster]\n");
     printf("  -i, --interlaced       create interlaced PNG [default=disabled]\n");

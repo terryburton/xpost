@@ -217,7 +217,7 @@ _xpost_main_usage(FILE *out, const char *filename)
     int i;
 
     fprintf(out, "Usage: %s [options] [file.ps]\n\n", filename);
-    fprintf(out, "Postscript level 2 interpreter\n\n");
+    fprintf(out, "PostScript level 3 interpreter\n\n");
     fprintf(out, "Options:\n");
     fprintf(out, "  -o, --output=[FILE]                output file; the run ends with the program\n");
     fprintf(out, "  -d, --device=[STRING]              device name\n");

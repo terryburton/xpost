@@ -7,7 +7,7 @@ libxpost; the `xpost` program is a small application over that library
 (src/bin/xpost_main.c), and src/bin/xpost_client.c is a smaller example
 of embedding it.
 
-It implements PostScript LanguageLevel 2, including the graphics: paths,
+It implements PostScript LanguageLevel 3, including the graphics: paths,
 paint, colour spaces, clipping, images, patterns, shadings, halftones,
 and text through host faces found by fontconfig and rendered by
 freetype, through Type 3 fonts described in PostScript, and through
@@ -17,7 +17,7 @@ the behavioural deviations and the implementation limits; doc/COMPAT
 says where each user-visible name comes from.
 
 How much is tested is a fair question to ask of an interpreter. The
-suite is 316 tests, run at both of the object widths the tree builds at;
+suite is 377 tests, run at both of the object widths the tree builds at;
 doc/GATING.md says which run answers which question. Beside it are
 corpora of real programs, fetched rather than committed, rendered and
 compared page by page (tests/corpus/README.md). doc/COVERAGE.md and
@@ -68,10 +68,9 @@ took. The one worth knowing about is `-Dlarge-object=true`, which widens
 the fields of the PostScript object; the tree is built and tested both
 ways and the narrow build is the primary one.
 
-The tree also carries an autotools build (`./autogen.sh`, `make`). It is
-not what CI builds, and at present `make` does not run to completion
-where xcb is installed: src/bin/xpost_view is compiled against xcb and
-linked without it. Build with meson.
+The tree also carries an autotools build (`./autogen.sh`, `make`). It
+builds the same programs, but it is not what CI builds and not what the
+tree is developed against, so meson is the one to reach for.
 
 
 == Running a program ==
