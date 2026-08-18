@@ -228,8 +228,8 @@ static struct { Xpost_Object *slot; const char *spelling; } _op_font_names[] =
 /* Give up the face the block holds, where the face is the block's.
    Called from the collector with the block, so it touches nothing in
    virtual memory: what it reaches is the face and what the font
-   machinery holds against it. A block whose face belongs to the name
-   cache, and one already given up, leave this nothing to do. */
+   machinery holds against it. A block already given up leaves this
+   nothing to do. */
 static void _reclaim(void *block)
 {
     fontdata *fd = block;
@@ -1077,13 +1077,43 @@ Xpost_Object _face_get(Xpost_Context *ctx, const char *facename,
     return xpost_dict_get(ctx, ent, _face_key(ctx, what));
 }
 
+/* Give up the objects held against a name. Called where the name's
+   entry in the C half is given up, so the two halves stop answering for
+   a name together: what stays behind would otherwise hold the name's
+   derived objects for the life of the run, one name at a time, however
+   many names the run asks for. */
+static
+void _face_drop(Xpost_Context *ctx, const char *facename)
+{
+    Xpost_Object faces;
+
+    if (xpost_object_get_type(ctx->globalprivatedict) != dicttype)
+        return;
+    faces = xpost_dict_get(ctx, ctx->globalprivatedict,
+                           _face_key(ctx, ".facecache"));
+    if (xpost_object_get_type(faces) != dicttype)
+        return;
+    (void)xpost_dict_undef(ctx, faces, _face_key(ctx, facename));
+}
+
 /* Faces held against the names they were asked for. A face maps the
    font file and holds library state, so one per findfont grows the
    process by a mapping a lookup; the entry is what keeps that from
-   being repeated, and holds the only reference to the face. */
-static struct { char *name; void *face; char *file; int csreal; }
+   being repeated. The reference an entry holds is the cache's own:
+   every font dictionary a name produces takes a claim of its own on
+   the face (xpost_font_face_reference), so an entry can be given up
+   while such a dictionary is still in use.
+
+   The cache is full when every slot is taken, and a name arriving then
+   takes the place of the one asked for longest ago: used orders the
+   entries by when each was last asked for, so what stays is the names
+   the run is asking for now rather than the first ones it ever saw. A
+   wrap of the clock costs a poor choice of victim, never a wrong
+   face. */
+static struct { char *name; void *face; char *file; unsigned long used; }
     face_cache[32];
 static int face_cache_n = 0;
+static unsigned long face_cache_clock = 0;
 
 /* Give the held faces back. The library the faces belong to goes down
    with the module (xpost_font_quit), and a cache still naming them
@@ -1134,6 +1164,7 @@ static void xpost_op_font_quit(void)
     }
     memset(face_cache, 0, sizeof(face_cache));
     face_cache_n = 0;
+    face_cache_clock = 0;
     _clip_memo_drop();
 }
 
@@ -1152,6 +1183,7 @@ int _findfont(Xpost_Context *ctx,
     int istt = 0;
     int cffreal = 0;
     int uncached = 0;
+    int referenced = 0;
     int ret;
 
     data.face = NULL;
@@ -1177,13 +1209,14 @@ int _findfont(Xpost_Context *ctx,
        already shares it.
 
        The cache holds a fixed number of names and the run may ask for
-       more. What a name past that number costs is a face of its own
-       and the derived objects built again; what it does not cost is a
-       different font. Everything below reads the name and the file the
-       face was opened from rather than the cache entry, so a name the
-       cache had no room for states the same FontType, the same
-       CharStrings and the same sfnts as the same name asked for first
-       would. The entry, where there is one, is what keeps that work
+       more: a name arriving at a full cache takes the place of the one
+       asked for longest ago. What being out of the cache costs a name
+       is a face of its own and the derived objects built again when it
+       is next asked for; what it does not cost is a different font.
+       Everything below reads the name and the file the face was opened
+       from rather than the cache entry, so a name states the same
+       FontType, the same CharStrings and the same sfnts however many
+       times it has come and gone. The entry is what keeps that work
        from being repeated -- not what decides its outcome. */
     {
         Xpost_Object cs_cached;
@@ -1194,6 +1227,7 @@ int _findfont(Xpost_Context *ctx,
             {
                 data.face = face_cache[fi].face;
                 ffile = face_cache[fi].file;
+                face_cache[fi].used = ++face_cache_clock;
                 slot = fi;
                 break;
             }
@@ -1205,16 +1239,42 @@ int _findfont(Xpost_Context *ctx,
                answers for the last open, so it is read here and not
                after anything else may have opened a face */
             ffile = xpost_font_face_last_file();
-            if (data.face != NULL && face_cache_n < 32)
+            if (data.face != NULL)
             {
+                int at = face_cache_n;
+
                 /* the cache is about to hold a face, which belongs to a
                    library that goes down at the teardown: asking to be
                    called is part of taking it */
                 (void)xpost_at_quit(xpost_op_font_quit);
-                face_cache[face_cache_n].file = ffile ? strdup(ffile) : NULL;
-                face_cache[face_cache_n].name = strdup(fname);
-                face_cache[face_cache_n].face = data.face;
-                slot = face_cache_n++;
+                if (at == (int)(sizeof face_cache / sizeof face_cache[0]))
+                {
+                    /* every slot is taken: the name asked for longest
+                       ago gives up its place, so a run asking for more
+                       names than the cache holds keeps the ones it is
+                       asking for now. The face given up here is the
+                       cache's own reference; a font dictionary still
+                       using that face holds a claim of its own. */
+                    int vi;
+
+                    at = 0;
+                    for (vi = 1;
+                         vi < (int)(sizeof face_cache / sizeof face_cache[0]);
+                         vi++)
+                        if (face_cache[vi].used < face_cache[at].used)
+                            at = vi;
+                    _face_drop(ctx, face_cache[at].name);
+                    xpost_font_face_free(face_cache[at].face);
+                    free(face_cache[at].name);
+                    free(face_cache[at].file);
+                }
+                else
+                    face_cache_n++;
+                face_cache[at].file = ffile ? strdup(ffile) : NULL;
+                face_cache[at].name = strdup(fname);
+                face_cache[at].face = data.face;
+                face_cache[at].used = ++face_cache_clock;
+                slot = at;
                 ffile = face_cache[slot].file;
             }
         }
@@ -1307,7 +1367,15 @@ int _findfont(Xpost_Context *ctx,
         cs_cached = slot >= 0 ? _face_get(ctx, fname, "CharStrings") : null;
         if (xpost_object_get_type(cs_cached) == dicttype)
         {
-            if (face_cache[slot].csreal && xpost_font_face_is_cff(data.face))
+            /* whether the held dictionary is the program's own
+               charstrings is a fact about that dictionary, so it is
+               held beside it rather than in the entry: the entry may
+               be given up and the name asked for again while the
+               objects are still held here */
+            Xpost_Object csr = _face_get(ctx, fname, "csreal");
+
+            if (xpost_object_get_type(csr) == booleantype && csr.int_.val
+                && xpost_font_face_is_cff(data.face))
                 cffreal = 1;
             ret = xpost_dict_put(ctx, fontdict, name_CharStrings,
                                  cs_cached);
@@ -1332,7 +1400,7 @@ int _findfont(Xpost_Context *ctx,
                     if (slot >= 0)
                     {
                         _face_put(ctx, fname, "CharStrings", cs);
-                        face_cache[slot].csreal = 1;
+                        _face_put(ctx, fname, "csreal", xpost_bool_cons(1));
                     }
                     ret = xpost_dict_put(ctx, fontdict,
                                        name_CharStrings, cs);
@@ -1351,7 +1419,7 @@ int _findfont(Xpost_Context *ctx,
                     if (slot >= 0)
                     {
                         _face_put(ctx, fname, "CharStrings", cs);
-                        face_cache[slot].csreal = 1;
+                        _face_put(ctx, fname, "csreal", xpost_bool_cons(1));
                     }
                     cffreal = 1;
                     ret = xpost_dict_put(ctx, fontdict,
@@ -1575,24 +1643,29 @@ have_charstrings: ;
             goto fail;
     }
 
-    /* a face the cache took is the cache's, and every dictionary this
-       name produces names it; one the cache had no room for is named by
-       this dictionary alone */
-    ret = _font_data_set(ctx, fontdict, data.face, uncached);
+    /* Every dictionary owns the face it names: one made from a cached
+       face takes a claim of its own on it, so the cache can give its
+       entry up while the dictionary is still in use, and the face goes
+       when the last holder does. One the cache did not take is named by
+       this dictionary alone. */
+    if (!uncached)
+    {
+        xpost_font_face_reference(data.face);
+        referenced = 1;
+    }
+    ret = _font_data_set(ctx, fontdict, data.face, 1);
     if (ret)
         goto fail;
     xpost_stack_push(ctx->lo, ctx->os, fontdict);
     free(fname);
     return 0;
 
-    /* The face is open and no block names it yet, so nothing else can
-       give it back: the block that would carry the release is what the
-       handover was going to make. A face the cache took is left alone
-       -- the cache names it and hands it out again -- and a face the
-       cache had no room for goes here, since this call is the only
-       thing that ever named it. */
+    /* The claim this call made is this call's to give back: a face the
+       cache did not take is named by nothing else, and one it did take
+       stays the cache's, so only the reference taken for the handover
+       above -- where the failure came after it -- goes with it. */
 fail:
-    if (uncached)
+    if (uncached || referenced)
         xpost_font_face_free(data.face);
     free(fname);
     return ret;

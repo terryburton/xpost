@@ -84,6 +84,10 @@ src/lib/xpost_font.c         _xpost_font_faces    counts  the faces open at this
   which is what xpost_font_faces_held answers
 src/lib/xpost_op_font.c      face_cache_n         counts  the slots of the face cache in
   use, which is an extent
+
+src/lib/xpost_op_font.c      face_cache_clock     counts  the order the face cache's
+  entries were last asked for, so the one to give up is the one asked for longest ago; a
+  wrap costs a poor choice of victim, never a wrong face
 src/lib/xpost_garbage.c      _xpost_garbage_work_n  counts  the entries on the collector's
   work list
 src/lib/xpost_interpreter.c  _contexts_created    counts  how many contexts this process

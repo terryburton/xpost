@@ -139,6 +139,20 @@ int xpost_font_face_is_cff(void *face);
 void xpost_font_face_free(void *face);
 
 /**
+ * @brief Take a further claim on the given face.
+ *
+ * @param[in,out] face The font face.
+ *
+ * A face may be named from several places at once -- a cache entry and
+ * the font dictionaries made from it -- and each holder releases its
+ * claim through xpost_font_face_free(); the face is given up when the
+ * last claim is. The count is kept by the font library.
+ *
+ * @see xpost_font_face_free()
+ */
+void xpost_font_face_reference(void *face);
+
+/**
  * @brief Return how many faces the font machinery currently holds open.
  *
  * A face is host state outside virtual memory, and how many are open

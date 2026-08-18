@@ -814,6 +814,18 @@ xpost_font_face_is_cff(void *face)
 }
 
 void
+xpost_font_face_reference(void *face)
+{
+    if (!face)
+        return;
+
+    /* the count is the library's: each holder releases through
+       xpost_font_face_free, and the face goes when the last one has */
+    FT_Reference_Face((FT_Face)face);
+    _xpost_font_faces++;
+}
+
+void
 xpost_font_face_free(void *face)
 {
     Xpost_Glyph_Entry *e, *next;

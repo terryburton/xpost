@@ -120,6 +120,7 @@ filter_proc_test.ps                        once   unexplained
 filter_source_life_test.ps                 costs  unexplained
 font_bigbuf_test.ps                        fits
 font_cache_bound_test.ps                   fits
+font_cache_evict_test.ps                   zero
 font_directory_test.ps                     costs  unexplained
 font_face_release_test.ps                  fits
 font_glyph_colour_test.ps                  fits

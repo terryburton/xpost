@@ -1,0 +1,124 @@
+%!
+% The face cache serves the names a run is asking for now, not the first
+% names it ever saw. Run through `xpost -q --no-sandbox -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% findfont keeps a fixed number of faces against the names asked for,
+% and a name arriving at a full cache takes the place of the one asked
+% for longest ago. Three things follow, and each is asked here. A name
+% past the cache's capacity is cached all the same: two findfonts of it
+% answer dictionaries sharing one CharStrings object, where an uncached
+% name would build the object twice. A name that gave its place up and
+% is asked for again is cached again on the same terms. And a set of
+% names no larger than the cache stays cached however long the run
+% rotates through it, since asking for a name is what keeps it there.
+%
+% The names are spellings of one name, as in font_cache_bound_test.ps: a
+% face is matched without regard to case, so one font answers to as many
+% spellings as its letters allow, and each spelling is a name of its own
+% as far as the cache is concerned. Sharing is read by object identity
+% -- the operators compare composite objects by identity, so two
+% dictionaries sharing their CharStrings answer eq, and two builds of
+% the same charstrings do not.
+
+/faildict 1 dict def
+faildict /n 0 put
+/require { % bool (label)  .  -
+    exch { (ok   ) print print (\n) print }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/note { print (\n) print } def
+
+% ---- a face this host resolves -----------------------------------------
+
+/b0 null def
+[ (DejaVuSans) (LiberationSans) (NotoSans) (FreeSans) (Helvetica)
+  (FreeSerif) (NimbusSans) (NimbusRoman) (DejaVuSerif) (Courier) ]
+{ /nm exch def
+  mark { nm findfont } stopped
+  { cleartomark }
+  { cleartomark /b0 nm def exit } ifelse
+} forall
+
+/variant { % base n  .  string
+    /vn exch def
+    /vb exch def
+    /vs vb length string def
+    vs 0 vb putinterval
+    0 1 vb length 1 sub {
+        /vi exch def
+        vn vi neg bitshift 1 and 1 eq {
+            /vc vs vi get def
+            vc 65 ge vc 90 le and { vs vi vc 32 add put } if
+            vc 97 ge vc 122 le and { vs vi vc 32 sub put } if
+        } if
+    } for
+    vs
+} bind def
+
+% The object a font dictionary shares with the other dictionaries of its
+% name while the name is cached: CharStrings where the face publishes
+% one, the program where it does not. A face publishing neither offers
+% nothing whose sharing could be read, and the run says so and skips.
+/anchored true def
+/anchor { % font  .  obj
+    dup /CharStrings known { /CharStrings get }{
+        dup /sfnts known { /sfnts get }{ pop null /anchored false def }
+        ifelse
+    } ifelse
+} bind def
+
+b0 null eq {
+    (skip no font resolves on this host: the cache is not reached) note
+}{
+    b0 0 variant findfont anchor pop
+    anchored not {
+        (skip this host's face publishes nothing shared: sharing cannot)
+          note
+        (     be read by identity) note
+    }{
+        (reference: ) print b0 print (\n) print
+
+        % ---- a name past the capacity is cached after an eviction ----
+        % fill past whatever the cache holds, each spelling its own name
+        1 1 40 { b0 exch variant findfont pop } for
+        /a1 b0 41 variant findfont anchor def
+        /a2 b0 41 variant findfont anchor def
+        a1 a2 eq
+        (a name past the cache's capacity is cached all the same) require
+
+        % ---- a name evicted and asked for again is cached again ----
+        % spelling 1 was asked for first and 40 names have arrived since,
+        % so its place has been given up
+        /e1 b0 1 variant findfont anchor def
+        /e2 b0 1 variant findfont anchor def
+        e1 e2 eq
+        (a name that gave its place up is cached again when asked for)
+          require
+
+        % ---- a rotating set no larger than the cache stays cached ----
+        % One pass installs the set, the next reads each name's anchor,
+        % and a third asks again: every answer must be the object the
+        % second pass read, which it is only if no member gave its place
+        % up while the set rotated.
+        /set 32 array def
+        0 1 31 { /si exch def set si b0 si 100 add variant put } for
+        set { findfont pop } forall
+        /got 32 array def
+        0 1 31 { /si exch def got si set si get findfont anchor put } for
+        /stable true def
+        0 1 31 { /si exch def
+            set si get findfont anchor got si get eq not
+            { /stable false def } if
+        } for
+        stable
+        (a rotating set of names no larger than the cache stays cached)
+          require
+    } ifelse
+} ifelse
+
+faildict /n get 0 eq { (SUCCESS\n) print }{
+    (FAILURES: ) print faildict /n get 20 string cvs print (\n) print
+} ifelse

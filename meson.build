@@ -2224,6 +2224,17 @@ test('font-cache-bound',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The face cache serves the names a run is asking for now: a name arriving at
+# a full cache takes the place of the one asked for longest ago. Read by
+# object identity -- two findfonts of a cached name share one CharStrings
+# object -- for a name past the capacity, a name evicted and asked for again,
+# and a rotating set of names no larger than the cache.
+test('font-cache-evict',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_cache_evict_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A loader that fails between opening a face and handing it over gives
 # the face back: nothing else can, because the block carrying the release
 # is what the handover was going to make. The failure is arranged with a

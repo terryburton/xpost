@@ -204,6 +204,7 @@ tests/filter_proc_test.ps \
 tests/filter_source_life_test.ps \
 tests/font_bigbuf_test.ps \
 tests/font_cache_bound_test.ps \
+tests/font_cache_evict_test.ps \
 tests/font_directory_test.ps \
 tests/font_serial_test.ps \
 tests/form_serial_restore_test.ps \
