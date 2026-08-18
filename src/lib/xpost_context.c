@@ -163,7 +163,7 @@ int initglobal(Xpost_Context *ctx,
     {
         return 0;
     }
-    ret = xpost_memory_table_init(ctx->gl);
+    ret = xpost_memory_table_init(ctx->gl, XPOST_MEMORY_COLLECT_START_GLOBAL);
     if (!ret)
     {
         xpost_memory_file_exit(ctx->gl);
@@ -241,7 +241,7 @@ int initlocal(Xpost_Context *ctx,
         return 0;
     }
 
-    ret = xpost_memory_table_init(ctx->lo);
+    ret = xpost_memory_table_init(ctx->lo, XPOST_MEMORY_COLLECT_START_LOCAL);
     if (!ret)
     {
         xpost_memory_file_exit(ctx->lo);

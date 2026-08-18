@@ -103,7 +103,8 @@ int main(void)
         report_failure("xpost_memory_file_init");
         return verdict();
     }
-    if (!xpost_memory_table_init(&mem))
+    if (!xpost_memory_table_init(&mem,
+                                 XPOST_MEMORY_TABLE_SPECIAL_FREE + 1))
     {
         report_failure("xpost_memory_table_init");
         return verdict();

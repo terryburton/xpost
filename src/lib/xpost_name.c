@@ -168,9 +168,8 @@ static unsigned int _tsttab_new(Xpost_Memory_File *mem)
     unsigned int i;
 
     /* The table is built when the first name is interned rather than when
-       the tree's entity is made. The special entities are numbered by the
-       order they are allocated in, and the allocation here would take the
-       number the next of them expects. */
+       the tree's entity is made, so a bank that interns nothing carries
+       no storage for nodes it never has. */
     if (xpost_memory_name_tree_size(mem) < sizeof(tsttab))
     {
         if (!_tsttab_grow(mem, TSTTAB_FIRST))
@@ -201,6 +200,35 @@ static unsigned int _tsttab_root(Xpost_Memory_File *mem)
 static void _tsttab_set_root(Xpost_Memory_File *mem, unsigned int r)
 {
     _tsttab(mem)->root = r;
+}
+
+/* The name no program can spell, made in the slot reserved for it.
+ *
+ * It is the one special not built by the entity allocator: it is a
+ * string, and the string constructor takes whichever slot is next. The
+ * slots are reserved before any constructor runs, so the next one is
+ * never the one this belongs in -- the storage is exchanged into the
+ * reserved row. What the borrowed row is left holding is the reserved
+ * row's own emptiness: no storage, and a tag saying nothing is built
+ * there. One row per bank is spent this way, once, during
+ * initialisation. */
+static Xpost_Object _bogus_name(Xpost_Context *ctx, Xpost_Memory_File *mem,
+                                unsigned int want)
+{
+    Xpost_Object str;
+    unsigned int borrowed;
+
+    str = xpost_string_cons(ctx, CNT_STR("_not_a_name_"));
+    if (xpost_object_get_type(str) == nulltype)
+        return str;
+    borrowed = xpost_object_get_ent(str);
+    if (borrowed == want)
+        return str;
+
+    xpost_ent_swap(mem, borrowed, want);
+    mem->table.tab[want].tag = mem->table.tab[borrowed].tag;
+    mem->table.tab[borrowed].tag = 0;
+    return xpost_object_set_ent(str, want);
 }
 
 /* initialize the name special entities XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, NAME_TREE */
@@ -239,7 +267,8 @@ int xpost_name_init(Xpost_Context *ctx)
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     xpost_memory_set_name_tree(ctx->gl, 0, 0);
     nstk = xpost_memory_name_stack_adr(ctx->gl);
-    xpost_stack_push(ctx->gl, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
+    xpost_stack_push(ctx->gl, nstk, _bogus_name(ctx, ctx->gl,
+                    XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME));
     /* The name no program can spell takes the slot after the tree's. It is
        not allocated through the table allocator -- it is the first string
        pushed on the name stack -- so it is held to its slot here, for the
@@ -276,7 +305,8 @@ int xpost_name_init(Xpost_Context *ctx)
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     xpost_memory_set_name_tree(ctx->lo, 0, 0);
     nstk = xpost_memory_name_stack_adr(ctx->lo);
-    xpost_stack_push(ctx->lo, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
+    xpost_stack_push(ctx->lo, nstk, _bogus_name(ctx, ctx->lo,
+                    XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME));
     if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0))
         != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
     {

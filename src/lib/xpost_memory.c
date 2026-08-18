@@ -973,8 +973,10 @@ xpost_memory_file_dump(const Xpost_Memory_File *mem)
  * allocate and initialize a memory table data structure
  */
 XPOST_TEST_VISIBLE int
-xpost_memory_table_init(Xpost_Memory_File *mem)
+xpost_memory_table_init(Xpost_Memory_File *mem, unsigned int nspecials)
 {
+    unsigned int i, ent;
+
     mem->table.tab = malloc( (mem->table.max = 1000) * sizeof(*mem->table.tab));
     if (!mem->table.tab)
     {
@@ -984,6 +986,24 @@ xpost_memory_table_init(Xpost_Memory_File *mem)
     mem->table.nextent = 0;
     mem->ent_reserve_open = 0;
     mem->ent_exhausted = 0;
+
+    /* the specials take the foot of the table, in the order the
+       enumerators name them */
+    for (i = 0; i < nspecials; i++)
+    {
+        if (!xpost_memory_table_alloc(mem, 0, 0, &ent))
+        {
+            XPOST_LOG_ERR("%d unable to reserve the special entity slots",
+                          VMerror);
+            return 0;
+        }
+        if (ent != i)
+        {
+            XPOST_LOG_ERR("%d slot %u was taken before the specials were "
+                          "reserved", VMerror, ent);
+            return 0;
+        }
+    }
     return 1;
 }
 
@@ -1234,18 +1254,35 @@ xpost_memory_table_alloc_special(Xpost_Memory_File *mem,
                                  unsigned int want,
                                  unsigned int *entity)
 {
-    unsigned int ent;
+    unsigned int adr;
 
-    if (!xpost_memory_table_alloc(mem, sz, tag, &ent))
-        return 0;
-    if (ent != want)
+    if (want >= mem->table.nextent)
     {
-        XPOST_LOG_ERR("%d special entity %u landed on slot %u: the slots are "
-                      "filled in the order the constructors run and one has "
-                      "run out of turn", VMerror, want, ent);
+        XPOST_LOG_ERR("%d slot %u was never reserved: the reservation runs "
+                      "before any constructor and this one is outside it",
+                      VMerror, want);
         return 0;
     }
-    *entity = ent;
+    if (mem->table.tab[want].adr != 0 || mem->table.tab[want].sz != 0)
+    {
+        XPOST_LOG_ERR("%d slot %u was built twice", VMerror, want);
+        return 0;
+    }
+
+    /* The row is already there; what it needs is storage. Taken straight
+       off the file, which leaves nothing undescribed: this row is the
+       description, and giving the special a row of its own is what the
+       reservation is for. */
+    if (sz)
+    {
+        if (!xpost_memory_file_alloc(mem, sz, &adr))
+            return 0;
+        mem->table.tab[want].adr = adr;
+        mem->table.tab[want].sz = sz;
+        mem->table.tab[want].used = sz;
+    }
+    mem->table.tab[want].tag = tag;
+    *entity = want;
     return 1;
 }
 

@@ -494,11 +494,14 @@ xpost_ent_ptr_checked(Xpost_Memory_File *mem, unsigned int ent)
  * the constructor named in each accessor's comment, before any of this
  * runs.
  *
- * Their addresses are therefore TOTAL. nextent starts at zero and is only
- * ever incremented (xpost_memory.c, _xpost_memory_table_alloc_new); the
- * table is allocated with room for a thousand rows before the first one is
- * claimed. So once a special entity has been constructed its row exists
- * for the life of the memory file and cannot stop existing.
+ * Their rows are reserved together, before any of those constructors
+ * runs (xpost_memory_reserve_specials), so which slot each lands on is
+ * stated rather than left to the order they allocate in. nextent starts
+ * at zero and is only ever incremented (xpost_memory.c,
+ * _xpost_memory_table_alloc_new); the table is allocated with room for a
+ * thousand rows before the first one is claimed. So a special entity's
+ * row exists for the life of the memory file and cannot stop existing,
+ * and its address is therefore TOTAL.
  *
  * That matters because the fallible spelling of this lookup was ignored at
  * two sites in three: the caller passed an uninitialised local for the
@@ -508,9 +511,13 @@ xpost_ent_ptr_checked(Xpost_Memory_File *mem, unsigned int ent)
  * the same lookup with four different messages for a branch none of them
  * could take. An accessor that cannot refuse deletes the question.
  *
- * The one genuine use of the fallible form is asking whether a special
- * entity has been built YET, during initialisation, which is what
- * xpost_memory_save_stack_ready answers.
+ * The one genuine question left open is whether a special entity has been
+ * built YET, during initialisation, which is what the _ready accessors
+ * answer. A reserved row is not an answer to it: the row is there from
+ * the start, so what those ask is whether the row has been given
+ * storage. No allocation in a memory file begins at address zero -- the
+ * table stands in front of every one of them -- so an address of zero is
+ * a row nothing has been built in.
  */
 
 /**
@@ -532,7 +539,8 @@ xpost_memory_free_lists_adr(Xpost_Memory_File *mem)
 static inline int
 xpost_memory_free_lists_ready(Xpost_Memory_File *mem)
 {
-    return xpost_ent_valid(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE);
+    return xpost_ent_valid(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE)
+        && mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_FREE].adr != 0;
 }
 
 /**
@@ -554,7 +562,8 @@ xpost_memory_save_stack_adr(Xpost_Memory_File *mem)
 static inline int
 xpost_memory_save_stack_ready(Xpost_Memory_File *mem)
 {
-    return xpost_ent_valid(mem, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK);
+    return xpost_ent_valid(mem, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK)
+        && mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK].adr != 0;
 }
 
 /**
@@ -829,21 +838,33 @@ void xpost_memory_file_dump(const Xpost_Memory_File *mem);
 */
 
 /**
- * @brief Allocate and Initialize a new table and return the offset.
+ * @brief Allocate and initialize a new table, with @p nspecials reserved.
+ *
+ * The specials are reached by number: every accessor above subscripts the
+ * table with an enumerator, and the band the collector owns begins one
+ * past the last of them. Their rows are reserved here, as the table is
+ * made and before any constructor can allocate, so which slot each lands
+ * on is stated rather than left to emerge from the order the constructors
+ * happen to run in. A constructor may then allocate as freely as it likes
+ * on the way to filling its own row.
+ *
+ * The count is asked for rather than assumed because it is not the same
+ * in both banks -- the operator table is global only -- and asking makes
+ * the reservation part of building a table, which is the one place it
+ * cannot be forgotten.
+ *
+ * A reserved row exists but describes nothing: it has no storage until
+ * its constructor calls xpost_memory_table_alloc_special.
  *
  * @param[in,out] mem The memory file.
- * @param[out] addr The offset.
+ * @param[in] nspecials How many slots this bank's specials occupy.
  * @return 1 on success, 0 on failure.
- *
- * This function attempts to allocate and initialise
- * a new memory table in @p mem.
- * If successful, the offset of the allocated memory relative to
- * mem->base is stored through the @p addr pointer.
  *
  * MUST recalculate all VM pointers after this function.
  * See note in xpost_memory_file_alloc().
  */
-XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_init(Xpost_Memory_File *mem);
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_init(Xpost_Memory_File *mem,
+                                                                unsigned int nspecials);
 
 int xpost_memory_register_free_list_alloc_function(Xpost_Memory_File *mem,
                                                    int (*free_list_alloc)(struct Xpost_Memory_File *mem,
@@ -878,7 +899,7 @@ XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_alloc(Xpost_Memory_Fi
                                         unsigned int *entity);
 
 /**
- * @brief Allocate the entity a special is required to occupy.
+ * @brief Give a special entity the storage its reserved row describes.
  *
  * The special entities are reached by number: every accessor above
  * subscripts the table with an enumerator, and the collector's domain
@@ -888,12 +909,16 @@ XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_alloc(Xpost_Memory_Fi
  * entity's storage, and the boundary the collector starts at falls in the
  * wrong place, putting a root inside its domain.
  *
- * Nothing arranges the numbering except the order the constructors run
- * in, so it is checked here, once, on the way out of the allocator. A
- * mismatch is refused rather than asserted: an interpreter that cannot be
- * built is a failure the caller can report, where an abort takes down a
- * process that only embedded this library, and an assertion is not there
- * at all in a build configured without them.
+ * The slot is therefore not allocated here but claimed: the row was
+ * reserved before any constructor ran, and what this adds is the
+ * storage. Storage comes straight off the file, which leaves nothing
+ * undescribed, since this row is the description.
+ *
+ * A slot outside the reservation, or one claimed twice, is refused
+ * rather than asserted: an interpreter that cannot be built is a failure
+ * the caller can report, where an abort takes down a process that only
+ * embedded this library, and an assertion is not there at all in a build
+ * configured without them.
  *
  * @param[in] mem The memory file.
  * @param[in] sz Bytes the entity is to hold.
