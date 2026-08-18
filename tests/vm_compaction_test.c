@@ -51,6 +51,43 @@ static const char *churn =
 
 typedef struct { unsigned int ent, sz, sum; } Snap;
 
+/* Which entities the free lists hold.
+ *
+ * A freed entity keeps its address and its size until a pass reclaims
+ * its row, and the table cannot tell it from a live one -- a freed
+ * entity carries the same zero tag a live raw allocation carries, so the
+ * lists are the only record of which is which. Its storage holds nothing
+ * anybody promised anything about: the pass is free to slide a live
+ * entity over it, and where the arena is described to a memory checker
+ * the storage is closed. Summing it would be asserting over bytes with
+ * no claim on them, so the snapshot leaves them out.
+ */
+static unsigned char *_free_set(Xpost_Memory_File *mem, unsigned int rows)
+{
+    unsigned char *isfree = calloc(rows ? rows : 1, 1);
+    unsigned int b;
+
+    if (!isfree || !xpost_memory_free_lists_ready(mem))
+        return isfree;
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
+    {
+        unsigned int e, seen = 0;
+
+        memcpy(&e, xpost_vm_ptr(mem, xpost_memory_free_lists_adr(mem)
+                                + b * (unsigned int)sizeof(unsigned int)),
+               sizeof e);
+        /* bounded by the table it indexes, so a spoiled link cannot spin
+           this the way it cannot spin the allocator's own walk */
+        while (e && e < rows && seen <= rows)
+        {
+            isfree[e] = 1;
+            ++seen;
+            e = mem->table.tab[e].nextfree;
+        }
+    }
+    return isfree;
+}
+
 static unsigned int _sum(Xpost_Memory_File *mem, unsigned int adr,
                          unsigned int sz)
 {
@@ -66,6 +103,7 @@ int main(void)
 {
     Xpost_Context *ctx;
     Snap *snap;
+    unsigned char *isfree;
     unsigned int n = 0, i, before, after, checked = 0;
 
     if (!xpost_init())
@@ -94,9 +132,11 @@ int main(void)
         report_failure("out of memory taking the snapshot");
         return verdict();
     }
+    isfree = _free_set(ctx->lo, ctx->lo->table.nextent);
     for (i = 0; i < ctx->lo->table.nextent; i++)
     {
         if (ctx->lo->table.tab[i].sz == 0) continue;
+        if (isfree && isfree[i]) continue;
         snap[n].ent = i;
         snap[n].sz = ctx->lo->table.tab[i].sz;
         snap[n].sum = _sum(ctx->lo, ctx->lo->table.tab[i].adr,
@@ -158,6 +198,7 @@ int main(void)
     }
 
     free(snap);
+    free(isfree);
     xpost_destroy(ctx);
     xpost_quit();
     return verdict();
