@@ -891,7 +891,15 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
        or, taken as an offset from the file's base, memory in front of the
        file altogether. */
     adr = ((unsigned long long)mem->high_water + 7u) & ~(unsigned long long)7u;
-    end = adr + sz;
+    /* The mark advances by the aligned extent, not the requested one, so
+       that an entity's footprint in the file is the same whether it was
+       laid down here or packed by the rearrangement, which accounts in
+       aligned extents throughout. The mark is then one figure for one
+       population of entities, however the arena came to hold them, and
+       the padding above an odd-sized allocation is charged to the
+       allocation rather than surfacing later as a phantom cost of the
+       first rearrangement to pass over it. */
+    end = (adr + sz + 7u) & ~(unsigned long long)7u;
 
     /* the file's addresses are unsigned ints and cannot name a byte past
        this one, so an allocation ending beyond it is one no amount of
@@ -914,9 +922,18 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
         }
 
         /* opened before it is written: the zeroing below is the first
-           access the file makes to storage it has just handed out */
-        XPOST_VG_UNPOISON_RANGE(mem->base, (unsigned int)adr, sz);
-        memset(xpost_vm_ptr(mem, (unsigned int)adr), 0, sz);
+           access the file makes to storage it has just handed out. The
+           alignment padding above the allocation is inside the extent
+           the mark advances over, so it is cleared with the allocation
+           -- every byte below the mark is one the file put there -- and
+           closed again: the padding is not handed out, so nothing may
+           read it afterwards. */
+        XPOST_VG_UNPOISON_RANGE(mem->base, (unsigned int)adr,
+                                (unsigned int)(end - adr));
+        memset(xpost_vm_ptr(mem, (unsigned int)adr), 0, (size_t)(end - adr));
+        if ((unsigned long long)sz < end - adr)
+            XPOST_VG_POISON_RANGE(mem->base, (unsigned int)adr + sz,
+                                  (unsigned int)(end - adr) - sz);
     }
 
     /* The bytes skipped to reach an aligned address are inside what the
