@@ -359,7 +359,15 @@ int xpost_operator_init_optab(Xpost_Context *ctx)
     }
     tab = &ctx->gl->table;
     assert(ent == XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE);
-    tab->tab[ent].sz = 0; // so gc will ignore it
+    (void)tab;
+    /* The row keeps the size the table really occupies. The collector
+       does not reach this entity because of where it sits: its domain
+       begins one past the last special entity, and this is the last of
+       them, so every walk starts above it. A row saying nought would
+       keep the collector off it just the same, but it would also hide
+       the block from everything else that reads the table to learn what
+       the arena holds -- and a block the table does not describe is one
+       a pass rearranging the arena would write a live entity over. */
     _xpost_noops = 0;
 
     return 1;
