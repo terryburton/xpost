@@ -224,11 +224,11 @@ verdict_ok() {
 #
 # Removing it is arranged here rather than left to each wrapper, because
 # a trap on EXIT alone does not run when the shell is killed by a signal
-# and the test runner enforces its time limits by sending one. A wrapper
-# that ran long, or a suite stopped at the keyboard, left its directory
-# behind. Of the wrappers that made one, fifty-one trapped EXIT alone,
-# thirteen removed it on the way out where an early exit would step past
-# the removal, and two had it right.
+# and the test runner enforces its time limits by sending one. So the
+# signals it sends are caught here as well, and a wrapper that runs long
+# or a suite stopped at the keyboard leaves nothing behind. Removing the
+# directory on the way out instead would be stepped past by any exit
+# taken before it.
 verdict_workdir() {
     work=$(mktemp -d 2>/dev/null) || work=
     if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then

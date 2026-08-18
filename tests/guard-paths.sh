@@ -88,9 +88,9 @@ guard_workdir() {
     fi
     # Removing it is arranged here rather than left to the caller. A trap on
     # EXIT alone does not run when the shell is killed by a signal, and the
-    # test runner enforces its time limits with one, so a guard that ran long
-    # left its directory behind -- which is the state the caller had no way to
-    # notice and every caller had to get right separately.
+    # test runner enforces its time limits with one, so the signals it sends
+    # are caught here too: without them a guard that runs long leaves its
+    # directory behind, and nothing about the guard says so.
     trap 'rm -rf "$work"' EXIT INT TERM
 }
 
@@ -518,7 +518,8 @@ guard_srcdata() {   # <source tree root>
 # because it is the state a newly-written difference arrives in.
 #
 # The wording is here rather than in each guard because it tells the
-# reader what to do about it, and eight guards had eight copies of it.
+# reader which way the disagreement runs and what to do about it, which is
+# the same answer whichever family is asking.
 guard_hold_divergence() {   # <register> <what the register names> <what was found>
     guard_hold "$2" "$3" \
         "named in the register and no longer found by the probe that finds
