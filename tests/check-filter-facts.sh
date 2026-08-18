@@ -307,6 +307,14 @@ done < "$work/reg"
 # half in tests/filter_family_test.ps, and the one deviation either had
 # found was asserted there and written down nowhere a reader of the
 # register would meet it.
+# Every probe below runs from the scratch directory, and every file a probe
+# names is named relatively for that reason. The scratch directory is the
+# shell's, and on a host where the shell and the interpreter do not spell a
+# path the same way -- a POSIX shell driving a native Windows binary -- an
+# absolute name from the one is a name the other cannot open. A probe whose
+# file will not open answers undefinedfilename, which is an answer about the
+# name and not about the filter, and the guard reads it as a difference
+# between two sources.
 run() {             # <body> -> the error name, or "none"
     {
         printf '/S 80 string def\n'
@@ -326,7 +334,7 @@ run() {             # <body> -> the error name, or "none"
 # member itself, so the bytes before the marker are what that member
 # would really have written.
 {
-    printf '/TA (%s/fx-a) def /TB (%s/fx-b) def\n' "$work" "$work"
+    printf '/TA (fx-a) def /TB (fx-b) def\n'
     printf '/ROW 216 string def\n'
     printf '0 1 215 { /i exch def ROW i i 7 mul 31 add 255 and put } for\n'
     printf '/SENT (SENTINEL) def\n'
@@ -360,7 +368,7 @@ allundef=yes
 any=no
 for f in $nd; do
     case $f in
-        *Encode) probe="($work/fx-$f) (w) file /$f filter closefile" ;;
+        *Encode) probe="(fx-$f) (w) file /$f filter closefile" ;;
         *)       probe="(abc) /$f filter pop" ;;
     esac
     # a filter absent from this build answers undefined for a reason that
@@ -389,11 +397,11 @@ allsame=yes
 first=
 for probe in \
     "(abc) /XpostNoSuchFilter filter pop" \
-    "($work/fx-c) (w) file /XpostNoSuchFilter filter closefile" \
-    "($work/fx-c) (w) file dup (x) writestring closefile
-     ($work/fx-c) (r) file /XpostNoSuchFilter filter closefile" \
+    "(fx-c) (w) file /XpostNoSuchFilter filter closefile" \
+    "(fx-c) (w) file dup (x) writestring closefile
+     (fx-c) (r) file /XpostNoSuchFilter filter closefile" \
     "(abc) /XpostNoSuchEncode filter pop" \
-    "($work/fx-c) (w) file /XpostNoSuchEncode filter closefile"
+    "(fx-c) (w) file /XpostNoSuchEncode filter closefile"
 do
     got=$(run "$probe")
     if [ -z "$got" ]; then
