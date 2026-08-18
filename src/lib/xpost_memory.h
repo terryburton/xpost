@@ -640,6 +640,19 @@ xpost_ent_swap(Xpost_Memory_File *mem, unsigned int a, unsigned int b)
  */
 extern size_t xpost_memory_page_size;
 
+/**
+ * @var xpost_memory_return_grain
+ * @brief The grain in which storage can be handed back to the system.
+ *
+ * Not the same number as the one above on every host. A memory file is
+ * sized in whatever unit the host hands address space out in, which on
+ * Windows is the allocation granularity and is sixteen times the page;
+ * storage is given up a page at a time. Handing back in the larger unit
+ * would return nothing at all for every block smaller than it, which on
+ * that host is most of them.
+ */
+extern size_t xpost_memory_return_grain;
+
 
 /*
  *
@@ -723,7 +736,10 @@ XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_file_grow(Xpost_Memory_File
  * This answers only whether the backing could take it: an arena that is
  * a mapping of a file is not this process's to give back -- the bytes
  * belong to the file -- and where the arena came from the host allocator
- * the file does not own the pages under it.
+ * the file does not own the pages under it. A host whose only way of
+ * giving storage up would leave the range unwritable answers zero as
+ * well, since a range this leaves behind must stay usable without
+ * anything being asked for first.
  */
 unsigned int xpost_memory_file_release_range(Xpost_Memory_File *mem,
                                              unsigned int adr,

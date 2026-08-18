@@ -84,6 +84,7 @@
 
 
 size_t xpost_memory_page_size;
+size_t xpost_memory_return_grain;
 
 #if defined(_WIN64)
 /* A pagefile-backed section charges its whole nominal size against the
@@ -117,16 +118,23 @@ xpost_memory_init(void)
 
     GetSystemInfo(&si);
 
+    /* Two grains, and they differ here: address space is handed out in
+       allocation-granularity units, storage is given up a page at a
+       time. */
     xpost_memory_page_size = (size_t)si.dwAllocationGranularity;
+    xpost_memory_return_grain = (size_t)si.dwPageSize;
     return 1;
 #elif defined HAVE_SYSCONF_PAGESIZE
     xpost_memory_page_size = (size_t)sysconf(_SC_PAGESIZE);
+    xpost_memory_return_grain = xpost_memory_page_size;
     return 1;
 #elif defined HAVE_SYSCONF_PAGE_SIZE
     xpost_memory_page_size = (size_t)sysconf(_SC_PAGE_SIZE);
+    xpost_memory_return_grain = xpost_memory_page_size;
     return 1;
 #elif defined HAVE_GETPAGESIZE
     xpost_memory_page_size = (size_t)getpagesize();
+    xpost_memory_return_grain = xpost_memory_page_size;
     return 1;
 #else
     XPOST_LOG_ERR("Could not find a way to retrieve the page size");
@@ -302,25 +310,41 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
 /* Give the whole pages inside a range of the arena back to the system.
    Answers the bytes that went, which is zero where none could.
 
-   WHICH BACKINGS CAN TAKE IT. Only an anonymous mapping: those pages are
-   storage this process holds on its own account, and dropping them
-   charges them again when the range is next written. A mapping of a file
-   is not this process's to give back -- the bytes are the file's, and
-   dropping the pages only means reading them in again -- and where the
+   WHICH BACKINGS CAN TAKE IT. Only storage this process holds on its own
+   account -- an anonymous mapping, or a reservation it committed -- whose
+   pages are charged to it again when the range is next written. A mapping
+   of a file is not this process's to give back: the bytes are the file's,
+   and dropping the pages only means reading them in again. Where the
    arena came from the host allocator the file does not own the pages
    under it and has no way to name them.
 
-   WHICH CALL. MADV_DONTNEED is what returns pages on Linux. The other
-   POSIX systems answer the call and keep the storage, so an arena there
-   is left alone rather than told to do something that would report a
-   figure it did not deliver. */
+   WHICH CALL. What is wanted is a call that gives the storage up and
+   leaves the range writable, so that nothing has to be asked for before
+   the range is used again: an allocator that had to ask would be asking
+   on the path every allocation takes. Two systems have one, and it
+   behaves the same way on both -- the storage goes, the range stays
+   addressable, and it reads as zero until it is written again.
+
+     Linux      madvise MADV_DONTNEED
+     Windows    DiscardVirtualMemory, from Windows 8.1
+
+   Windows is also able to decommit the range outright, which is cheaper
+   per call, but a decommitted range faults on the next write and would
+   put a system call on every handout to prevent it. The discard is taken
+   instead: it costs about ten times as much, and it costs it here, where
+   a program has asked for a collection, rather than in the allocator.
+
+   The other POSIX systems answer their calls and keep the storage, so an
+   arena there is left alone rather than told to do something that would
+   report a figure it did not deliver. */
 unsigned int
 xpost_memory_file_release_range(Xpost_Memory_File *mem,
                                 unsigned int adr,
                                 unsigned int len)
 {
-#if defined(HAVE_MMAP) && defined(__linux__) && defined(MADV_DONTNEED)
-    size_t ps = xpost_memory_page_size;
+#if (defined(HAVE_MMAP) && defined(__linux__) && defined(MADV_DONTNEED)) \
+    || defined(XPOST_MEMORY_RESERVED_VM)
+    size_t ps = xpost_memory_return_grain;
     size_t from;
     size_t to;
 
@@ -335,13 +359,43 @@ xpost_memory_file_release_range(Xpost_Memory_File *mem,
     if (to <= from)
         return 0;
 
-    if (madvise(xpost_vm_ptr(mem, (unsigned int)from), to - from,
-                MADV_DONTNEED) != 0)
+    /* a range of bytes rather than anything with a shape: what the call
+       below is told is where the storage is and how much of it there is */
+    {
+        void *bytes = xpost_vm_ptr(mem, (unsigned int)from);
+
+# ifdef XPOST_MEMORY_RESERVED_VM
+    {
+        /* Named through the module rather than linked to, so that a
+           build of this runs on the Windows that predate the call: where
+           it is absent nothing is handed back, which is the same answer
+           this gives for a backing that cannot take it. */
+        typedef DWORD (WINAPI *Xpost_Discard_Func)(PVOID, SIZE_T);
+        Xpost_Discard_Func discard = (Xpost_Discard_Func)(void *)
+            GetProcAddress(GetModuleHandleA("kernel32.dll"),
+                           "DiscardVirtualMemory");
+        DWORD ret;
+
+        if (!discard)
+            return 0;
+        ret = discard(bytes, to - from);
+        if (ret != ERROR_SUCCESS)
+        {
+            XPOST_LOG_ERR("cannot hand back %lu bytes at %lu (error %lu)",
+                          (unsigned long)(to - from), (unsigned long)from,
+                          (unsigned long)ret);
+            return 0;
+        }
+    }
+# else
+    if (madvise(bytes, to - from, MADV_DONTNEED) != 0)
     {
         XPOST_LOG_ERR("cannot hand back %lu bytes at %lu (error: %s)",
                       (unsigned long)(to - from), (unsigned long)from,
                       strerror(errno));
         return 0;
+    }
+# endif
     }
     return (unsigned int)(to - from);
 #else
