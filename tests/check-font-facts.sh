@@ -142,7 +142,16 @@ while read -r code verdict; do
     {
         printf '<< /PageSize [80 40] >> setpagedevice\n/S 120 string def\n'
         printf '/Base /Helvetica findfont def\n'
-        printf '/D Base maxlength 8 add dict def\nBase { D 3 1 roll put } forall\n'
+        # The copy leaves out the font data. Which face the host resolved
+        # for the name above is not this probe's subject and differs
+        # between hosts -- where it resolves to a TrueType face the copy
+        # carries the data a Type 42 is read from, and the dictionary
+        # stamped 42 below is then a real one and is accepted, where on a
+        # host resolving anything else the same probe is refused. Dropping
+        # the key makes the dictionary claim a type it has no data for on
+        # every host, which is what the register's line for 42 is about.
+        printf '/D Base maxlength 8 add dict def\n'
+        printf 'Base { 1 index /sfnts eq { pop pop }{ D 3 1 roll put } ifelse } forall\n'
         printf 'D /FontType %s put\n' "$code"
         printf 'D /FMapType 2 put D /Encoding [ 0 0 ] put\n'
         printf 'D /FDepVector [ Base 12 scalefont ] put\n'
