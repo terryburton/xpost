@@ -3722,6 +3722,18 @@ test('check-vm-address-fields',
   suite: cost_fast,
   timeout: 120)
 
+# Whose storage the table does not describe at all. A block taken straight
+# off the high-water mark carries no row, so nothing can find it, learn its
+# size or reach what holds its address -- and a pass that walked the table
+# to rearrange the arena would relocate a live entity on top of it. Each
+# such call says here either why the arena may be moved under it or what it
+# is that stands in the way.
+test('check-raw-allocations',
+  find_program('tests/check-raw-allocations.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # And virtual memory names nothing by where the process put it. A
 # composite object names its storage by entity number and a handle is a
 # number this process issued, so a memory file could be read back
