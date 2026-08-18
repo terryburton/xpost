@@ -56,12 +56,6 @@ mark
 t0 null ne { t0 shut } if
 cleartomark
 
-refuses not {
-    (INCONCLUSIVE: no data target that refuses data on this platform\n) print
-    flush
-    quit
-} if
-
 % ---- every coding with an end-of-data marker reports the one it lost ----
 /reports { % /FilterName  .  bool
     /nm exch def
@@ -102,6 +96,16 @@ refuses not {
     } ifelse
 } bind def
 
+% ---- the question, where the platform can pose it ----
+%
+% Everything above is a definition and opens nothing; the runs below are
+% what need the target. So they are what the answer above guards, rather
+% than the file ending itself when there is no target: `quit` takes down
+% whatever is running the file, and a harness that runs a workload twice to
+% weigh what it holds gets no reading at all from a run that stopped the
+% interpreter. Here the file does nothing, says so, and returns.
+refuses {
+
 /ASCIIHexEncode check
 /ASCII85Encode check
 /RunLengthEncode check
@@ -130,4 +134,8 @@ dctran dctrep not and {
 } if
 
 failures 0 eq { (SUCCESS\n) print } if
+
+}{
+(INCONCLUSIVE: no data target that refuses data on this platform\n) print
+} ifelse
 flush
