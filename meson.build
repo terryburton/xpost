@@ -3711,6 +3711,17 @@ test('check-vm-address',
   suite: cost_fast,
   timeout: 120)
 
+# Which stored integers hold an address into an arena, as against a size, an
+# index or an entity number. Only a handful do, virtual memory being
+# referenced by entity number almost everywhere; the register exists so that
+# the next member to hold one has to say so, since a pass that rearranged the
+# arena would have to rewrite every one of them.
+test('check-vm-address-fields',
+  find_program('tests/check-vm-address-fields.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # And virtual memory names nothing by where the process put it. A
 # composite object names its storage by entity number and a handle is a
 # number this process issued, so a memory file could be read back
