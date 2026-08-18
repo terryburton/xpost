@@ -120,6 +120,8 @@ _only "$src/tests/check-*.sh" 'awk -v K='  guard_hold_count \
       "reads a register's declared count"
 _only "$src/tests/check-*.sh" '! -x "\$xpost"' guard_require_interpreter \
       "refuses a path that is not an interpreter"
+_only "$src/tests/check-*.sh" 'srcdata='  guard_srcdata \
+      "names the directory the interpreter reads its boot files from"
 
 # A register entry naming nothing in the tree.
 while read -r name rest; do
