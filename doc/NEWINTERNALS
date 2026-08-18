@@ -11,11 +11,31 @@ But the basic building blocks, the abstractions, have remained quite constant th
 
 Memory
 
-The ground layer is the Memory File. It can be configured to use big malloc blocks,
-or to mmap temporary files, and these it suballocates. Xpost_Object describes 
-the tag-union for the simple object structure and is independent of Memory File,
-although specialized object types like Array and Dict /do/ depend on access to 
-Memory, though the Context.
+The ground layer is the Memory File. It holds one large region and suballocates
+it. Xpost_Object describes the tag-union for the simple object structure and is
+independent of Memory File, although specialized object types like Array and
+Dict /do/ depend on access to Memory, though the Context.
+
+The region is obtained in one of three ways, chosen by what the host offers.
+What is wanted is a region that grows without moving, since a grow that copies
+pays for the whole file each time it doubles:
+
+    a mapping extended in place	    mmap with mremap
+    a reservation committed by	    mmap without mremap, and Win64
+      the piece
+    the host allocator		    a host with neither
+
+The middle arrangement reserves the whole range an offset can address, without
+being charged for it, and commits more of it as the file fills. The base never
+moves and no copy is made, which is what the first gets from mremap. It is also
+the only difference that matters to a program: in the first two the file owns
+the pages beneath it, and in the third it borrows them from the allocator, so
+only the first two can give storage back (see Returning storage, below).
+
+The configure summary reports which arrangement a build has as "memory
+backing". `-Dmmap=false` forces the allocator, and `-Dmremap=false` forces the
+reservation on a host that could extend a mapping, which is how that
+arrangement is exercised where it would not otherwise be reached.
 
 An Execution Context has 2 memories: global and local. Allocations are made into the
 current memory file selected by a parameter in the context, which may be altered
@@ -25,7 +45,14 @@ save and restore. So this rule prevents dangling links in global memory.
 
 A Memory File has an internal indexing structure called the Memory Table.
 The Memory Table struct contains allocation slots and a counter. A simple linear
-allocator increases the counter to dole-out slots in the table.
+allocator increases the counter to dole-out slots in the table. The counter only
+ever rises, so a slot that stops being used is recovered rather than skipped: a
+slot whose storage is still there goes on a free list and is handed out again
+with its storage, and one whose storage has gone -- which is what closing the
+arena up leaves behind -- goes on a list of its own and is handed out with fresh
+storage. Without the second of those a job that fragments and closes up
+repeatedly would spend the whole range of slot numbers without spending any
+memory.
 
 Addresses to memory occur in several definite forms, which represent several
 levels of "crackng the nut". Since the base pointer to memory, in either of the malloc
@@ -48,6 +75,16 @@ is the safest analogue to an "absolute" pointer into the memory space.
     No new names, because names have associated strings AND live on a stack.
     There are lines in the source commented "//recalc" that show how
     to refresh a pointer after allocating, if you really need to do that.
+
+    Allocating is not the only thing that invalidates one. Closing the
+    arena up moves the bytes an entity holds, so every pointer derived
+    from an entity's recorded address is stale afterwards however it was
+    obtained. That is why the rearrangement is done in the outermost loop
+    of the interpreter and nowhere else: an operator runs underneath
+    machinery holding such pointers, and so does every nested call running
+    a procedure, each holding the storage of the array it is running.
+    Only the outermost loop has none of them below it, and
+    tests/check-compaction-safe-point.sh holds the code to that.
 
 An index into the slots of the memory table is called an "ent" for "entity" 
 or "entry" (I never could decide; sometimes one makes more sense than the other
@@ -128,8 +165,84 @@ The garbage collector currently runs on a periodic cycle, every so many allocati
 from the memory file. If a useable allocation is found on the free-list, the 
 gc cycle count is not incremented.
 
-Stacks are allocated in local memory, and may grow. Preparations are in place to
-shrink them as well, but this is not currently activated.
+The free list is a chain of entity numbers, bucketed by size class. The bucket
+heads live in the data area of entity 0, and each entity on a list names the
+next through the `nextfree` field of its own row in the memory table. The
+storage a freed entity stands for holds nothing the allocator reads, which is
+what lets that storage be treated as meaningless once released: a write into it
+through a stale reference spoils no link, a sanitizer can be told the whole
+extent is closed rather than all but its first word, and a pass that closes the
+arena up can slide a live entity over it without reading it first.
+
+
+Returning storage
+
+Storage a collection recovers goes on a free list, where a later allocation of a
+size it suits takes it. The region itself does not shrink, so the largest a job
+makes the region is the size it keeps.
+
+A program asking for a collection with a positive `vmreclaim` operand gets more
+than a collection. The arena is closed up: the live entities are sorted by
+address and slid down over the free blocks between them, so the free storage
+gathers into one run at the top, and the cursor is left where the live storage
+ends. The pages under that run go back to the system in a single call.
+
+This is writable at all only because every block in the arena carries a row in
+the memory table. A pass that closes the arena up walks the table, and a block
+with no row could not be seen -- an entity slid down would be moved on top of
+it. The one field that says where an entity's bytes are is the row's, so moving
+an entity is rewriting that field as the bytes move; nothing else in virtual
+memory records a place.
+
+The blocks slid over stop existing. Their storage is inside what the live
+entities now occupy, so the lists that named them are emptied and their rows are
+handed back for their numbers to be issued again. A bank that has just been
+closed up therefore reports nothing on its free lists: what a collection would
+have left there lies above the cursor instead.
+
+Closing the arena up is done between operator executions, in the outermost loop
+of the interpreter, and not by the operator that asks for it. It moves the bytes
+under every pointer derived from an entity's recorded address, and an operator
+runs underneath machinery that holds such pointers -- as does every nested call
+running a procedure, each holding the storage of the array it is running. Only
+the outermost loop has none of those below it. A reclaim asked for deep inside a
+procedure waits until the procedure has finished, which is no loss: a program
+asks for a reclaim, not for a moment.
+
+Because the cursor comes back, the used figure `vmstatus` reports is where the
+live storage ends rather than the high-water mark of the job. The account of a
+bank is then maximum less used. Collections that run of their own accord do not
+close the arena up, and leave the storage where it is.
+
+It is a trade rather than a saving: the cost is the page faults to write that
+storage again, paid by whichever later allocation takes it, and the work of
+moving every live byte. A program asking for a reclaim is saying it would rather
+pay that than hold the memory.
+
+Each host is asked for it by a different call, and all three give the storage up
+while leaving the range writable, so nothing has to be asked for before the
+range is used again:
+
+    Linux	    madvise MADV_DONTNEED
+    other POSIX	    the range re-mapped in place, MAP_FIXED
+    Windows	    DiscardVirtualMemory, from Windows 8.1
+
+The middle one is plain POSIX and serves Linux too, at about three times the
+cost of the call above it; Linux uses the cheaper one, and XPOST_RETURN_REMAPS
+in the environment asks for the portable route anyway, which is how it is
+exercised on a host that would not otherwise reach it.
+
+Storage is given up a page at a time, which is not the unit a memory file is
+sized in: on Windows the region is handed out in allocation-granularity units,
+sixteen times the page. The two are separate numbers, xpost_memory_page_size and
+xpost_memory_return_grain.
+
+Stacks live in local memory and grow by the segment. A stack is a chain of
+segments, each one an entity with a row of its own, and each naming its
+neighbours by entity number; the root segment's backward link names the segment
+holding the topmost value, so reaching the top costs no walk. Segments are not
+given up when a stack shrinks -- one emptied is left chained above the top for
+the next push to move back into.
 
 
 Tunable parameters.
