@@ -86,6 +86,12 @@ guard_workdir() {
         echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
         exit 1
     fi
+    # Removing it is arranged here rather than left to the caller. A trap on
+    # EXIT alone does not run when the shell is killed by a signal, and the
+    # test runner enforces its time limits with one, so a guard that ran long
+    # left its directory behind -- which is the state the caller had no way to
+    # notice and every caller had to get right separately.
+    trap 'rm -rf "$work"' EXIT INT TERM
 }
 
 # Mirror text files into the scratch directory with carriage returns
