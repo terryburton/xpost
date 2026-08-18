@@ -228,6 +228,7 @@ xpost_font_quit
 xpost_fpurge
 xpost_free_alloc
 xpost_free_bytes
+xpost_free_compact
 xpost_free_dump
 xpost_free_init
 xpost_free_memory_ent

@@ -36,6 +36,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h> /* calloc malloc qsort free: the slide gathers its live rows */
 #include <string.h>
 
 #include "xpost.h"
@@ -44,6 +45,7 @@
 #include "xpost_object.h" /* Xpost_Object */
 #include "xpost_file.h" /* Xpost_File: what a file entity holds */
 #include "xpost_handle.h" /* what a handle entity holds */
+#include "xpost_error.h" /* VMerror: what a refused rearrangement is */
 #include "xpost_free.h"
 
 /*
@@ -502,3 +504,142 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
     return 0; /* not found, fall-back to _new allocator */
 }
 
+
+/* Sort by address, so the slide visits the entities in the order they
+   lie in the arena and each one moves down into space already vacated. */
+typedef struct { unsigned int adr, ent; } _Xpost_Slide;
+
+static int _by_adr(const void *a, const void *b)
+{
+    const _Xpost_Slide *x = a, *y = b;
+
+    return (x->adr < y->adr) ? -1 : (x->adr > y->adr);
+}
+
+/* Close the gaps between the live entities, so that the free storage
+   gathers above them.
+
+   The free lists let a released block serve a later request of its own
+   size, but nothing moves, so a job that releases many small blocks and
+   then asks for large ones holds an arena full of holes it cannot use
+   and cannot hand back. This walks the table, which is a complete
+   account of the arena only because every block in it carries a row, and
+   slides each live entity down over whatever free blocks lie below it.
+   The row's address is rewritten as the bytes move: it is the one place
+   an entity's location is written down, which is what makes moving one
+   possible at all.
+
+   The blocks slid over cease to exist. Their storage is inside what the
+   live entities now occupy, so the lists that named them are emptied and
+   their rows are handed back to be issued again.
+
+   MUST NOT BE CALLED FROM INSIDE AN OPERATOR. Every pointer into virtual
+   memory is derived from an entity's recorded address, and a caller
+   between deriving one and using it holds a pointer this invalidates.
+   The interpreter's safe point between operator executions is where no
+   such pointer is held, which is the same reason a collection is taken
+   there. */
+int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed)
+{
+    unsigned char *isfree;
+    _Xpost_Slide *live;
+    unsigned int rows, nlive = 0, i, b, cursor, floor_adr = 0xffffffffu;
+    unsigned int before;
+
+    if (freed) *freed = 0;
+    if (!mem || !mem->base || !xpost_memory_free_lists_ready(mem))
+        return 0;
+
+    before = mem->high_water;
+    rows = mem->table.nextent;
+    isfree = calloc(rows ? rows : 1, 1);
+    live = malloc(sizeof(*live) * (rows ? rows : 1));
+    if (!isfree || !live)
+    {
+        free(isfree);
+        free(live);
+        XPOST_LOG_ERR("%d out of memory rearranging the arena", VMerror);
+        return 0;
+    }
+
+    /* The blocks the live ones are slid over. Read before anything
+       moves: the heads live in virtual memory themselves, inside an
+       entity this pass relocates. */
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
+    {
+        unsigned int e = _xpost_free_bucket_head(mem, b);
+        unsigned int seen = 0;
+
+        while (e && xpost_ent_valid(mem, e) && seen <= rows)
+        {
+            isfree[e] = 1;
+            ++seen;
+            e = mem->table.tab[e].nextfree;
+        }
+    }
+
+    for (i = 0; i < rows; i++)
+    {
+        if (mem->table.tab[i].sz == 0)
+            continue;
+        /* The lowest address any entity holds is the floor the slide
+           stops at. Below it is the reservation the bank opens with,
+           which nothing addresses and nothing may be moved onto. */
+        if (mem->table.tab[i].adr < floor_adr)
+            floor_adr = mem->table.tab[i].adr;
+        if (isfree[i])
+            continue;
+        live[nlive].adr = mem->table.tab[i].adr;
+        live[nlive].ent = i;
+        nlive++;
+    }
+    if (floor_adr == 0xffffffffu)
+    {
+        free(isfree);
+        free(live);
+        return 0;
+    }
+    qsort(live, nlive, sizeof(*live), _by_adr);
+
+    cursor = floor_adr;
+    for (i = 0; i < nlive; i++)
+    {
+        unsigned int e = live[i].ent;
+        unsigned int a = mem->table.tab[e].adr;
+        unsigned int s = mem->table.tab[e].sz;
+
+        if (a != cursor)
+        {
+            /* bytes, whatever the entity holds: the pass moves storage
+               and does not read it */
+            unsigned char *to = xpost_vm_ptr(mem, cursor);
+            unsigned char *from = xpost_vm_ptr(mem, a);
+
+            memmove(to, from, s);
+            mem->table.tab[e].adr = cursor;
+        }
+        /* alignment is kept as the allocator hands it out, so that an
+           entity's address means the same thing after the pass as before */
+        cursor += (s + 7u) & ~7u;
+    }
+
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
+        _xpost_free_bucket_head_set(mem, b, 0);
+    for (i = 0; i < rows; i++)
+        if (isfree[i])
+        {
+            /* the storage is inside what the live entities now occupy,
+               so the row describes nothing before it is handed back */
+            mem->table.tab[i].sz = 0;
+            if (!xpost_memory_table_release_row(mem, i))
+                XPOST_LOG_ERR("%d a row emptied by the rearrangement was "
+                              "refused, so its number is spent", VMerror);
+        }
+
+    mem->high_water = cursor;
+    if (freed) *freed = before - cursor;
+
+    free(isfree);
+    free(live);
+    return 1;
+}

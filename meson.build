@@ -1192,6 +1192,22 @@ test('table-row-reuse',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# That rearranging the arena moves storage without changing what it
+# holds. The contents are checksummed before and after, since an object
+# read through the table would be read through the very field the pass
+# rewrites and would agree with itself however wrong it was.
+vm_compaction_exe = executable('vm_compaction_test',
+  'tests/vm_compaction_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('vm-compaction',
+  vm_compaction_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What that refusal is worth. Emptying the buckets throws away every
 # entity the list held, so the answer the allocator gives has to reach a
 # collection: an allocator that emptied them and reported a plain

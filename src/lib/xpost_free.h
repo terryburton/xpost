@@ -243,4 +243,13 @@ XPOST_MUST_CHECK int xpost_free_memory_ent(Xpost_Memory_File *mem,
                           unsigned int ent);
 
 
+/**
+ * @brief close the gaps between the live entities, gathering the free
+ *        storage above them so the pages under it can be handed back.
+ *        Sets *freed, when given, to the bytes the high-water mark fell
+ *        by. MUST NOT be called from inside an operator: it invalidates
+ *        every pointer derived from an entity's recorded address.
+ */
+int xpost_free_compact(Xpost_Memory_File *mem, unsigned int *freed);
+
 #endif
