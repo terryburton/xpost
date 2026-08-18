@@ -46,12 +46,22 @@
 #                         residue this does not speak for.
 #
 # The population is derived, not listed: every file-scope static in
-# src/lib whose declaration can be made to name something. That is a
-# declaration carrying a * which is neither a const object nor a pointer
-# that is itself const -- neither of those can be made to name anything
-# else, so neither can carry a lifetime across. A static holding only
-# scalars or a plain char buffer names nothing and is not in the
-# population.
+# src/lib whose declaration can be made to name something. There are two
+# ways to name something here and the population takes both.
+#
+# A declaration carrying a * names storage by its address, unless it is a
+# const object or a pointer that is itself const -- neither of those can
+# be made to name anything else, so neither can carry a lifetime across.
+#
+# A declaration of an Xpost_Object names storage by ENTITY NUMBER, which
+# is how a composite says where its storage is: an index into the memory
+# table rather than a place in the process. It carries no *, and reading
+# the population off the star alone would miss every one of them -- which
+# it did, while the tree moved from addresses to entity numbers underneath
+# it.
+#
+# A static holding only scalars or a plain char buffer names nothing and
+# is not in the population.
 #
 # The C is read through guard_c_source, so a mention in a comment or
 # inside a string literal answers nothing.
@@ -128,7 +138,8 @@ function fn_body(t,   b, head) {
 }
 
 function emit(file, line, head,   outer, decls, i, k, nm, rest) {
-    if (head !~ /\*/) return
+    if (head !~ /\*/ && head !~ /(^|[^A-Za-z0-9_])Xpost_Object([^A-Za-z0-9_]|$)/)
+        return
     # what is written outside any brace group: the object being declared,
     # rather than the members of a struct it is one of
     outer = head
@@ -232,13 +243,19 @@ done < "$work/teardown1" | sort -u > "$work/teardown2"
 cat "$work/teardown1" "$work/teardown2" | sort -u > "$work/teardown"
 
 # and what a lifetime starting reaches, for the state given up there
-awk -F'\t' '$3 ~ /^(int|void)?[ \t]*xpost_(oper_init_[a-z_]+|context_init)[ \t]*\(/ {
+awk -F'\t' '$3 ~ /^(int|void)?[ \t]*xpost_(oper_init_[a-z0-9_]+|context_init|interpreter_init)[ \t]*\(/ {
         t = $3; sub(/[ \t]*\(.*/, "", t); sub(/^.*[^A-Za-z0-9_]/, "", t); print t
     }' "$work/code" | sort -u > "$work/starts"
-: > "$work/setup"
+# A lifetime starting reaches the functions its roots call AND the roots
+# themselves -- an init that sets a static directly is as much a place the
+# state is given up as one it calls to do it. The teardown half unions its
+# roots the same way; without it here, a fate naming an init outright is
+# refused for not being reached by the thing it is.
+: > "$work/setup1"
 while read -r fn; do
     reached "$fn"
-done < "$work/starts" | sort -u > "$work/setup"
+done < "$work/starts" | sort -u > "$work/setup1"
+cat "$work/starts" "$work/setup1" | sort -u > "$work/setup"
 
 # ---- the register ----
 grep -vE '^[[:space:]]*(#|$)' "$golden" | tr -d '\r' \

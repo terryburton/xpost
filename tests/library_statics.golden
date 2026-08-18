@@ -86,3 +86,105 @@ src/lib/xpost_op_param.c        _userparam_vmthreshold     outlives string-liter
 src/lib/xpost_op_param.c        _userparam_maxopstack      outlives string-literals
 src/lib/xpost_op_param.c        _userparam_maxdictstack    outlives string-literals
 src/lib/xpost_op_param.c        _userparam_maxexecstack    outlives string-literals
+
+# The statics that name their storage by ENTITY NUMBER rather than by
+# address. An Xpost_Object holds an index into the memory table, which is
+# how a composite says where its storage is, so it can carry a lifetime
+# across exactly as a pointer can -- and it carries no *, which is why a
+# population read off the star alone did not have them.
+#
+# Every one is reset where a context starts, which is the fate that suits
+# an interned name: the name belongs to the context that interned it, and
+# the next context interns its own. The one that is not a name is
+# _gstate_cache, whose reset is the flag beside it that the same init
+# clears.
+
+src/lib/xpost_dev_bgr.c      nameDeviceRGB         reset xpost_oper_init_bgr_device_ops
+src/lib/xpost_dev_bgr.c      namePrivate           reset xpost_oper_init_bgr_device_ops
+src/lib/xpost_dev_bgr.c      namedotcopydict       reset xpost_oper_init_bgr_device_ops
+src/lib/xpost_dev_bgr.c      nameheight            reset xpost_oper_init_bgr_device_ops
+src/lib/xpost_dev_bgr.c      namenativecolorspace  reset xpost_oper_init_bgr_device_ops
+src/lib/xpost_dev_bgr.c      namewidth             reset xpost_oper_init_bgr_device_ops
+src/lib/xpost_dev_generic.c  nameDeviceGray        reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameDeviceRGB         reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameDrawLine          reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameFillRect          reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameImgData           reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameRbracket          reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namecvx               reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedotbandrows       reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedotbandtop        reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedotcopydict       reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedotground         reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedothtcell         reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedothth            reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namedothtw            reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameexec              reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameheight            reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namenativecolorspace  reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namepdfPrivate        reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namerepeat            reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  nameroll              reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_generic.c  namewidth             reset xpost_oper_init_generic_device_ops
+src/lib/xpost_dev_jpeg.c     nameDeviceRGB         reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_jpeg.c     namePrivate           reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_jpeg.c     namedotbandpage       reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_jpeg.c     namedotcopydict       reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_jpeg.c     nameheight            reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_jpeg.c     namenativecolorspace  reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_jpeg.c     namewidth             reset xpost_oper_init_jpeg_device_ops
+src/lib/xpost_dev_png.c      nameDeviceRGB         reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_png.c      namePrivate           reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_png.c      namedotbandpage       reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_png.c      namedotcopydict       reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_png.c      nameheight            reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_png.c      namenativecolorspace  reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_png.c      namewidth             reset xpost_oper_init_png_device_ops
+src/lib/xpost_dev_raster.c   nameDeviceRGB         reset xpost_oper_init_raster_device_ops
+src/lib/xpost_dev_raster.c   namePrivate           reset xpost_oper_init_raster_device_ops
+src/lib/xpost_dev_raster.c   namedotcopydict       reset xpost_oper_init_raster_device_ops
+src/lib/xpost_dev_raster.c   nameheight            reset xpost_oper_init_raster_device_ops
+src/lib/xpost_dev_raster.c   namenativecolorspace  reset xpost_oper_init_raster_device_ops
+src/lib/xpost_dev_raster.c   namewidth             reset xpost_oper_init_raster_device_ops
+src/lib/xpost_dev_record.c   namePrivate           reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namebdkey             reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotcopydict       reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotground         reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotncomp          reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplayclass      reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplaydev        reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplaygen        reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplayloaders    reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplaymake       reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplaypage       reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplayrows       reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namedotplaytargets    reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   nameheight            reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namenativecolorspace  reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   nameslot              reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   nametextalphabits     reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_record.c   namewidth             reset xpost_oper_init_record_device_ops
+src/lib/xpost_dev_win32.c    namePrivate           reset xpost_oper_init_win32_device_ops
+src/lib/xpost_dev_win32.c    namedotcopydict       reset xpost_oper_init_win32_device_ops
+src/lib/xpost_dev_win32.c    nameheight            reset xpost_oper_init_win32_device_ops
+src/lib/xpost_dev_win32.c    namewidth             reset xpost_oper_init_win32_device_ops
+src/lib/xpost_dev_xcb.c      nameDeviceRGB         reset xpost_oper_init_xcb_device_ops
+src/lib/xpost_dev_xcb.c      namePrivate           reset xpost_oper_init_xcb_device_ops
+src/lib/xpost_dev_xcb.c      namedotcopydict       reset xpost_oper_init_xcb_device_ops
+src/lib/xpost_dev_xcb.c      nameheight            reset xpost_oper_init_xcb_device_ops
+src/lib/xpost_dev_xcb.c      namenativecolorspace  reset xpost_oper_init_xcb_device_ops
+src/lib/xpost_dev_xcb.c      namewidth             reset xpost_oper_init_xcb_device_ops
+src/lib/xpost_interpreter.c  nameerrordict         reset _xpost_interpreter_extra_context_init
+src/lib/xpost_op_font.c      namedotrecordglyph    reset xpost_oper_init_font_ops
+src/lib/xpost_op_matrix.c    namecurrgstate        reset xpost_oper_init_matrix_ops
+src/lib/xpost_op_matrix.c    namecurrmatrix        reset xpost_oper_init_matrix_ops
+src/lib/xpost_op_matrix.c    namedefaultmatrix     reset xpost_oper_init_matrix_ops
+src/lib/xpost_op_matrix.c    namedevice            reset xpost_oper_init_matrix_ops
+src/lib/xpost_op_matrix.c    namedotgraphicsdict   reset xpost_oper_init_matrix_ops
+src/lib/xpost_op_path.c      _gstate_cache         reset xpost_oper_init_path_ops
+src/lib/xpost_op_path.c      nameclipregion        reset xpost_oper_init_path_ops
+src/lib/xpost_op_path.c      namecurrgstate        reset xpost_oper_init_path_ops
+src/lib/xpost_op_path.c      namecurrmatrix        reset xpost_oper_init_path_ops
+src/lib/xpost_op_path.c      namecurrpath          reset xpost_oper_init_path_ops
+src/lib/xpost_op_path.c      nameflat              reset xpost_oper_init_path_ops
+src/lib/xpost_op_path.c      namegraphicsdict      reset xpost_oper_init_path_ops
