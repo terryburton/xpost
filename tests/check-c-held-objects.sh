@@ -99,7 +99,7 @@ fi
 # A name interned once and held is a name object: it carries an index
 # into the name stack, which the collector walks whole, so holding one
 # names nothing the sweep could take.
-grep -vE ':name[A-Za-z_]*$' "$work/found" | sort -u > "$work/held"
+grep -vE ':name[A-Za-z_0-9]*$' "$work/found" | sort -u > "$work/held"
 
 # The register may not outlive what it describes either: an entry for a
 # holder that is gone reads as cover for one that is not.

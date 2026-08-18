@@ -150,6 +150,30 @@ initgraphics
         (this operator resolves a name per call: ) pn assertn
 } for
 
-checks 3 PROBES length add eq (every check was reached) assert
+% And for the text operators, which resolved the most of all: a show
+% walked to the graphics state, the font, the device and the colour by
+% name for every string it painted -- thirty-five lookups a call -- and
+% measuring or outlining a string cost its own dozen or two. These run
+% once per string of every page of text, so they are held to the same
+% shape as the fills above. The font is set once, outside the
+% measurement, the way a page of text sets it.
+/Courier findfont 8 scalefont setfont
+/TPROBES [
+    [ (show)        { 5 5 moveto (xy) show } ]
+    [ (ashow)       { 5 5 moveto 0 0 (xy) ashow } ]
+    [ (widthshow)   { 5 5 moveto 0 0 32 (xy) widthshow } ]
+    [ (stringwidth) { (xy) stringwidth pop pop } ]
+    [ (charpath)    { newpath 5 5 moveto (xy) true charpath newpath } ]
+] def
+0 1 TPROBES length 1 sub {
+    /pi exch def
+    /pn TPROBES pi get 0 get def
+    /c1 TPROBES pi get 1 get SMALL repeatcost def
+    /c2 TPROBES pi get 1 get LARGE repeatcost def
+    c2 c1 sub SLACK le
+        (this operator resolves a name per call: ) pn assertn
+} for
+
+checks 3 PROBES length add TPROBES length add eq (every check was reached) assert
 
 failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse
