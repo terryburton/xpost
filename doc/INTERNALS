@@ -21,18 +21,22 @@ in this order (xpost_interpreter.c:xpost_interpreter_data_dir):
 
     $XPOST_DATA_DIR
     the directory worked out from the shared library's own location
+    the source tree's data directory, as recorded at configure time
     the configured PACKAGE_DATA_DIR
     data, ../data, ../../data, relative to the working directory
 
-The second of those is what makes a build tree self-sufficient. It is
-computed in xpost_main.c from where the library was loaded: an installed
-one looks beside itself for ../share/xpost, and where that is not there
--- an uninstalled build -- it tries ../../../data instead, which is the
-source tree's own data directory from either build/src/lib or
-src/lib/.libs. So an interpreter built and not installed finds the
-tree's PostScript files from any working directory, and a change to one
-of them takes effect without installing anything. A shell alias is
-enough to keep one to hand:
+The second and third of those are what make a build tree
+self-sufficient. The second is computed in xpost_main.c from where the
+library was loaded: an installed one looks beside itself for
+../share/xpost, and where that is not there -- an uninstalled build --
+it tries ../../../data instead, which is the source tree's own data
+directory from either build/src/lib or src/lib/.libs. That walk supposes
+the build directory sits inside the tree; the third candidate is the
+same directory named absolutely, compiled in when the build was
+configured, and holds for a build directory anywhere. So an interpreter
+built and not installed finds the tree's PostScript files from any
+working directory, and a change to one of them takes effect without
+installing anything. A shell alias is enough to keep one to hand:
 
     alias xpost="$PWD/build/src/bin/xpost"
 

@@ -102,7 +102,8 @@ libxpost_lib = library('xpost', libxpost_src,
     '-DXPOST_BUILD',
     '-D_XOPEN_SOURCE=700',
     '-DPACKAGE_DATA_DIR="' + dir_pkgdata + '"',
-    '-DPACKAGE_INSTALL_DIR="' + dir_prefix + '"'
+    '-DPACKAGE_INSTALL_DIR="' + dir_prefix + '"',
+    '-DXPOST_SOURCE_DATA_DIR="' + meson.project_source_root() / 'data' + '"'
   ],
   dependencies: libxpost_deps,
   include_directories: [ config_dir, include_directories('.') ],

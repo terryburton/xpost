@@ -2656,6 +2656,25 @@ XPOST_TEST_VISIBLE void xpost_interpreter_data_dir(char *datadir,
     if (path)
         XPOST_PATH_INIT;
 
+    /* the data directory of the source tree this build was configured
+       from. The candidate above reaches the tree by walking up from
+       where the library sits, which supposes the build directory is
+       inside the tree; a build directory is free to be anywhere, and
+       this candidate is what holds for one that is not. It is a path on
+       the machine the build was configured on, so on any other machine
+       it is one more candidate that fails the stat and passes the
+       search along -- which is why it sits after the library-relative
+       candidate and before the installed one: an uninstalled build
+       reads the tree it was built from in preference to whatever an
+       earlier install left behind. */
+#ifdef XPOST_SOURCE_DATA_DIR
+    {
+        static char x[] = XPOST_SOURCE_DATA_DIR;
+        path = x;
+    }
+    XPOST_PATH_INIT;
+#endif
+
 #ifdef PACKAGE_DATA_DIR
     {
         static char x[] = PACKAGE_DATA_DIR;

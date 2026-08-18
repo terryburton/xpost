@@ -133,6 +133,7 @@ endif
 src_lib_libxpost_la_CPPFLAGS = \
 -DPACKAGE_DATA_DIR=\"$(pkgdatadir)\" \
 -DPACKAGE_INSTALL_DIR=\"$(prefix)/\" \
+-DXPOST_SOURCE_DATA_DIR=\"$(abs_top_srcdir)/data\" \
 -DXPOST_BUILD \
 -D_POSIX_C_SOURCE=200809L
 
