@@ -224,7 +224,12 @@ typedef struct Xpost_Memory_File
                           or "" if not used. */
     /*@dependent@*/
     unsigned char *base; /**< pointer to mapped memory */
-    unsigned int used;  /**< size used, cursor to free space */
+    /* The arena's high-water mark: the offset one past the last byte
+       handed out, and so where the next fresh allocation begins. It is a
+       place in the arena rather than a quantity of it -- an entity row's
+       `used` is the quantity, and the two were one word for long enough
+       to be filed as one thing. */
+    unsigned int high_water;
     unsigned int max; /**< size available in memory pointed to by base */
 
     struct Xpost_Memory_Table table;

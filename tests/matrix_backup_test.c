@@ -57,15 +57,15 @@ static unsigned int held_max;
 /* Decline every allocation in mem until released. */
 static void refuse_allocation(Xpost_Memory_File *mem)
 {
-    held_used = mem->used;
+    held_used = mem->high_water;
     held_max = mem->max;
-    mem->used = 0xfffffff8u;
+    mem->high_water = 0xfffffff8u;
     mem->max = 0xfffffff8u;
 }
 
 static void allow_allocation(Xpost_Memory_File *mem)
 {
-    mem->used = held_used;
+    mem->high_water = held_used;
     mem->max = held_max;
 }
 

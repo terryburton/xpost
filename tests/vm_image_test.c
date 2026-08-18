@@ -138,7 +138,7 @@ static unsigned int _row(const Bank *b, unsigned int ent, unsigned int field)
 
 static unsigned int _bank_used(const Bank *b)
 {
-    return b->field[XPOST_VM_IMAGE_BANK_USED];
+    return b->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
 }
 
 static unsigned int _bank_nextent(const Bank *b)

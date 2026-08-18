@@ -305,7 +305,7 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
                           VMerror, _xpost_memory_reserve_error());
             return 0;
         }
-        mem->used = 0;
+        mem->high_water = 0;
         mem->max = sz;
         /* a freshly committed page reads as zero, which is what the
            caller of a new memory file is promised */
@@ -366,7 +366,7 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("%d failed to allocate memory-file data", VMerror);
         return 0;
     } /* . .. */
-    mem->used = 0;
+    mem->high_water = 0;
     mem->max = sz;
 #ifndef HAVE_MMAP
     /* read file into malloc'd memory */
@@ -557,14 +557,14 @@ xpost_memory_file_exit(Xpost_Memory_File *mem)
         if (lseek(mem->fd, 0, SEEK_SET) == (off_t)-1)
             XPOST_LOG_ERR("%d unable to rewind memory file (error: %s)",
                           VMerror, strerror(errno));
-        else if (write(mem->fd, mem->base, mem->used) == -1)
+        else if (write(mem->fd, mem->base, mem->high_water) == -1)
             XPOST_LOG_ERR("%d unable to write memory file (error: %s)",
                           VMerror, strerror(errno));
     }
     free(mem->base);
 #endif
     mem->base = NULL;
-    mem->used = 0;
+    mem->high_water = 0;
     mem->max = 0;
 
     if (mem->fd != -1)
@@ -634,7 +634,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
            capacity is added by committing a further step of it: the
            over-allocation a copying grow needs to keep its cost down
            would only be commit charge for bytes the file never writes */
-        size_t want = (size_t)mem->used + sz;
+        size_t want = (size_t)mem->high_water + sz;
 
         if (want > 0xffffffffu)
         {
@@ -684,7 +684,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
 
         if (want > 0xffffffffull)
         {
-            if ((unsigned long long)mem->used + req > 0xffffffffull)
+            if ((unsigned long long)mem->high_water + req > 0xffffffffull)
             {
                 XPOST_LOG_ERR("%d memory file full: cannot grow beyond addressable size", VMerror);
                 return 0;
@@ -738,7 +738,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     CloseHandle(fm);
     if (tmp)
     {
-        memcpy(tmp, mem->base, mem->used);
+        memcpy(tmp, mem->base, mem->high_water);
         UnmapViewOfFile(mem->base);
     }
     else
@@ -768,7 +768,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
                    mem->fd, 0);
         if (tmp != MAP_FAILED)
         {
-            memcpy(tmp, mem->base, mem->used);
+            memcpy(tmp, mem->base, mem->high_water);
             munmap((void *)mem->base, mem->max);
         }
     }
@@ -798,7 +798,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         tmp = malloc(sz);
         if (tmp != NULL)
         {
-            memcpy(tmp, mem->base, mem->used);
+            memcpy(tmp, mem->base, mem->high_water);
             free(mem->base);
         }
     }
@@ -813,7 +813,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
        what the file holds. Both ways of growing the file are covered by
        the one clearing. */
     if (tmp != NULL)
-        memset((unsigned char *)tmp + mem->used, 0, sz - mem->used);
+        memset((unsigned char *)tmp + mem->high_water, 0, sz - mem->high_water);
     if (tmp == NULL)
     { /* hanging error case */
 #endif
@@ -835,7 +835,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
        live raw allocation carries, so the two cannot be told apart from
        the table, and reopening one costs a redzone while closing the
        other would report the file's own bookkeeping as an error. */
-    XPOST_VG_POISON_RANGE(mem->base, mem->used, sz - mem->used);
+    XPOST_VG_POISON_RANGE(mem->base, mem->high_water, sz - mem->high_water);
 #ifdef XPOST_VALGRIND_ARENA
     xpost_free_repoison(mem);
 #endif
@@ -883,7 +883,7 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
        handed back is a small number that names storage already in use --
        or, taken as an offset from the file's base, memory in front of the
        file altogether. */
-    adr = ((unsigned long long)mem->used + 7u) & ~(unsigned long long)7u;
+    adr = ((unsigned long long)mem->high_water + 7u) & ~(unsigned long long)7u;
     end = adr + sz;
 
     /* the file's addresses are unsigned ints and cannot name a byte past
@@ -899,7 +899,7 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
     {
         if (end >= mem->max)
         {
-            if (!xpost_memory_file_grow(mem, (size_t)(end - mem->used)))
+            if (!xpost_memory_file_grow(mem, (size_t)(end - mem->high_water)))
             {
                 XPOST_LOG_ERR("%d unable to allocate memory", VMerror);
                 return 0;
@@ -922,22 +922,22 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
        the high-water mark is one the file put there. Opened to be
        written and closed again: the padding is not handed out, so
        nothing may read it afterwards either. */
-    if (adr > mem->used)
+    if (adr > mem->high_water)
     {
-        unsigned int gap = (unsigned int)adr - mem->used;
+        unsigned int gap = (unsigned int)adr - mem->high_water;
 
         /* An allocation of nothing is not grown for, so the alignment it
            steps over is only the file's to clear as far as the file
            reaches. */
-        if (mem->used + gap > mem->max)
-            gap = mem->max - mem->used;
+        if (mem->high_water + gap > mem->max)
+            gap = mem->max - mem->high_water;
 
-        XPOST_VG_UNPOISON_RANGE(mem->base, mem->used, gap);
-        memset(xpost_vm_ptr(mem, mem->used), 0, gap);
-        XPOST_VG_POISON_RANGE(mem->base, mem->used, gap);
+        XPOST_VG_UNPOISON_RANGE(mem->base, mem->high_water, gap);
+        memset(xpost_vm_ptr(mem, mem->high_water), 0, gap);
+        XPOST_VG_POISON_RANGE(mem->base, mem->high_water, gap);
     }
 
-    mem->used = (unsigned int)end;
+    mem->high_water = (unsigned int)end;
     *retaddr = (unsigned int)adr;
     return 1;
 }
@@ -956,7 +956,7 @@ xpost_memory_file_dump(const Xpost_Memory_File *mem)
             "max = 0x%x (%u), "
             "start = %d}\n",
             mem->base,
-            mem->used, mem->used,
+            mem->high_water, mem->high_water,
             mem->max, mem->max,
             mem->start);
 

@@ -120,7 +120,7 @@ int vmstatus (Xpost_Context *ctx)
 
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(lev)))
         return stackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(vm->used)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(vm->high_water)))
         return stackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(vm->max)))
         return stackoverflow;
@@ -247,9 +247,9 @@ int vmreserve (Xpost_Context *ctx, Xpost_Object nobjects, Xpost_Object nbytes)
     mem = (ctx->vmmode == GLOBAL) ? ctx->gl : ctx->lo;
 
     if (want > (double)0xffffffffu
-        || (double)mem->used + want > (double)0xffffffffu)
+        || (double)mem->high_water + want > (double)0xffffffffu)
         fits = 0;
-    else if ((size_t)mem->used + (size_t)want < (size_t)mem->max)
+    else if ((size_t)mem->high_water + (size_t)want < (size_t)mem->max)
         fits = 1;
     else
         fits = xpost_memory_file_grow(mem, (unsigned int)want) ? 1 : 0;
@@ -487,7 +487,7 @@ int globalvmstatus (Xpost_Context *ctx)
     lev = xpost_stack_count(ctx->gl, vstk);
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(lev)))
         return stackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(ctx->gl->used)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(ctx->gl->high_water)))
         return stackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(ctx->gl->max)))
         return stackoverflow;

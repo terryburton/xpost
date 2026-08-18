@@ -275,7 +275,7 @@ static int _read(const char *path, Image *im)
         im->bank[b] = at;
         at += 8;
         used = _u32(im->bytes + at
-                    + XPOST_VM_IMAGE_BANK_USED * sizeof(unsigned int));
+                    + XPOST_VM_IMAGE_BANK_HIGH_WATER * sizeof(unsigned int));
         nextent = _u32(im->bytes + at
                        + XPOST_VM_IMAGE_BANK_NEXTENT * sizeof(unsigned int));
         at += (XPOST_VM_IMAGE_BANK_FIELDS + XPOST_VM_IMAGE_FILE_BIRTHS)

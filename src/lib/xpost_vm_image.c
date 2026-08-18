@@ -79,7 +79,7 @@ static const char *const _stamp_names[] =
 
 static const char *const _bank_field_names[] =
 {
-    "used",
+    "high_water",
     "start",
     "nextent",
     "free_substack",
@@ -541,7 +541,7 @@ static int _put_bank_fields(_Writer *w, Xpost_Memory_File *mem)
     unsigned int field[XPOST_VM_IMAGE_BANK_FIELDS];
     unsigned int i;
 
-    field[XPOST_VM_IMAGE_BANK_USED] = mem->used;
+    field[XPOST_VM_IMAGE_BANK_HIGH_WATER] = mem->high_water;
     field[XPOST_VM_IMAGE_BANK_START] = mem->start;
     field[XPOST_VM_IMAGE_BANK_NEXTENT] = mem->table.nextent;
     field[XPOST_VM_IMAGE_BANK_FREE_SUBSTACK] = mem->free_substack;
@@ -580,7 +580,7 @@ static int _put_arena(_Writer *w, Xpost_Context *ctx, Xpost_Memory_File *mem,
     unsigned int nops;
     int ok;
 
-    if (mem->used == 0)
+    if (mem->high_water == 0)
         return 1;
 
     /* A build that describes its arena to a memory checker keeps the
@@ -591,18 +591,18 @@ static int _put_arena(_Writer *w, Xpost_Context *ctx, Xpost_Memory_File *mem,
        already opens it to grow itself -- and stays open afterwards, at
        the cost of what the description would have caught in the padding
        for the rest of the run. */
-    XPOST_VG_REOPEN_RANGE(mem->base, 0, mem->used);
+    XPOST_VG_REOPEN_RANGE(mem->base, 0, mem->high_water);
 
     if (host_state || !is_global)
-        return _emit(w, mem->base, mem->used);
+        return _emit(w, mem->base, mem->high_water);
 
-    copy = malloc(mem->used);
+    copy = malloc(mem->high_water);
     if (!copy)
     {
         XPOST_LOG_ERR("cannot hold a copy of the arena to write");
         return 0;
     }
-    memcpy(copy, mem->base, mem->used);
+    memcpy(copy, mem->base, mem->high_water);
 
     nops = xpost_operator_count();
     for (k = 0; k < nops; k++)
@@ -616,7 +616,7 @@ static int _put_arena(_Writer *w, Xpost_Context *ctx, Xpost_Memory_File *mem,
         {
             unsigned int at = adr + (unsigned int)s * (unsigned int)sizeof(Xpost_Signature);
 
-            if (at + sizeof(Xpost_Signature) > mem->used)
+            if (at + sizeof(Xpost_Signature) > mem->high_water)
                 break;
             memset(copy + at + offsetof(Xpost_Signature, fp), 0,
                    sizeof ((Xpost_Signature *)0)->fp);
@@ -625,7 +625,7 @@ static int _put_arena(_Writer *w, Xpost_Context *ctx, Xpost_Memory_File *mem,
         }
     }
 
-    ok = _emit(w, copy, mem->used);
+    ok = _emit(w, copy, mem->high_water);
     free(copy);
     return ok;
 }
@@ -936,7 +936,7 @@ static int _read_bank(_Reader *r, unsigned int which, _Bank *b)
                            * XPOST_VM_IMAGE_ROW_FIELDS * sizeof(unsigned int));
     if (!b->rows)
         return 0;
-    b->arena = _take_run(r, b->field[XPOST_VM_IMAGE_BANK_USED]);
+    b->arena = _take_run(r, b->field[XPOST_VM_IMAGE_BANK_HIGH_WATER]);
     if (!b->arena)
         return 0;
     return 1;
@@ -948,7 +948,7 @@ static int _read_bank(_Reader *r, unsigned int which, _Bank *b)
    refused rather than read. */
 static int _bank_consistent(const _Bank *b, unsigned int which)
 {
-    unsigned int used = b->field[XPOST_VM_IMAGE_BANK_USED];
+    unsigned int used = b->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
     unsigned int entities = b->field[XPOST_VM_IMAGE_BANK_NEXTENT];
     unsigned int ent;
 
@@ -987,11 +987,11 @@ static int _bank_consistent(const _Bank *b, unsigned int which)
    the way the allocator grows it, one slot short of its capacity. */
 static int _make_room(Xpost_Memory_File *mem, const _Bank *b)
 {
-    unsigned int used = b->field[XPOST_VM_IMAGE_BANK_USED];
+    unsigned int used = b->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
     unsigned int entities = b->field[XPOST_VM_IMAGE_BANK_NEXTENT];
     unsigned int max = mem->table.max;
 
-    if (used > mem->used && !xpost_memory_file_grow(mem, used - mem->used))
+    if (used > mem->high_water && !xpost_memory_file_grow(mem, used - mem->high_water))
     {
         XPOST_LOG_INFO("cannot grow virtual memory to the %u bytes an image "
                       "holds", used);
@@ -1023,7 +1023,7 @@ static int _make_room(Xpost_Memory_File *mem, const _Bank *b)
 static void _install_bank(Xpost_Memory_File *mem, const _Bank *b)
 {
     unsigned int entities = b->field[XPOST_VM_IMAGE_BANK_NEXTENT];
-    unsigned int used = b->field[XPOST_VM_IMAGE_BANK_USED];
+    unsigned int used = b->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
     unsigned int ent;
     unsigned int i;
 
@@ -1046,7 +1046,7 @@ static void _install_bank(Xpost_Memory_File *mem, const _Bank *b)
 
     if (used)
         memcpy(mem->base, b->arena, used);
-    mem->used = used;
+    mem->high_water = used;
     mem->start = b->field[XPOST_VM_IMAGE_BANK_START];
     mem->free_substack = b->field[XPOST_VM_IMAGE_BANK_FREE_SUBSTACK];
     mem->free_scan = b->field[XPOST_VM_IMAGE_BANK_FREE_SCAN];
@@ -1121,7 +1121,7 @@ static int _check_operators(const _Image_Row *image, unsigned int nimage,
 static const unsigned char *_image_optab(const _Bank *g, unsigned int rows)
 {
     Xpost_Memory_File view;
-    unsigned int used = g->field[XPOST_VM_IMAGE_BANK_USED];
+    unsigned int used = g->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
     unsigned int entities = g->field[XPOST_VM_IMAGE_BANK_NEXTENT];
     unsigned int adr;
 
@@ -1140,7 +1140,7 @@ static const unsigned char *_image_optab(const _Bank *g, unsigned int rows)
     memset(&view, 0, sizeof view);
     view.fd = -1;
     view.base = g->arena;
-    view.used = used;
+    view.high_water = used;
     view.max = used;
     view.table.tab = (void *)g->rows;
     view.table.nextent = entities;
@@ -1162,7 +1162,7 @@ static int _check_operator_rows(const _Bank *g, const _Host_Table *t,
                                 unsigned int nimage)
 {
     const unsigned char *rows = _image_optab(g, nimage);
-    unsigned int used = g->field[XPOST_VM_IMAGE_BANK_USED];
+    unsigned int used = g->field[XPOST_VM_IMAGE_BANK_HIGH_WATER];
     unsigned int k;
 
     if (!rows)

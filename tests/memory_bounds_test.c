@@ -205,19 +205,19 @@ int main(void)
        range, and capacity as far as the range goes. The rounding up the
        allocator does to it reaches past the last address the file has,
        which is a place no growth can put storage. */
-    held_used = mem.used;
+    held_used = mem.high_water;
     held_max = mem.max;
-    mem.used = 0xfffffffbu;
+    mem.high_water = 0xfffffffbu;
     mem.max = 0xffffffffu;
 
     check(xpost_memory_file_alloc(&mem, 16, &top) == 0,
           "an allocation rounded past the top of the address range is refused");
     check(top == 0xdeadbeefu,
           "a refused allocation hands back no address");
-    check(mem.used == 0xfffffffbu,
+    check(mem.high_water == 0xfffffffbu,
           "a refused allocation leaves the file's cursor where it was");
 
-    mem.used = held_used;
+    mem.high_water = held_used;
     mem.max = held_max;
 
     /* the allocation the file starts with still holds what was put in

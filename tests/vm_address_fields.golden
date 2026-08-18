@@ -36,7 +36,7 @@ address  xpost_context.h:_Xpost_Context     es                       the executi
 address  xpost_context.h:_Xpost_Context     hold                     the stack a constructor stashes a new object on until its operator returns, same
 address  xpost_context.h:_Xpost_Context     os                       the operand stack, named by where it is rather than by which entity it is
 address  xpost_memory.h:Xpost_Memory_File   free_substack            a parked save-record stack, held by where it is because those stacks are raw file allocations rather than table entities
-address  xpost_memory.h:Xpost_Memory_File   used                     the cursor the arena is handed out from, which a rearrangement would set to the new high-water rather than move
+address  xpost_memory.h:Xpost_Memory_File   high_water               the offset one past the last byte handed out, which a rearrangement would set to its new value rather than move
 address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
 address  xpost_name.h:tst                   eq                       the subtree for a matching character, EXCEPT at a terminator node -- where val is TST_END -- at which it holds the name's index on the name stack instead, so a pass that rewrote it unconditionally would corrupt every name's payload
 address  xpost_name.h:tst                   hi                       the subtree of the name tree for keys above this node's, held as an address
