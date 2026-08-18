@@ -87,6 +87,7 @@ tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
 tests/check-shared-helpers.sh \
+tests/check-raster-reading.sh \
 tests/check-error-quiet.sh \
 tests/check-testlib.sh \
 tests/testlib-facts \
@@ -156,6 +157,7 @@ tests/library_statics.golden \
 tests/counters.golden \
 tests/vm_growth.golden \
 tests/shared_helpers.exempt \
+tests/raster_reading.exempt \
 tests/direct_comm.exempt \
 tests/device_destroy_test.ps \
 tests/device_dictstack_test.ps \

@@ -5169,6 +5169,20 @@ test('shared-helpers',
   suite: cost_fast,
   timeout: 120)
 
+# Where a rendered page starts is a grammar -- a magic number, the
+# dimensions, a maximum value for every format but the bilevel one, any
+# whitespace between them and a comment allowed among them -- and nine
+# scripts had each walked it for themselves. Getting that walk wrong is
+# silent: the raster is merely shifted, and every count taken from it is
+# plausible and wrong, so a test measuring nothing still goes green. It is
+# written once in guard-paths.sh and this holds every script to it, taking
+# the population from the directory so that a newly written one is in it.
+test('raster-reading',
+  find_program('tests/check-raster-reading.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # The shared test framework, held to the tree. tests/testlib.ps is the one
 # place a case that may raise is run and the one place that puts the world
 # back after it, and that is worth nothing if a suite can quietly keep its
