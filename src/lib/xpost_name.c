@@ -46,10 +46,162 @@
 #include "xpost_context.h"
 //#include "xpost_interpreter.h"  // initialize interpreter to test
 #include "xpost_error.h"
+#include "xpost_free.h"  // give the old node table storage back
 #include "xpost_string.h"  // access string objects
 #include "xpost_name.h"  // double-check prototypes
 
 #define CNT_STR(s) sizeof(s)-1, s
+
+/* A name is a counted byte sequence: each tree level keys one byte
+   (0..255), and a level keyed by the out-of-band terminator 256 ends
+   the name and holds the payload, so a nul byte is an ordinary name
+   character (PLRM: cvn yields a name lexically the same as the
+   string). */
+#define TST_END 256u
+
+/* The nodes of the tree live together in one entity and name each other
+   by node number rather than by where that entity sits.
+ *
+ * A node held its own allocation before, taken straight off the memory
+ * file with no table row to describe it, and lo/eq/hi were addresses into
+ * the arena. Nothing could find such a node: not its size, not its tag,
+ * and not whichever other node pointed at it. Names go on being interned
+ * for as long as a program runs, so those nodes were scattered the whole
+ * height of the arena, and a pass that rearranged it would have relocated
+ * a live entity onto one of them.
+ *
+ * Gathered here the nodes are one entity with one row, and are numbered
+ * within it the way virtual memory numbers entities within the memory
+ * table. A number survives the storage moving, so lo, eq and hi are no
+ * longer places; the table's row is, and it is the single thing a
+ * rearrangement rewrites. The root moves as the tree is built and so
+ * lives in the table's head rather than in the row, which now means what
+ * it means everywhere else.
+ *
+ * Node 0 is not a node. Every link spells "no subtree" as zero and the
+ * first node is 1, so the empty tree needs no separate spelling.
+ *
+ * Nodes are handed out by counting and are never given back. A name that
+ * has been interned stays interned for the life of the bank, so there is
+ * nothing to return and no free list to keep -- which is why this is not
+ * what xpost_save.c calls a pool, where a parked record stack is chained
+ * for a later save to take. Growing is the whole table moving at once.
+ */
+typedef struct
+{
+    unsigned int root; /**< the node the tree is entered at, 0 while empty */
+    unsigned int n;    /**< nodes handed out, which is the highest number */
+    unsigned int cap;  /**< nodes the storage holds */
+} tsttab;
+
+/* Nodes in the first allocation. A boot interns thousands, so this is a
+   starting point to double from rather than an estimate of the total. */
+#define TSTTAB_FIRST 64u
+
+/* The table's head, and a node in it. Both are derived afresh at every use: an
+   allocation may grow the memory file, which moves it, so a pointer taken
+   before one is stale after it. */
+static tsttab *_tsttab(Xpost_Memory_File *mem)
+{
+    return xpost_vm_ptr(mem, xpost_memory_name_tree_adr(mem));
+}
+
+static tst *_tstnode(Xpost_Memory_File *mem, unsigned int i)
+{
+    return (tst *)(void *)(_tsttab(mem) + 1) + (i - 1);
+}
+
+/* Give the node table storage for `want` nodes, keeping what it holds.
+ *
+ * The table is a special entity and its number is fixed, so the storage is
+ * moved into that row rather than the row being replaced: a fresh entity
+ * is allocated, the contents copied across, the two rows exchange what
+ * they describe, and the temporary -- now holding the old storage -- is
+ * given back. */
+static int _tsttab_grow(Xpost_Memory_File *mem, unsigned int want)
+{
+    Xpost_Memory_Table *tab;
+    unsigned int tmp, oldadr, oldsz, newadr, newsz;
+
+    if (want > (0xffffffffu - sizeof(tsttab)) / sizeof(tst))
+    {
+        XPOST_LOG_ERR("%d name tree too large to address", VMerror);
+        return 0;
+    }
+    if (!xpost_memory_table_alloc(mem,
+            (unsigned int)(sizeof(tsttab) + want * sizeof(tst)), 0, &tmp))
+    {
+        XPOST_LOG_ERR("%d cannot grow the name tree", VMerror);
+        return 0;
+    }
+
+    tab = &mem->table;                          /* recalc: the file may have grown */
+    oldadr = xpost_memory_name_tree_adr(mem);
+    oldsz = xpost_memory_name_tree_size(mem);
+    newadr = tab->tab[tmp].adr;
+    /* what the row says, which the free list may have made larger than
+       the request; taking the row's figure leaves none of it unused and
+       keeps the accounting the list was given */
+    newsz = tab->tab[tmp].sz;
+
+    if (oldsz)
+        memcpy(xpost_vm_ptr(mem, newadr), xpost_vm_ptr(mem, oldadr), oldsz);
+
+    xpost_memory_set_name_tree(mem, newadr, newsz);
+    tab->tab[tmp].adr = oldadr;
+    tab->tab[tmp].sz = oldsz;
+    /* The entity was allocated moments ago in this same function and
+       carries no tag, so the free list has nothing to object to; a
+       refusal here would be the list refusing what it just handed out. */
+    XPOST_REFUSAL_IMPOSSIBLE(xpost_free_memory_ent(mem, tmp));
+
+    _tsttab(mem)->cap =
+        (unsigned int)((newsz - sizeof(tsttab)) / sizeof(tst));
+    return 1;
+}
+
+/* the index of a fresh node, zeroed, or 0 if none can be had */
+static unsigned int _tsttab_new(Xpost_Memory_File *mem)
+{
+    tsttab *pl;
+    tst *p;
+    unsigned int i;
+
+    /* The table is built when the first name is interned rather than when
+       the tree's entity is made. The special entities are numbered by the
+       order they are allocated in, and the allocation here would take the
+       number the next of them expects. */
+    if (xpost_memory_name_tree_size(mem) < sizeof(tsttab))
+    {
+        if (!_tsttab_grow(mem, TSTTAB_FIRST))
+            return 0;
+    }
+    pl = _tsttab(mem);
+    if (pl->n >= pl->cap)
+    {
+        if (!_tsttab_grow(mem, pl->cap * 2))
+            return 0;
+        pl = _tsttab(mem);
+    }
+    i = ++pl->n;
+    p = _tstnode(mem, i);
+    p->val = 0; p->lo = p->eq = p->hi = 0;
+    return i;
+}
+
+/* the node the tree is entered at, and recording a new one */
+static unsigned int _tsttab_root(Xpost_Memory_File *mem)
+{
+    /* no table yet is no names yet, which is the empty tree */
+    if (xpost_memory_name_tree_size(mem) < sizeof(tsttab))
+        return 0;
+    return _tsttab(mem)->root;
+}
+
+static void _tsttab_set_root(Xpost_Memory_File *mem, unsigned int r)
+{
+    _tsttab(mem)->root = r;
+}
 
 /* initialize the name special entities XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, NAME_TREE */
 int xpost_name_init(Xpost_Context *ctx)
@@ -85,7 +237,7 @@ int xpost_name_init(Xpost_Context *ctx)
     }
     tab = &ctx->gl->table; //recalc pointer
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
-    tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;
+    xpost_memory_set_name_tree(ctx->gl, 0, 0);
     nstk = xpost_memory_name_stack_adr(ctx->gl);
     xpost_stack_push(ctx->gl, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
     assert (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->gl, nstk, 0)) == XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME);
@@ -113,7 +265,7 @@ int xpost_name_init(Xpost_Context *ctx)
     }
     tab = &ctx->lo->table; //recalc pointer
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
-    tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;
+    xpost_memory_set_name_tree(ctx->lo, 0, 0);
     nstk = xpost_memory_name_stack_adr(ctx->lo);
     xpost_stack_push(ctx->lo, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
     if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0)) != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
@@ -124,32 +276,25 @@ int xpost_name_init(Xpost_Context *ctx)
     return 1;
 }
 
-/* A name is a counted byte sequence: each tree level keys one byte
-   (0..255), and a level keyed by the out-of-band terminator 256 ends
-   the name and holds the payload, so a nul byte is an ordinary name
-   character (PLRM: cvn yields a name lexically the same as the
-   string). */
-#define TST_END 256u
-
 /* perform a search using the ternary search tree */
 static
 unsigned int tstsearch(Xpost_Memory_File *mem,
-                       unsigned int tadr,
+                       unsigned int ti,
                        const char *s,
                        unsigned int n)
 {
-    while (tadr) {
-        tst *p = xpost_vm_ptr(mem, tadr);
+    while (ti) {
+        tst *p = _tstnode(mem, ti);
         unsigned int key = n ? (unsigned char)*s : TST_END;
 
         if (key < p->val) {
-            tadr = p->lo;
+            ti = p->lo;
         } else if (key == p->val) {
             if (key == TST_END) return p->eq; /* payload at the terminator */
             s++, n--;
-            tadr = p->eq;
+            ti = p->eq;
         } else {
-            tadr = p->hi;
+            ti = p->hi;
         }
     }
     return 0;
@@ -158,7 +303,7 @@ unsigned int tstsearch(Xpost_Memory_File *mem,
 /* add a counted string to the ternary search tree */
 static
 int tstinsert(Xpost_Memory_File *mem,
-              unsigned int tadr,
+              unsigned int ti,
               const char *s,
               unsigned int n,
               unsigned int *retval)
@@ -169,29 +314,28 @@ int tstinsert(Xpost_Memory_File *mem,
     int ret;
     unsigned int key = n ? (unsigned char)*s : TST_END;
 
-    if (!tadr) {
-        if (!xpost_memory_file_alloc(mem, sizeof(tst), &tadr))
+    if (!ti) {
+        ti = _tsttab_new(mem);
+        if (!ti)
         {
             XPOST_LOG_ERR("cannot allocate tree node");
             return VMerror;
         }
-        p = xpost_vm_ptr(mem, tadr);
-        p->val = key;
-        p->lo = p->eq = p->hi = 0;
+        _tstnode(mem, ti)->val = key;
     }
-    p = xpost_vm_ptr(mem, tadr);
+    p = _tstnode(mem, ti);
     if (key < p->val) {
         ret = tstinsert(mem, p->lo, s, n, &t);
         if (ret)
             return ret;
-        p = xpost_vm_ptr(mem, tadr); //recalc pointer
+        p = _tstnode(mem, ti); //recalc pointer
         p->lo = t;
     } else if (key == p->val) {
         if (key != TST_END) {
             ret = tstinsert(mem, p->eq, s + 1, n - 1, &t);
             if (ret)
                 return ret;
-            p = xpost_vm_ptr(mem, tadr); //recalc pointer
+            p = _tstnode(mem, ti); //recalc pointer
             p->eq = t;
         }else {
             nstk = xpost_memory_name_stack_adr(mem);
@@ -201,10 +345,10 @@ int tstinsert(Xpost_Memory_File *mem,
         ret = tstinsert(mem, p->hi, s, n, &t);
         if (ret)
             return ret;
-        p = xpost_vm_ptr(mem, tadr); //recalc pointer
+        p = _tstnode(mem, ti); //recalc pointer
         p->hi = t;
     }
-    *retval = tadr;
+    *retval = ti;
     return 0;
 }
 
@@ -264,10 +408,10 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
        using one of them throughout. Searching global first hands back
        the other object for those names and the interpreter does not
        finish starting up. */
-    tstk = xpost_memory_name_tree_adr(ctx->lo);
+    tstk = _tsttab_root(ctx->lo);
     u = tstsearch(ctx->lo, tstk, s, n);
     if (!u) {
-        tstk = xpost_memory_name_tree_adr(ctx->gl);
+        tstk = _tsttab_root(ctx->gl);
         u = tstsearch(ctx->gl, tstk, s, n);
         if (!u) {
             Xpost_Memory_File *mem = ctx->vmmode==GLOBAL?ctx->gl:ctx->lo;
@@ -292,7 +436,7 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
             }
             memcpy(chars, s, n);
 
-            ret = tstinsert(mem, xpost_memory_name_tree_adr(mem), chars, n, &t);
+            ret = tstinsert(mem, _tsttab_root(mem), chars, n, &t);
             if (ret)
             {
                 //this can only be a VMerror
@@ -300,7 +444,7 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
                     free(chars);
                 return invalid;
             }
-            xpost_memory_set_name_tree_adr(mem, t);
+            _tsttab_set_root(mem, t);
             u = addname(ctx, chars, n); // obeys vmmode
             if (chars != inline_copy)
                 free(chars);
@@ -340,19 +484,19 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx,
     unsigned int tstk;
     int ret;
 
-    tstk = xpost_memory_name_tree_adr(ctx->gl);
+    tstk = _tsttab_root(ctx->gl);
     u = tstsearch(ctx->gl, tstk, s, (unsigned int)strlen(s));
     if (!u) {
         unsigned int vmmode = ctx->vmmode;
 
         ctx->vmmode = GLOBAL;
-        ret = tstinsert(ctx->gl, xpost_memory_name_tree_adr(ctx->gl), s, (unsigned int)strlen(s), &t);
+        ret = tstinsert(ctx->gl, _tsttab_root(ctx->gl), s, (unsigned int)strlen(s), &t);
         if (ret)
         {
             ctx->vmmode = vmmode;
             return invalid;
         }
-        xpost_memory_set_name_tree_adr(ctx->gl, t);
+        _tsttab_set_root(ctx->gl, t);
         u = addname(ctx, s, (unsigned int)strlen(s));
         ctx->vmmode = vmmode;
     }

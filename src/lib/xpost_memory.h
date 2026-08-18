@@ -576,11 +576,11 @@ xpost_memory_name_stack_adr(Xpost_Memory_File *mem)
 }
 
 /**
- * @brief address of the root of the name tree (xpost_name_init).
+ * @brief address of the name tree's table of nodes (xpost_name_init).
  *
- * Unlike its siblings this one moves: the ternary search tree is rebuilt
- * upward as names are interned, so the root changes and is written back
- * through xpost_memory_set_name_tree_adr.
+ * The nodes of the ternary search tree live together in this one entity
+ * and name each other by node number, so the tree is reached by asking
+ * that table for its root rather than by holding an address to a node.
  */
 static inline unsigned int
 xpost_memory_name_tree_adr(Xpost_Memory_File *mem)
@@ -589,12 +589,27 @@ xpost_memory_name_tree_adr(Xpost_Memory_File *mem)
 }
 
 /**
- * @brief record the new root of the name tree.
+ * @brief bytes the name tree's table of nodes holds.
+ */
+static inline unsigned int
+xpost_memory_name_tree_size(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].sz;
+}
+
+/**
+ * @brief give the name tree's node table different storage.
+ *
+ * The table outgrows its allocation as names are interned. Its entity
+ * number is fixed, so what is replaced is the storage under that row.
  */
 static inline void
-xpost_memory_set_name_tree_adr(Xpost_Memory_File *mem, unsigned int adr)
+xpost_memory_set_name_tree(Xpost_Memory_File *mem,
+                           unsigned int adr,
+                           unsigned int sz)
 {
     mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = adr;
+    mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].sz = sz;
 }
 
 /**

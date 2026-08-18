@@ -241,7 +241,7 @@ typedef enum
  * @def XPOST_VM_IMAGE_VERSION
  * @brief The layout below, which a reader must know in full.
  */
-#define XPOST_VM_IMAGE_VERSION 5u
+#define XPOST_VM_IMAGE_VERSION 6u
 
 /**
  * @def XPOST_VM_IMAGE_DIGEST_SEED
