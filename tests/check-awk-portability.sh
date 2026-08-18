@@ -29,6 +29,14 @@
 # first report comes from a host the author does not have in front of
 # them -- which is the whole shape this suite exists to shorten.
 #
+# The awks are not the only tools whose lines an awk reads, so a second
+# divergence is held at the end: the od in the base system of macOS
+# closes -A n output with a line for the final offset, blank under that
+# flag, where GNU od ends with the data. The raster-reading helpers are
+# run here under an od that writes that extra line, so an assumption
+# about od's line count is met on every host rather than only where
+# that od lives.
+#
 # What is deliberately not here: a redirection to a plain name or to a
 # quoted string is unambiguous and is left alone, and so is `>` used as
 # a comparison, which is why the rule reads only lines that print.
@@ -123,5 +131,39 @@ if grep -qE "$concat_target" "$work/clean.awk"; then
     echo "      the target parenthesised, so it refuses what it asks for"
     fail=1
 fi
+
+# The od divergence, met here rather than on the host that carries it.
+# An od standing in for the macOS one runs the real od and closes with
+# the extra line; the helpers that read rasters through od are held to
+# their answers under it. A helper that takes every line for data grows
+# a second line, and where its answer rides into an awk as a -v value
+# the extra line is a newline inside a string, which the awk in that
+# same base system refuses at parse time -- the guard then reports
+# itself instead of what it watches. The pages are the two grounds the
+# helpers know: a bilevel page with four bits set, and a grey page with
+# two marked bytes.
+realod=$(command -v od)
+mkdir -p "$work/shim"
+printf '#!/bin/sh\n%s "$@"\necho\n' "$realod" > "$work/shim/od"
+chmod +x "$work/shim/od"
+printf 'P4\n2 2\n\300\300' > "$work/probe.pbm"
+printf 'P5\n2 2\n255\n\000\377\000\377' > "$work/probe.pgm"
+
+check_od() {    # <which helper on which page> <the answer it owes> <the answer given>
+    if [ "$3" != "$2" ]; then
+        echo "FAILURES: $1 answered '$3' rather than '$2' under an od that"
+        echo "      closes its output with a line for the final offset, as"
+        echo "      the od in the base system of macOS does"
+        fail=1
+    fi
+}
+check_od "guard_pnm_bilevel on a bilevel page" "yes" \
+    "$(PATH="$work/shim:$PATH" guard_pnm_bilevel "$work/probe.pbm")"
+check_od "guard_pnm_bilevel on a grey page" "no" \
+    "$(PATH="$work/shim:$PATH" guard_pnm_bilevel "$work/probe.pgm")"
+check_od "guard_pnm_ink on a bilevel page" "ink 4" \
+    "$(PATH="$work/shim:$PATH" guard_pnm_ink "$work/probe.pbm")"
+check_od "guard_pnm_ink on a grey page" "ink 2" \
+    "$(PATH="$work/shim:$PATH" guard_pnm_ink "$work/probe.pgm")"
 
 exit $fail

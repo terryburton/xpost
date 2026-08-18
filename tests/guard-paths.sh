@@ -438,8 +438,17 @@ guard_pnm_ink() {   # <file> -> "ink <n>" or "blank"
 
 # Whether a PNM file is the bilevel format, whose ground and marks are bits
 # rather than bytes.
+#
+# Only the line that carries the two bytes is read. What follows the data
+# is od's own business and differs by implementation: the od in the base
+# system of macOS closes -A n output with a line for the final offset,
+# blank under that flag, where GNU od ends with the data. The answer here
+# rides into an awk program as a -v value, where a second line would put
+# a newline inside a string and the awk on that same system refuses the
+# whole program at parse time -- so the answer is one line by
+# construction, not by trust in od.
 guard_pnm_bilevel() {   # <file> -> "yes" or "no"
-    od -An -v -tu1 -N2 "$1" | awk '{ print ($2 == 52) ? "yes" : "no" }'
+    od -An -v -tu1 -N2 "$1" | awk 'NF { print ($2 == 52) ? "yes" : "no"; exit }'
 }
 
 # The count a register declares for a kind of entry, held against what the
