@@ -52,15 +52,24 @@ tmp=${TMPDIR:-/tmp}/examples-test-$$
 mkdir -p "$tmp" || exit 1
 trap 'rm -rf "$tmp"' 0
 
-# How long an unbounded example is given to prove it is still going.
-# It only needs to outlive startup: each was producing output well
-# within its first second on an idle machine.
-window=3
-
 # whether this build carries a face library: the faceless build seeds
-# NOFACES into systemdict, and the skip below exists only for it
-printf 'systemdict /NOFACES known { (NOFACES) = } if\n' > "$tmp/probe.ps"
-nofaces=$("$xpost" -q -d null -o /dev/null --no-sandbox "$tmp/probe.ps" </dev/null 2>&1 | grep -c NOFACES)
+# NOFACES into systemdict, and the skip below exists only for it. The
+# probe is also the wrapper's clock: how long a whole interpreter run
+# takes on this host, under whatever instrumentation the run carries,
+# which is what the aliveness window below must stand clear of -- a
+# window a slow host can exhaust at startup turns the check into a
+# race about the host's speed.
+probe_from=$(date +%s)
+nofaces=$(printf 'systemdict /NOFACES known { (NOFACES) = } if\n' > "$tmp/probe.ps"
+          "$xpost" -q -d null -o /dev/null --no-sandbox "$tmp/probe.ps" </dev/null 2>&1 | grep -c NOFACES)
+probe_took=$(( $(date +%s) - probe_from ))
+
+# How long an unbounded example is given to prove it is still going.
+# It only needs to outlive startup, and startup is what the probe just
+# measured: five of those plus a floor stands clear of the host's own
+# speed, while an example that has already spoken passes the moment it
+# has, so a fast host never waits the window out.
+window=$((probe_took * 5 + 3))
 
 # in a faceless build, a run that failed by the refusal contract is a
 # skip: report it and count it, judge nothing else about it
@@ -94,6 +103,10 @@ for f in "$dir"/*.ps; do
         pid=$!
         t=0
         while [ "$t" -lt "$window" ] && kill -0 "$pid" 2>/dev/null; do
+            # said something of its own already: the pass needs no more
+            # of the window. The interpreter's startup banner is four
+            # lines; anything past them is the program's.
+            [ "$(grep -c . "$tmp/out-$name")" -gt 4 ] && break
             sleep 1
             t=$((t + 1))
         done
@@ -106,8 +119,9 @@ for f in "$dir"/*.ps; do
             # banner is four lines, everything past them is the
             # program's
             if [ "$(grep -c . "$tmp/out-$name")" -le 4 ]; then
-                echo "FAILURES: example $name was still running at ${window}s but"
-                echo "      had said nothing beyond the startup banner"
+                echo "FAILURES: example $name was still running at ${window}s"
+                echo "      (window scaled from a ${probe_took}s probe) but had"
+                echo "      said nothing beyond the startup banner"
                 fail=1
             fi
         else
