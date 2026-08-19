@@ -168,8 +168,10 @@ export XPOST_DATA_DIR
 # limit a slow workload can reach on a slow host turns the measurement into a
 # race, and the workload that loses it reads as one that cannot be run twice
 # -- which is a claim about the host's speed dressed as a claim about the
-# workload. The longest run in this directory takes twenty-seven seconds on
-# the machine this was written on, so thirty seconds was a coin toss for it.
+# workload. The slowest run in this directory takes seventeen seconds on the
+# machine this was written on, an address-sanitized build with leak checking
+# multiplies that by three, and a shared runner is slower again; the limit
+# stands clear of the product of all three.
 #
 # The limit is honoured on the hosts that carry a command for it and on the
 # ones that do not. The base system of macOS has no timeout(1), and a run
@@ -292,7 +294,7 @@ xg.used xg.mark sub
 (XGCOST ) print 20 string cvs print (\n) print
 flush
 PS
-    out=$(cd "$work/case" && xg_limit 120 \
+    out=$(cd "$work/case" && xg_limit 360 \
               "$xpost" -q --no-sandbox -d null drive.ps </dev/null 2>/dev/null)
     st=$?
     # Read in the C locale. What a workload prints is bytes and not text --
