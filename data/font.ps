@@ -80,7 +80,7 @@ setglobal
 % FontType of its own, distinct from the base-font type the same kind of
 % description carries. A CIDFontType 2 is stamped 11 and not the 42 a
 % TrueType base font would carry.
-.xpostsys /.cidfonttypes << 0 9 1 10 2 11 4 32 >> put
+.xpostsys /.cidtypemap << 0 9 1 10 2 11 4 32 >> put
 
 % dict /operator  .cidstamp  dict
 % Stamp a CIDFont dictionary with the FontType its CIDFontType calls for.
@@ -100,7 +100,7 @@ setglobal
     get
     dup type /integertype ne
         { pop pop cvx /typecheck signalerror } if
-    //.xpostsys /.cidfonttypes get exch 2 copy known not
+    //.xpostsys /.cidtypemap get exch 2 copy known not
         { pop pop pop cvx /invalidfont signalerror } if
     get
     1 index exch /FontType exch put

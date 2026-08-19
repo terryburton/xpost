@@ -758,7 +758,7 @@ setglobal
 % table rather than a chain of tests: the chain asked five questions of
 % one number and each arm had to leave the stack as the next one found
 % it, which two of them did not.
-/.shadingtypes <<
+/.shadepainters <<
     1 //.fnsh      2 //.axialsh   3 //.radialsh
     4 //.meshsh    5 //.meshsh
     6 //.patchsh   7 //.patchsh
@@ -771,9 +771,9 @@ systemdict /shfill [ /dicttype ] {
     % program that caught the rangecheck would go on painting in whatever
     % colour and clip the shading was given.
     dup /ShadingType get
-    //.shadingtypes 1 index known not
+    //.shadepainters 1 index known not
         { pop pop /shfill cvx /rangecheck signalerror } if
-    //.shadingtypes exch get exch          % proc shdict
+    //.shadepainters exch get exch          % proc shdict
 
     gsave
     dup /ColorSpace get setcolorspace

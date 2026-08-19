@@ -111,7 +111,7 @@ entries 363
 .xpostsys /.checkpagefeatures
 .xpostsys /.checkpagehandlers
 .xpostsys /.cidface
-.xpostsys /.cidfonttypes
+.xpostsys /.cidtypemap
 .xpostsys /.cidstamp
 .xpostsys /.cieabcrgb
 .xpostsys /.ciearpgb
@@ -332,7 +332,7 @@ entries 363
 .xpostsys /.setpageno
 .xpostsys /.setpagesent
 .xpostsys /.settlebandbudget
-.xpostsys /.shadingtypes
+.xpostsys /.shadepainters
 .xpostsys /.shcolor
 .xpostsys /.showclip
 .xpostsys /.showfmap

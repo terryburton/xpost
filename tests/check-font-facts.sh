@@ -259,12 +259,12 @@ sort -u "$work/got.diverge" -o "$work/got.diverge"
 
 # ---- the CIDFontType-to-FontType correspondence, held and probed
 #
-# The register carries PLRM Table 5.11 and .cidfonttypes carries the same
+# The register carries PLRM Table 5.11 and .cidtypemap carries the same
 # table in the interpreter, so the two are held to each other; a row added
 # to one without the other fails. Then each row is probed through BOTH
 # operators the specification requires the stamp of, because one of them
 # doing it looks exactly like both from any single test.
-sed -n 's|^\.xpostsys /\.cidfonttypes[[:space:]]*<<\(.*\)>>.*|\1|p' \
+sed -n 's|^\.xpostsys /\.cidtypemap[[:space:]]*<<\(.*\)>>.*|\1|p' \
     "$src/data/font.ps" \
     | tr -s ' ' '\n' | grep . | paste - - | LC_ALL=C sort -n > "$work/cid.src"
 awk '$1 == "cidtype" && NF >= 3 { print $2 "\t" $3 }' "$work/reg" \
@@ -278,7 +278,7 @@ if [ "$ncid" -lt 1 ] || [ "$(grep -c . "$work/cid.src")" -lt 1 ]; then
     exit 1
 fi
 if ! diff_out=$(diff "$work/cid.reg" "$work/cid.src" 2>&1); then
-    echo "FAIL: tests/font-facts and .cidfonttypes disagree about which"
+    echo "FAIL: tests/font-facts and .cidtypemap disagree about which"
     echo "      FontType a CIDFontType carries. PLRM Table 5.11 decides"
     echo "      (< register, > interpreter):"
     printf '%s\n' "$diff_out" | sed 's/^/        /'

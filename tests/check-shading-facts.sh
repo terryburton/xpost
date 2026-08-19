@@ -77,7 +77,7 @@ fail=0
 # several lines, so it is taken between its opening and its closing and
 # read as a stream of pairs rather than line by line.
 awk '
-    /^\/\.shadingtypes[ \t]*<</ { open = 1; next }
+    /^\/\.shadepainters[ \t]*<</ { open = 1; next }
     open && /^>>/ { exit }
     open { gsub(/%.*/, ""); print }
 ' "$shade" \
