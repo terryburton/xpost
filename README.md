@@ -153,8 +153,7 @@ answers which question.
 | `doc/MANUAL` | using xpost: building it, running it, the devices, the interactive session, and the language by example |
 | `doc/CONTRIBUTING.md` | working on xpost: the gate, the guards, the corpora, and what a commit looks like |
 | `doc/GATING.md` | which test run answers which question |
-| `doc/NEWINTERNALS` | how it works: the object, the memory, the operators, the devices, the recorded page and the band loop |
-| `doc/INTERNALS` | the module map: which file holds what, and the parts of the memory file nothing else describes |
+| `doc/INTERNALS` | how it works: the module map, the memory, the object, the operators, the devices, the recorded page and the band loop |
 | `doc/ROOTS` | what the garbage collector marks from, and which bank each root lives in |
 | `doc/COMPAT` | where each user-visible name comes from |
 | `doc/COVERAGE.md`, `doc/COVERAGE-large.md` | how much of the C sources a full run executes, one per object width |

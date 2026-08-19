@@ -82,7 +82,7 @@ typedef struct
  * Not a chain per band: a band that covers several of those would read
  * them one after another and play a mark spanning two of them out of
  * order with a mark inside one, which is a different page (see
- * doc/NEWINTERNALS). Order is what a record is for, so the file keeps it
+ * doc/INTERNALS). Order is what a record is for, so the file keeps it
  * and a run of rows is chosen by reading past what it does not meet.
  *
  * The buffer is the whole of the per-page term a spill adds. It is one

@@ -106,7 +106,7 @@ typedef struct
    keeps between pages is the raster.
 
    A page arriving a band at a time is compressed across several Emit
-   calls (doc/NEWINTERNALS), and the file and the compressor outlive each
+   calls (doc/INTERNALS), and the file and the compressor outlive each
    of them -- which is the whole of what makes a band of any height
    right. A scanline goes into a unit of eight or sixteen rows, and the
    compressor holds the part of a unit it has not filled between one
@@ -981,7 +981,7 @@ int loadjpegdevicecont(Xpost_Context *ctx,
        colour raster class, which says it, and a copy carries what it
        was copied from -- so a device that had never considered the
        question would say yes by inheritance. Saying it again is what
-       makes the answer this device's own (doc/NEWINTERNALS). */
+       makes the answer this device's own (doc/INTERNALS). */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
                          xpost_bool_cons(1));
     if (ret)

@@ -4,7 +4,7 @@ What this tree expects of a change, written down because most of it is
 not obvious from the files and none of it is enforced by anything a new
 contributor would meet first.
 
-Read `doc/MANUAL` for building and running, `doc/NEWINTERNALS` for how
+Read `doc/MANUAL` for building and running, `doc/INTERNALS` for how
 the interpreter works, and `doc/GATING.md` for the reference version of
 the test selection this page introduces.
 
@@ -191,7 +191,7 @@ to change no pixel is gated on those bytes.
 
 ## Changing the C
 
-The one rule that will bite immediately, from `doc/NEWINTERNALS`:
+The one rule that will bite immediately, from `doc/INTERNALS`:
 
 > Do Not hold a pointer while allocating.
 

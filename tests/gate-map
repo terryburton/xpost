@@ -516,7 +516,6 @@ doc path doc/*.md
 doc path doc/COMPAT
 doc path doc/INTERNALS
 doc path doc/MANUAL
-doc path doc/NEWINTERNALS
 doc path doc/ROOTS
 doc path doc/*.dox
 doc path doc/Doxyfile

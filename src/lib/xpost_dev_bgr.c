@@ -561,7 +561,7 @@ int loadbgrdevicecont(Xpost_Context *ctx,
        given to whoever embedded the interpreter, which asked for a page
        and holds one, so the page is whole by the contract it asked
        under: holding less of it at once would bound nothing and would
-       hand back less than a page (doc/NEWINTERNALS).
+       hand back less than a page (doc/INTERNALS).
 
        Taken back out rather than left unsaid. The class is a copy of the
        colour raster class, which says its page may arrive that way, and

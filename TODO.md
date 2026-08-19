@@ -51,7 +51,7 @@ files for vc10, vc12 and vc14 and no installer.
 
 **Re-examine the split between `xpost_matrix.c` and `xpost_op_matrix.c`,
 which converts back and forth between matrix formats.** Open. Both files
-are still there. `doc/NEWINTERNALS` explains why the internal matrix is
+are still there. `doc/INTERNALS` explains why the internal matrix is
 the transpose of the PLRM's.
 
 **Remove optab from VM, thus removing all pointers; remove

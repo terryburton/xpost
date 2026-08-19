@@ -41,7 +41,6 @@ doc/COVERAGE-large.md \
 doc/GATING.md \
 doc/INTERNALS \
 doc/ROOTS \
-doc/NEWINTERNALS \
 doc/MANUAL \
 doc/Doxyfile \
 doc/xpost.dox \
