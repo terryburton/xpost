@@ -955,10 +955,10 @@ WARN_LOGFILE           =
 # spaces. See also FILE_PATTERNS and EXTENSION_MAPPING
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = ../src/bin \
-                         ../src/lib \
-                         ../doc/xpost.dox \
-                         ../doc/xpost_design.dox
+INPUT                  = src/bin \
+                         src/lib \
+                         doc/xpost.dox \
+                         doc/xpost_design.dox
 
 # This tag can be used to specify the character encoding of the source files
 # that Doxygen parses. Internally Doxygen uses the UTF-8 encoding. Doxygen uses
@@ -1013,8 +1013,7 @@ RECURSIVE              = NO
 # Note that relative paths are relative to the directory from which Doxygen is
 # run.
 
-EXCLUDE                = src/bin/glob.c \
-                         src/bin/glob.h
+EXCLUDE                =
 
 # The EXCLUDE_SYMLINKS tag can be used to select whether or not files or
 # directories that are symbolic links (a Unix file system feature) are excluded
