@@ -38,9 +38,11 @@
 #include <ctype.h>
 #include <math.h> /* sqrt */
 
-#ifdef HAVE_FONTCONFIG
-# include <fontconfig/fontconfig.h>
-#endif
+#ifdef HAVE_FREETYPE2
+
+# ifdef HAVE_FONTCONFIG
+#  include <fontconfig/fontconfig.h>
+# endif
 
 # include <ft2build.h>
 # include FT_FREETYPE_H
@@ -48,17 +50,23 @@
 # include FT_BBOX_H
 # include FT_FONT_FORMATS_H
 
+#endif
+
 #include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_object.h"
 #include "xpost_font.h"
 #include "xpost_main.h" /* to be called when the library goes down */
 
-#ifdef HAVE_FONTCONFIG
+#ifdef HAVE_FREETYPE2
+
+# ifdef HAVE_FONTCONFIG
 static FcConfig *_xpost_font_fc_config = NULL;
-#endif
+# endif
 
 static FT_Library _xpost_font_ft_library = NULL;
+
+#endif
 
 /* The glyph cache: rendered glyph rasters keyed by their full
    rendering inputs -- the face (or, for glyphs painted by procedure,
@@ -128,6 +136,10 @@ gcache_hashkey(const void *k1, unsigned long long k2, const long m[4], long size
     return (unsigned int)(h % GCACHE_BUCKETS);
 }
 
+#ifdef HAVE_FREETYPE2
+/* recorded as the face route installs a transform and size, and read
+   back when it renders: a procedural glyph's key carries its transform
+   from the caller, so only faces pass through here */
 static void
 gcache_state_set(const void *face, const long *m, const long *size)
 {
@@ -189,6 +201,7 @@ gcache_state_get(const void *face, long m[4], long *size)
     *size = 0;
     return 0;
 }
+#endif
 
 static Xpost_Glyph_Entry *
 gcache_find(const void *k1, unsigned long long k2, const long m[4], long size)
@@ -398,6 +411,7 @@ xpost_mask_cache_clear(void)
     gcache_clear();
 }
 
+#ifdef HAVE_FREETYPE2
 /* A face built over a font program in memory reads the program where it
    lies, keeping the pointer it was given rather than a copy of the bytes,
    so the program has to outlive every glyph built from it. It is the
@@ -467,10 +481,12 @@ program_clear(void)
 }
 
 static void strike_clear(void);
+#endif
 
 int
 xpost_font_init(void)
 {
+#ifdef HAVE_FREETYPE2
     FT_Error err_ft;
 
     err_ft = FT_Init_FreeType(&_xpost_font_ft_library);
@@ -493,6 +509,7 @@ xpost_font_init(void)
             XPOST_LOG_ERR("cannot load Fc config and fonts");
     }
 # endif
+#endif
 
     /* coming up is what asks to be taken down, so a module that starts
        holding something cannot be left out of a list. The configurations
@@ -507,19 +524,24 @@ xpost_font_init(void)
 void
 xpost_font_quit(void)
 {
-#ifdef HAVE_FONTCONFIG
+#ifdef HAVE_FREETYPE2
+# ifdef HAVE_FONTCONFIG
     FcConfigDestroy(_xpost_font_fc_config);
     FcFini();
+# endif
 #endif
 
     gcache_clear();
+#ifdef HAVE_FREETYPE2
     strike_clear();
     FT_Done_FreeType(_xpost_font_ft_library);
     /* the library takes the faces still open with it; their programs are
        this module's to give up, and nothing reads them once it has gone */
     program_clear();
+#endif
 }
 
+#ifdef HAVE_FREETYPE2
 # ifdef HAVE_FONTCONFIG
 /* case- and blank-insensitive name comparison, as fontconfig applies
    to family names */
@@ -675,6 +697,7 @@ _xpost_font_face_filename_and_index_get(const char *name, int *idx)
 
     return NULL;
 }
+#endif
 
 static char *_xpost_font_last_file = NULL;
 
@@ -703,6 +726,7 @@ xpost_font_face_last_file(void)
 void *
 xpost_font_face_new_from_name(const char *name)
 {
+#ifdef HAVE_FREETYPE2
     FT_Face face;
     FT_Error err;
     char *filename;
@@ -732,6 +756,9 @@ xpost_font_face_new_from_name(const char *name)
     _xpost_font_faces++;
 
     return face;
+#else
+    (void)name;
+#endif
 
     return NULL;
 }
@@ -739,6 +766,7 @@ xpost_font_face_new_from_name(const char *name)
 void *
 xpost_font_face_new_from_memory(const unsigned char *data, size_t len)
 {
+#ifdef HAVE_FREETYPE2
     FT_Face face;
     FT_Error err;
 
@@ -760,12 +788,17 @@ xpost_font_face_new_from_memory(const unsigned char *data, size_t len)
     _xpost_font_faces++;
 
     return face;
+#else
+    (void)data;
+    (void)len;
+#endif
 
     return NULL;
 }
 
 void
 xpost_font_face_get_bbox(void *face, Xpost_Object *bboxarray, real em){
+#ifdef HAVE_FREETYPE2
     FT_Face f = face;
     real s = 1.0;
 
@@ -779,43 +812,69 @@ xpost_font_face_get_bbox(void *face, Xpost_Object *bboxarray, real em){
     bboxarray[1] = xpost_real_cons(f->bbox.yMin * s);
     bboxarray[2] = xpost_real_cons(f->bbox.xMax * s);
     bboxarray[3] = xpost_real_cons(f->bbox.yMax * s);
+#else
+    (void)face;
+    (void)bboxarray;
+    (void)em;
+#endif
 }
 
 int
 xpost_font_face_units(void *face)
 {
+#ifdef HAVE_FREETYPE2
     FT_Face f = face;
 
     return f->units_per_EM > 0 ? f->units_per_EM : 0;
+#else
+    (void)face;
+    return 0;
+#endif
 }
 
 int
 xpost_font_face_is_truetype(void *face)
 {
+#ifdef HAVE_FREETYPE2
     const char *fmt = FT_Get_Font_Format((FT_Face)face);
 
     return fmt && strcmp(fmt, "TrueType") == 0;
+#else
+    (void)face;
+    return 0;
+#endif
 }
 
 int
 xpost_font_face_is_type1(void *face)
 {
+#ifdef HAVE_FREETYPE2
     const char *fmt = FT_Get_Font_Format((FT_Face)face);
 
     return fmt && strcmp(fmt, "Type 1") == 0;
+#else
+    (void)face;
+    return 0;
+#endif
 }
 
 int
 xpost_font_face_is_cff(void *face)
 {
+#ifdef HAVE_FREETYPE2
     const char *fmt = FT_Get_Font_Format((FT_Face)face);
 
     return fmt && strcmp(fmt, "CFF") == 0;
+#else
+    (void)face;
+    return 0;
+#endif
 }
 
 void
 xpost_font_face_reference(void *face)
 {
+#ifdef HAVE_FREETYPE2
     if (!face)
         return;
 
@@ -823,11 +882,15 @@ xpost_font_face_reference(void *face)
        xpost_font_face_free, and the face goes when the last one has */
     FT_Reference_Face((FT_Face)face);
     _xpost_font_faces++;
+#else
+    (void)face;
+#endif
 }
 
 void
 xpost_font_face_free(void *face)
 {
+#ifdef HAVE_FREETYPE2
     Xpost_Glyph_Entry *e, *next;
     unsigned char *bytes;
     int i;
@@ -857,11 +920,15 @@ xpost_font_face_free(void *face)
     FT_Done_Face(face);
     free(bytes);
     _xpost_font_faces--;
+#else
+    (void)face;
+#endif
 }
 
 real
 xpost_font_face_scale(void *face, real scale)
 {
+#ifdef HAVE_FREETYPE2
     FT_Face f = face;
 
     /* Request the scale directly (16.16 pixels per font unit) rather
@@ -937,12 +1004,16 @@ xpost_font_face_scale(void *face, real scale)
 
         gcache_state_set(face, NULL, &sz);
     }
+#else
+    (void)face;
+#endif
     return scale;
 }
 
 void
 xpost_font_face_transform(void *face, float *mat)
 {
+#ifdef HAVE_FREETYPE2
     FT_Matrix matrix;
     matrix.xx = (FT_Fixed)(mat[0] * 0x10000L);
     matrix.xy = (FT_Fixed)(mat[1] * 0x10000L);
@@ -956,16 +1027,27 @@ xpost_font_face_transform(void *face, float *mat)
         m[2] = (long)matrix.yx; m[3] = (long)matrix.yy;
         gcache_state_set(face, m, NULL);
     }
+#else
+    (void)face;
+    (void)mat;
+#endif
 }
 
 unsigned int
 xpost_font_face_glyph_index_get(void *face, char c)
 {
+#ifdef HAVE_FREETYPE2
     /* the character code is a byte value: keep 128-255 out of the
        sign extension */
     return FT_Get_Char_Index(face, (unsigned char)c);
+#else
+    (void)face;
+    (void)c;
+    return 0;
+#endif
 }
 
+#ifdef HAVE_FREETYPE2
 /* Adobe glyph name -> Unicode for the names the standard encodings hold
    (PLRM Appendix E.6 and E.7). Over U+0020..U+007E and U+00A0..U+00FF
    the ISOLatin1Encoding position is the code point, and the rest are
@@ -1242,40 +1324,63 @@ _xpost_glyph_name_to_unicode(const char *name)
             return _xpost_glyph_unicode[i].cp;
     return -1;
 }
+#endif /* HAVE_FREETYPE2 */
 
 unsigned int
 xpost_font_face_glyph_name_count(void *face)
 {
+#ifdef HAVE_FREETYPE2
     if (!FT_HAS_GLYPH_NAMES((FT_Face)face))
         return 0;
     return (unsigned int)((FT_Face)face)->num_glyphs;
+#else
+    (void)face;
+    return 0;
+#endif
 }
 
 int
 xpost_font_face_glyph_name_get(void *face, unsigned int gid, char *buf, int len)
 {
+#ifdef HAVE_FREETYPE2
     if (!FT_HAS_GLYPH_NAMES((FT_Face)face))
         return 0;
     if (FT_Get_Glyph_Name((FT_Face)face, gid, buf, (FT_UInt)len) != 0)
         return 0;
     return buf[0] != '\0';
+#else
+    (void)face;
+    (void)gid;
+    (void)buf;
+    (void)len;
+    return 0;
+#endif
 }
 
 int
 xpost_font_face_std_name_at(void *face, unsigned int i,
                             const char **name, unsigned int *gid)
 {
+#ifdef HAVE_FREETYPE2
     if (i >= sizeof _xpost_glyph_unicode / sizeof _xpost_glyph_unicode[0])
         return 0;
     *name = _xpost_glyph_unicode[i].name;
     *gid = FT_Get_Char_Index((FT_Face)face,
                              (FT_ULong)_xpost_glyph_unicode[i].cp);
     return 1;
+#else
+    (void)face;
+    (void)i;
+    (void)name;
+    (void)gid;
+    return 0;
+#endif
 }
 
 unsigned int
 xpost_font_face_glyph_name_index_get(void *face, const char *name)
 {
+#ifdef HAVE_FREETYPE2
     unsigned int gi;
     long uni;
 
@@ -1291,8 +1396,14 @@ xpost_font_face_glyph_name_index_get(void *face, const char *name)
     if (uni >= 0)
         return FT_Get_Char_Index((FT_Face)face, (FT_ULong)uni);
     return 0;
+#else
+    (void)face;
+    (void)name;
+    return 0;
+#endif
 }
 
+#ifdef HAVE_FREETYPE2
 /* FT_Outline_Decompose adapter: track the current point, divide the
    26.6 fixed-point coordinates out to pixels, and raise quadratic
    segments to the equivalent cubics so the sink sees one curve form.
@@ -1365,8 +1476,10 @@ _outline_cubicto(const FT_Vector *control1, const FT_Vector *control2, const FT_
                             control2->x / 64.0, control2->y / 64.0,
                             w->x, w->y);
 }
+#endif
 
 
+#ifdef HAVE_FREETYPE2
 /* The hinter rounds slot->advance to whole pixels and the rounding
    accumulates as horizontal drift across a string. Derive the pen
    advance from the unhinted linear width instead, applied through the
@@ -1394,10 +1507,12 @@ _glyph_linear_advance(FT_Face face, long *advance_x, long *advance_y)
     *advance_x = FT_MulFix(m.xx, lin);
     *advance_y = FT_MulFix(m.yx, lin);
 }
+#endif
 
 int
 xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xpost_Font_Outline_Sink *sink, long *advance_x, long *advance_y)
 {
+#ifdef HAVE_FREETYPE2
     FT_GlyphSlot slot;
     FT_Outline *outline;
     FT_Error err;
@@ -1438,6 +1553,14 @@ xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xpost_
     if (w.open && sink->closepath(sink->user))
         return 0;
     return 1;
+#else
+    (void)face;
+    (void)glyph_index;
+    (void)sink;
+    (void)advance_x;
+    (void)advance_y;
+    return 0;
+#endif
 }
 
 /* The ink extent of a glyph's outline in 26.6 glyph space (y-up around
@@ -1450,6 +1573,7 @@ xpost_font_face_glyph_extents(void *face, unsigned int glyph_index,
                               long *xmin, long *ymin, long *xmax, long *ymax,
                               long *advance_x, long *advance_y)
 {
+#ifdef HAVE_FREETYPE2
     FT_Error err;
     FT_GlyphSlot slot;
     FT_BBox box;
@@ -1470,8 +1594,20 @@ xpost_font_face_glyph_extents(void *face, unsigned int glyph_index,
     *ymax = box.yMax;
     _glyph_linear_advance((FT_Face)face, advance_x, advance_y);
     return 1;
+#else
+    (void)face;
+    (void)glyph_index;
+    (void)xmin;
+    (void)ymin;
+    (void)xmax;
+    (void)ymax;
+    (void)advance_x;
+    (void)advance_y;
+    return 0;
+#endif
 }
 
+#ifdef HAVE_FREETYPE2
 /* a fixed-size face's strike raster, resampled by the residual ratio
    the face transform carries (FreeType applies that transform to
    scalable formats only); serves the current glyph when the cache
@@ -1566,10 +1702,12 @@ _strike_resample(FT_Face f, const long m[4], long ax, long ay)
     _strike_scaled.valid = 1;
     return 1;
 }
+#endif
 
 int
 xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 {
+#ifdef HAVE_FREETYPE2
     FT_Error err;
     long m[4], size;
     int keyed;
@@ -1635,11 +1773,17 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
         XPOST_LOG_ERR("Can not load glyph (error : %d)", err);
         return 0;
     }
+#else
+    (void)face;
+    (void)glyph_index;
+    return 0;
+#endif
 }
 
 void
 xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, int *width, int *pitch, char *pixel_mode, int *left, int *top, long *advance_x, long *advance_y)
 {
+#ifdef HAVE_FREETYPE2
     if (gcache_serving)
     {
         *buffer = gcache_serving->bits;
@@ -1673,6 +1817,16 @@ xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, 
     *left = ((FT_Face)face)->glyph->bitmap_left;
     *top = ((FT_Face)face)->glyph->bitmap_top;
     _glyph_linear_advance((FT_Face)face, advance_x, advance_y);
+#else
+    (void)face;
+    (void)buffer;
+    (void)rows;
+    (void)width;
+    (void)pitch;
+    (void)pixel_mode;
+    (void)left;
+    (void)top;
+    (void)advance_x;
+    (void)advance_y;
+#endif
 }
-
-

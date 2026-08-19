@@ -2571,6 +2571,28 @@ int setlocalconfig(Xpost_Context *ctx,
     }
 #endif
 
+#ifndef HAVE_FREETYPE2
+    {
+        /* This build carries no face library: the font operators exist
+           and answer as a font system with no faces would -- findfont
+           and the font-program loaders refuse with invalidfont -- while
+           procedural (Type 3) fonts still render through their build
+           procedures. The name states which kind of build this is, so a
+           program or a test harness can ask rather than read a refusal
+           that a host with no fonts installed can also produce. Like
+           WIN32 above, it is a name in systemdict, which is global. */
+        unsigned int vmmode = ctx->vmmode;
+        int ret;
+
+        ctx->vmmode = GLOBAL;
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "NOFACES"),
+                             xpost_bool_cons(1));
+        ctx->vmmode = vmmode;
+        if (ret)
+            return ret;
+    }
+#endif
+
     return 0;
 }
 

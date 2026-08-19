@@ -233,7 +233,10 @@ PKG_CHECK_EXISTS([fontconfig],
 # freetype, which is required: the interpreter renders every glyph
 # through it, so a build without it shows no text
 PKG_CHECK_EXISTS([freetype2],
-   [xpost_requirements_lib_pc="${xpost_requirements_lib_pc} freetype2"],
+   [
+    xpost_requirements_lib_pc="${xpost_requirements_lib_pc} freetype2"
+    AC_DEFINE([HAVE_FREETYPE2], [1], [Define to 1 if Freetype is detected])
+   ],
    [AC_MSG_ERROR([freetype2 is required])])
 
 # libjpeg

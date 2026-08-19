@@ -339,6 +339,9 @@ endif
 # never finished -- it did not compile -- and nothing built it, so
 # offering it as a choice described something that did not exist.
 freetype_dep = dependency('freetype2', required: true)
+if freetype_dep.found()
+  config_h.set('HAVE_FREETYPE2', 1)
+endif
 
 # Virtual memory is one host allocation the interpreter suballocates, so a
 # read of storage it has reclaimed is, to a memory checker, an ordinary read
