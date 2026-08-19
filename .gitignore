@@ -41,6 +41,12 @@ src/bin/xpost_view
 
 # out-of-tree build, install-test and editor tooling cache directories
 /build*/
+/bcov/
+/bcovlarge/
+/bnoface/
+/basan/
+/doc/html/
+/doc/latex/
 /.cache/
 /at-inst/
 /at-build/
