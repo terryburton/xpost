@@ -232,14 +232,24 @@ PKG_CHECK_EXISTS([fontconfig],
 
 # freetype: the face library. Without it the build is a font system
 # with no faces -- findfont answers invalidfont, procedural (Type 3)
-# fonts still render through their build procedures.
-PKG_CHECK_EXISTS([freetype2],
+# fonts still render through their build procedures. The faceless build
+# is asked for with --without-freetype, never produced by a missing
+# library: the default requires freetype, matching the meson feature.
+AC_ARG_WITH([freetype],
+   [AS_HELP_STRING([--without-freetype],
+       [build without the face library; face-backed fonts answer invalidfont])],
+   [], [with_freetype="yes"])
+AS_IF([test "x${with_freetype}" != "xno"],
    [
-    have_freetype="yes"
-    xpost_requirements_lib_pc="${xpost_requirements_lib_pc} freetype2"
-    AC_DEFINE([HAVE_FREETYPE2], [1], [Define to 1 if Freetype is detected])
+    PKG_CHECK_EXISTS([freetype2],
+       [
+        have_freetype="yes"
+        xpost_requirements_lib_pc="${xpost_requirements_lib_pc} freetype2"
+        AC_DEFINE([HAVE_FREETYPE2], [1], [Define to 1 if Freetype is detected])
+       ],
+       [AC_MSG_ERROR([freetype2 not found; pass --without-freetype to build the faceless configuration deliberately])])
    ],
-   [have_freetype="no"])
+   [have_freetype="no (asked)"])
 
 # libjpeg
 AC_CHECK_LIB([jpeg], [jpeg_CreateDecompress],
