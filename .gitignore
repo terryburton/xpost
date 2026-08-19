@@ -38,24 +38,6 @@ src/bin/xpost
 src/bin/xpost_client
 src/bin/xpost_dsc
 src/bin/xpost_view
-visual_studio/vc14/.vs/
-visual_studio/vc14/Debug/
-visual_studio/vc14/Release/
-visual_studio/vc14/libxpost/Debug/
-visual_studio/vc14/libxpost/Release/
-visual_studio/vc14/libxpost/x64/
-visual_studio/vc14/x64/
-visual_studio/vc14/xpost.VC.opendb
-visual_studio/vc14/xpost.sdf
-visual_studio/vc14/xpost/Debug/
-visual_studio/vc14/xpost/Release/
-visual_studio/vc14/xpost/x64/
-visual_studio/vc14/xpost_client/Debug/
-visual_studio/vc14/xpost_client/Release/
-visual_studio/vc14/xpost_client/x64/
-visual_studio/vc14/xpost_suite/Debug/
-visual_studio/vc14/xpost_suite/Release/
-visual_studio/vc14/xpost_suite/x64/
 
 # out-of-tree build, install-test and editor tooling cache directories
 /build*/
@@ -67,5 +49,11 @@ visual_studio/vc14/xpost_suite/x64/
 /xpost-inst-test/
 semantics.diskf
 semantics.scratch
+*.scratch
+scanner_eof_scratch
+sparse_rows_out.pgm
+type42-charstrings/
+zz.out
+zzfilter-*.tmp
 graphics.scratch
 xpost-*.tar.*

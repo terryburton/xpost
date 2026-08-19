@@ -26,13 +26,5 @@
 *.pdf binary
 *.sha256 text eol=lf
 
-# The Visual Studio project files are stored as Visual Studio writes
-# them, CRLF and a byte-order mark, and are left exactly as they are:
-# nothing here reads them, and normalising them would rewrite every one.
-*.sln -text
-*.vcxproj -text
-*.vcxproj.filters -text
-visual_studio/config.h -text
-
 # Written by a drawing program and stored as it wrote it.
 doc/stack.eps -text
