@@ -1191,14 +1191,44 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
     }
 
     {
-        /* the name-lookup cache holds objects outside the root set;
-           entities recycled by this collection must not be served from
-           it afterwards */
+        /* The name-lookup cache holds objects outside the root set, so
+           an entry whose value this collection may recycle must not be
+           served from it afterwards. A collection of both banks may
+           recycle anything, and drops the whole cache by advancing the
+           generation. A collection of one bank cannot touch a value in
+           the other -- for a local collection that is the operators and
+           procedures of the frozen library, which are most of what a
+           run resolves -- so only the entries whose values live in the
+           collected bank are taken, each stamped with a generation that
+           has already passed. */
         for (i = 0; i < MAXCONTEXT && cid[i]; i++)
         {
             Xpost_Context *cctx = mem->interpreter_cid_get_context(cid[i]);
-            if (cctx)
+            unsigned int k;
+
+            if (!cctx)
+                continue;
+            if (markall)
+            {
                 ++cctx->namebind_gen;
+                continue;
+            }
+            for (k = 0; k < cctx->namecache_size; k++)
+            {
+                Xpost_Object v;
+                Xpost_Object_Type t;
+
+                if (cctx->namecache_gen[k] != cctx->namebind_gen)
+                    continue;
+                v = cctx->namecache_val[k];
+                t = xpost_object_get_type(v);
+                if (t != arraytype && t != dicttype && t != stringtype
+                 && t != filetype)
+                    continue;
+                if (xpost_context_select_memory(cctx, v) != mem)
+                    continue;
+                cctx->namecache_gen[k] = cctx->namebind_gen - 1;
+            }
         }
         _xpost_garbage_unmark(mem);
         if (markall)
