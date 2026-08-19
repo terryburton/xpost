@@ -48,12 +48,31 @@ setglobal
 % it from the class dictionary before specialising the copy).
 %
 % An instance is a copy of its class with the state the instance
-% accumulates: the dimensions it adopted, and the output file name in
-% force when it was made. The file name matters to any class whose Emit
-% writes a file, and a class carrying a copy without it produced a
-% device that wrote wherever Emit defaulted to whatever the program had
-% asked for -- which is why this is one procedure rather than a shape
-% each class repeats.
+% accumulates: the dimensions it adopted, the output file name in
+% force when it was made, and the device features of the page-device
+% request it is being made for. The file name matters to any class
+% whose Emit writes a file, and a class carrying a copy without it
+% produced a device that wrote wherever Emit defaulted to whatever the
+% program had asked for -- which is why this is one procedure rather
+% than a shape each class repeats.
+%
+% The features arrive through /.devrequest in graphicsdict, stated
+% there by whichever route is making a device -- the page-device
+% request around the maker it runs (data/init.ps), the recording class
+% around the painter it builds (data/recorddev.ps) -- and TAKEN here,
+% not merely read, so the next device made does not inherit a request
+% that was not asked of it. They are written after the class's own
+% entries, so a request's key overrides the default the class carries;
+% a driver may therefore read a feature as its instance is created and
+% see what the request said. Two kinds of name are skipped: /Private,
+% the handle a device's own state is reached through, issued to the
+% instance holding that state; and any name the class holds a method
+% under -- the machinery reads the instance's methods as its block of
+% state is issued (xpost_handle_cons, src/lib/xpost_handle.c), and the
+% release recorded there is the class's to name, never the request's.
+% What the request asked under a method's name still reaches the
+% finished device, written there after it is built exactly as every
+% feature always was.
 %
 % The dimensions are written with the copy current, and it is opened
 % through the bracket that takes it off again however the body ends,
@@ -73,6 +92,25 @@ currentglobal true setglobal
         { /OutputFileName //.xpostsys /.hostvalue get exec }
     ifelse
     dup null eq { pop }{ 1 index exch /OutputFileName exch put } ifelse
+    % the request's features, taken, kept on the instance under
+    % /.devrequest -- the recording class reads them back there for the
+    % painter it builds -- and written over the class's entries
+    graphicsdict /.devrequest 2 copy known {
+        get                                 % copy req
+        graphicsdict /.devrequest undef
+        dup 2 index exch /.devrequest exch put
+        { % copy key value
+            1 index /Private eq
+            % a name the class holds something executable under is a
+            % method, and a method is not the request's to write here
+            3 index 3 index 2 copy known
+                { get xcheck }{ pop pop false } ifelse
+            or
+                { pop pop }
+                { 2 index 3 1 roll put }
+            ifelse
+        } forall                            % copy
+    }{ pop pop } ifelse
 } bind put
 setglobal
 
@@ -824,13 +862,17 @@ currentglobal true setglobal
 % request that named nothing, silently and a page later.
 %
 % TextAlphaBits, the bits of a glyph's edge coverage a device is sent
-% (data/image.ps, src/lib/xpost_op_font.c), is the one such feature. It
+% (data/image.ps, src/lib/xpost_op_font.c), is one such feature. It
 % is refused for its type and not for its size: a number below one asks
 % for no coverage at all and a number above eight for more than a
 % rasterised glyph carries, and each of those is a number the machinery
-% meets with what there is.
+% meets with what there is. The codec knobs the compiled writers read
+% as numbers off their device dictionary -- png_compression_level and
+% png_interlaced (src/lib/xpost_dev_png.c), jpeg_quality
+% (src/lib/xpost_dev_jpeg.c) -- are the others; png_filter is a word,
+% and a wrong one is refused by the driver with the roster.
 .xpostsys /.checkpagefeatures {
-    [ /TextAlphaBits ] {
+    [ /TextAlphaBits /png_compression_level /png_interlaced /jpeg_quality ] {
         2 copy known {
             2 copy get type /integertype ne
                 { /setpagedevice cvx /typecheck signalerror } if

@@ -105,15 +105,18 @@
 # ---------------------------------------------------------------------
 # The tuning options
 #
-# A compiled driver may read a knob out of userdict when it builds or
-# opens its instance. Such a knob is not a key on a class, so the
-# enumeration below cannot see it; it is a word in the run's vocabulary,
-# and a word added to one member of the family forces the question for
-# the rest exactly as a class entry does. The population is derived from
-# the driver sources by the read itself -- xpost_dict_get over userdict
-# through a constructed name -- and held to these lines in both
-# directions, with every device a driver body makes carrying every
-# option that body reads.
+# A compiled driver may read a knob off its device dictionary when it
+# builds or opens its instance. The knob arrives as a key of a
+# setpagedevice request, or as a default an embedder recorded on the
+# class, so on a plain run no class carries it and the enumeration
+# below cannot see it; it is a word in the request's vocabulary, and a
+# word added to one member of the family forces the question for the
+# rest exactly as a class entry does. The population is derived from
+# the driver sources by the read itself -- xpost_dict_get over the
+# device dictionary through a constructed name -- less the keys the
+# class comparison above already holds, and held to these lines in
+# both directions, with every device a driver body makes carrying
+# every option that body reads.
 
 tune png_compression_level png pngalpha
     How hard the codec compresses, 0-9, read at stream open; unset is 3.
@@ -653,6 +656,12 @@ state .bandbytes record
 state .bandrows jpeg pbm pgm png pngalpha ppm tiff record
 state .bandtop jpeg pbm pgm png pngalpha ppm tiff
 state .chan bgr jpeg pbm pgm png pngalpha ppm raster tiff
+state .devrequest bbox bgr dscwrite jpeg null pbm pdfwrite pgm png pngalpha ppm raster svgwrite tiff
+    The features of the page-device request this instance was made for,
+    kept by the class-to-instance copy that wrote them onto it
+    (data/device.ps .classcopydict); the recording class reads them
+    back for the painter it builds. Absent from a device made with no
+    request -- the run's start device, and so the record read here.
 state defaultmatrix every
 state dimensions every
 state .docinfo dscwrite pdfwrite

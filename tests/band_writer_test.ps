@@ -37,6 +37,9 @@
 %   -DCHECK=n  1 to read the page back and decode what was written
 %   -DSECOND=n 1 to write a second page through the same device, which
 %              is the page a job's second showpage puts out
+%   -DINTERLACED=n  1 to add /png_interlaced 1 to the page-device
+%              request below, which is the channel a program asks a
+%              device feature by; only the png run passes it
 
 /PW where { pop }{ /PW 128 def } ifelse
 /PH where { pop }{ /PH 96 def } ifelse
@@ -50,6 +53,13 @@
 /TAG where { pop }{ /TAG 1 def } ifelse
 /CHECK where { pop }{ /CHECK 1 def } ifelse
 /SECOND where { pop }{ /SECOND 0 def } ifelse
+/INTERLACED where { pop }{ /INTERLACED 0 def } ifelse
+
+% the page-device request both routes install their device with; the
+% interlaced runs ask for their feature here, as a program would
+/request 2 dict def
+request /PageSize [W H] put
+INTERLACED 0 gt { request /png_interlaced 1 put } if
 
 /failcount 0 def
 /assert { % bool string  .  -
@@ -329,7 +339,7 @@
 
 BAND 0 gt {
     graphicsdict /.rasterband [ 0 BAND ] put
-    << /PageSize [W H] >> setpagedevice
+    request setpagedevice
     DEVICE /.bandpage 4 dict put
     BAND name bandpage
     % ... and a second page through the same device, which is what a
@@ -360,7 +370,7 @@ pixels of the page written whole) assert
         } if
     } if
 }{
-    << /PageSize [W H] >> setpagedevice
+    request setpagedevice
     DEVICE /.outputfile 0 name put
     paint
     CHECK 0 gt { /total 0 H 1 sub inked def }{ /total 0 def } ifelse

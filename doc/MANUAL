@@ -165,6 +165,29 @@ instead. Nothing else can hold more than one page in a file, so for the
 rasters and for svgwrite a %d gives a file per page and a fixed name
 keeps the last page, every page having rewritten the one file.
 
+The compiled codecs take four tuning keys, asked for with
+setpagedevice like any other device feature and accumulated the same
+way -- later requests on the same device merge over earlier ones, and
+switching OutputDevice starts from the new device's defaults:
+
+  /png_compression_level  how hard the png codec compresses, 0 to 9;
+                          unset is 3 (png and pngalpha)
+  /png_interlaced         1 for an interlaced image, written in seven
+                          passes, so the page is held whole (png and
+                          pngalpha)
+  /png_filter             which row filters the png codec may choose
+                          between: (adaptive) -- unset; the library's
+                          whole menu, chosen per row -- (none-sub-up)
+                          or (none); a word outside the three is
+                          refused with that roster
+  /jpeg_quality           the jpeg codec's quality scale, 0 to 100;
+                          unset is 90
+
+An embedding program may record defaults for these on the device
+classes through xpost_dev_png_options_set() and
+xpost_dev_jpeg_options_set(); a program's own request still overrides
+them.
+
 A colon after the device name introduces a mode. On raster it is the
 byte order a lent framebuffer is in -- `raster:rgb`, `raster:argb`,
 `raster:bgr`, `raster:bgra` -- and those four are the whole of it: a

@@ -2680,6 +2680,80 @@ int xpost_dev_page_emit(Xpost_Context *ctx, Xpost_Object devdic,
     return 0;
 }
 
+/* The default an embedder asks of a compiled writer, outside any run.
+
+   A knob of this kind is a key on the device dictionary: a page-device
+   request carries it there, and a driver that finds none takes the
+   default its class carries. An embedder speaks after the context is
+   made and before the driver's class exists -- the class is built on
+   first use -- so what it asked is recorded among the host's settings,
+   the one dictionary that holds what the invocation decided, and the
+   class takes it up as it is installed
+   (xpost_dev_class_option_default). A class already installed when the
+   embedder speaks is written as well, so the call means the same thing
+   whenever it is made. A program's own request still overrides either
+   way: the request's keys are written over the class's entries as an
+   instance is copied from it (data/device.ps). */
+int xpost_dev_option_default(Xpost_Context *ctx,
+                             const char *key,
+                             int value,
+                             const char *classname,
+                             const char *altclassname)
+{
+    Xpost_Object h;
+    Xpost_Object v = xpost_int_cons(value);
+    const char *names[2];
+    int i;
+    int ret;
+
+    if (!ctx)
+        return undefined;
+    if (xpost_object_get_type(ctx->globalprivatedict) != dicttype)
+        return undefined;
+    h = xpost_dict_get(ctx, ctx->globalprivatedict,
+                       xpost_name_cons(ctx, ".hostdict"));
+    if (xpost_object_get_type(h) != dicttype)
+        return undefined;
+    ret = xpost_dict_put(ctx, h, xpost_name_cons(ctx, key), v);
+    if (ret)
+        return ret;
+
+    names[0] = classname;
+    names[1] = altclassname;
+    for (i = 0; i < 2; i++)
+    {
+        Xpost_Object cd;
+
+        if (!names[i])
+            continue;
+        if (xpost_object_get_type(ctx->privatedict) != dicttype)
+            continue;
+        cd = xpost_dict_get(ctx, ctx->privatedict,
+                            xpost_name_cons(ctx, names[i]));
+        if (xpost_object_get_type(cd) != dicttype)
+            continue;
+        ret = xpost_dict_put(ctx, cd, xpost_name_cons(ctx, key), v);
+        if (ret)
+            return ret;
+    }
+    return 0;
+}
+
+/* The other half of xpost_dev_option_default: as a driver's class is
+   installed, take up the default the embedder recorded, so that every
+   instance copied from the class carries it. A setting nobody made, or
+   one that is not a number, leaves the class saying what it said. */
+int xpost_dev_class_option_default(Xpost_Context *ctx,
+                                   Xpost_Object classdic,
+                                   const char *key)
+{
+    Xpost_Object v = xpost_context_host_setting(ctx, key);
+
+    if (xpost_object_get_type(v) != integertype)
+        return 0;
+    return xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, key), v);
+}
+
 int xpost_dev_create_begin(Xpost_Context *ctx,
                            Xpost_Object width,
                            Xpost_Object height,

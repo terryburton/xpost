@@ -618,7 +618,6 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
 {
     PrivateData *p = state;
 
-    Xpost_Object ud;
     Xpost_Object quality_o;
     size_t bytes;
     int quality;
@@ -658,8 +657,7 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
         return VMerror;
     }
 
-    ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    quality_o = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "jpeg_quality"));
+    quality_o = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "jpeg_quality"));
 
     if (xpost_object_get_type(quality_o) == invalidtype)
         quality = 90;
@@ -1000,6 +998,15 @@ int loadjpegdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* the default the embedder asked of this driver before its class
+       was built (xpost_dev_jpeg_options_set), taken up so that every
+       instance copied from this class carries it; a page-device
+       request naming the same key still overrides, at the copy the
+       instance is made by */
+    ret = xpost_dev_class_option_default(ctx, classdic, "jpeg_quality");
+    if (ret)
+        return ret;
+
     op = xpost_operator_cons(ctx, "jpegCreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
@@ -1076,9 +1083,6 @@ int xpost_oper_init_jpeg_device_ops(Xpost_Context *ctx,
 XPAPI void
 xpost_dev_jpeg_options_set(Xpost_Context *ctx, int quality)
 {
-    char buf[32];
-    char *def[1];
-
     if ((quality < 0) || (quality > 100))
     {
         XPOST_LOG_ERR("wrong quality value for the JPEG device (%d)",
@@ -1086,9 +1090,13 @@ xpost_dev_jpeg_options_set(Xpost_Context *ctx, int quality)
         return;
     }
 
-    snprintf(buf, sizeof(buf), "jpeg_quality=%d", quality);
-    def[0] = buf;
-    xpost_add_definitions(ctx, 1, def);
+    /* a default for the class this driver makes: recorded for the
+       class to take up as it is installed, and written onto it where
+       it already is (xpost_dev_option_default); a program's own
+       page-device request still overrides it */
+    if (xpost_dev_option_default(ctx, "jpeg_quality", quality,
+                                 ".xpost_JPEGDEVICE", NULL))
+        XPOST_LOG_ERR("the JPEG device option could not be recorded");
 }
 
 #else /* ! HAVE_LIBJPEG */

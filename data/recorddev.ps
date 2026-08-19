@@ -342,10 +342,12 @@ end } bind put
 %
 % They are carried before the completion runs, so that a key the
 % completion reads -- the process colour model is one -- is there when it
-% looks. A key a device reads as it is created is one no route delivers:
-% a page-device request builds its device before it stores the request's
-% keys on it, so a device the program selected directly does not see one
-% either.
+% looks. A key a device reads as it is created arrives separately, at
+% the copy the instance is made by: every route that makes a device
+% leaves the request's keys for that copy to take (.classcopydict,
+% data/device.ps), .playmake above among them. What this carries is for
+% the instance that is past its copy -- a raster being kept, and the
+% completion about to read the device it kept.
 %
 % /Private is the one name skipped. It is the handle a device's own state
 % is reached through, issued to the instance holding that state, and a
@@ -686,6 +688,22 @@ setglobal
             % this raster holds are the record's answer and not whatever
             % the caller happened to leave behind.
             graphicsdict /.rasterband [ imgtop rasterrows ] put
+            % The features of the page-device request this record was
+            % made for, left for the class-to-instance copy the painter
+            % is made through, which takes them and writes them onto
+            % the instance as it is born (.classcopydict) -- so a key
+            % the painter's driver reads as the instance is created
+            % sees what the request said. The record's own copy kept
+            % them on the record under the same name, which is the only
+            % reading of them that is there both times this runs: at
+            % the record's creation, before the request is stored for
+            % currentpagedevice, and at a replay long after.
+            % .playparams below still carries the request's keys onto
+            % the finished instance, kept rasters taking that route
+            % alone.
+            graphicsdict /.devrequest
+                rec /.devrequest 2 copy known { get }{ pop pop 0 dict } ifelse
+                put
             /page pw ph cls dup /Create get exec def
             graphicsdict /.rasterband undef
             % named as soon as it exists, so that a device this record

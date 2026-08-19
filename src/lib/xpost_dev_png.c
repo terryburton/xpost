@@ -178,7 +178,6 @@ int _create_cont(Xpost_Context *ctx,
 {
     PrivateData private;
     Xpost_Object privatestr;
-    Xpost_Object ud;
     Xpost_Object interlaced_o;
     int width, height;
     int ret;
@@ -224,8 +223,7 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
-    ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    interlaced_o = xpost_dict_get(ctx, ud,
+    interlaced_o = xpost_dict_get(ctx, devdic,
                                   xpost_name_cons(ctx, "png_interlaced"));
 
     if (xpost_object_get_type(interlaced_o) == invalidtype)
@@ -259,7 +257,7 @@ int _create_cont(Xpost_Context *ctx,
        the dearest filters and reporting nothing. */
     private.filters = 0;
     {
-        Xpost_Object filter_o = xpost_dict_get(ctx, ud,
+        Xpost_Object filter_o = xpost_dict_get(ctx, devdic,
                                                xpost_name_cons(ctx, "png_filter"));
 
         if (xpost_object_get_type(filter_o) != invalidtype)
@@ -658,7 +656,6 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
 {
     PrivateData *p = state;
 
-    Xpost_Object ud;
     Xpost_Object compression_level_o;
     png_color_8 sig_bit;
     int compression_level;
@@ -695,8 +692,7 @@ static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
             ((Xpost_Png_Pixel *)p->ground)[i] = px;
     }
 
-    ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    compression_level_o = xpost_dict_get(ctx, ud,
+    compression_level_o = xpost_dict_get(ctx, devdic,
                                          xpost_name_cons(ctx, "png_compression_level"));
     if (xpost_object_get_type(compression_level_o) == invalidtype)
         compression_level = 3;
@@ -1181,6 +1177,18 @@ int _loaddevicecont_common(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* the defaults the embedder asked of this driver before its classes
+       were built (xpost_dev_png_options_set), taken up so that every
+       instance copied from this class carries them; a page-device
+       request naming the same key still overrides, at the copy the
+       instance is made by */
+    ret = xpost_dev_class_option_default(ctx, classdic, "png_compression_level");
+    if (ret)
+        return ret;
+    ret = xpost_dev_class_option_default(ctx, classdic, "png_interlaced");
+    if (ret)
+        return ret;
+
     op = xpost_operator_cons(ctx, "pngCreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
@@ -1290,10 +1298,6 @@ xpost_dev_png_options_set(Xpost_Context *ctx,
                           int compression_level,
                           int interlaced)
 {
-    char buf1[32];
-    char buf2[32];
-    char *defs[2];
-
     if ((compression_level < 0) || (compression_level > 9))
     {
         XPOST_LOG_ERR("wrong compression level for the PNG device (%d)",
@@ -1301,13 +1305,19 @@ xpost_dev_png_options_set(Xpost_Context *ctx,
         return;
     }
 
-    snprintf(buf1, sizeof(buf1),
-             "png_compression_level=%d", compression_level);
-    snprintf(buf2, sizeof(buf2),
-             "png_interlaced=%d", interlaced ? 1 : 0);
-    defs[0] = buf1;
-    defs[1] = buf2;
-    xpost_add_definitions(ctx, 2, defs);
+    /* defaults for the two classes this driver body makes: recorded
+       for the classes to take up as they are installed, and written
+       onto them where they already are (xpost_dev_option_default);
+       a program's own page-device request still overrides them */
+    if (xpost_dev_option_default(ctx, "png_compression_level",
+                                 compression_level,
+                                 ".xpost_PNGDEVICE",
+                                 ".xpost_PNGALPHADEVICE")
+     || xpost_dev_option_default(ctx, "png_interlaced",
+                                 interlaced ? 1 : 0,
+                                 ".xpost_PNGDEVICE",
+                                 ".xpost_PNGALPHADEVICE"))
+        XPOST_LOG_ERR("the PNG device options could not be recorded");
 }
 
 #else /* ! HAVE_LIBPNG */

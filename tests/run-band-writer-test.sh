@@ -251,9 +251,9 @@ done
 if [ -n "$(says png || true)" ]; then
     for tag in 1 3; do
         rm -f "$work"/*.out "$work"/*.out2
-        if run png -Dpng_interlaced=1 -DTAG=$tag -DBAND=0; then
+        if run png -DINTERLACED=1 -DTAG=$tag -DBAND=0; then
             for band in 1 8; do
-                run png -Dpng_interlaced=1 -DTAG=$tag -DBAND=$band || {
+                run png -DINTERLACED=1 -DTAG=$tag -DBAND=$band || {
                     note "png could not write interlaced page $tag in bands"
                     continue
                 }

@@ -194,6 +194,41 @@ int xpost_dev_create_begin(Xpost_Context *ctx,
                            Xpost_Object classdic,
                            unsigned int cont_opcode);
 
+/**
+ * @brief Record a default an embedder asks of a compiled writer.
+ *
+ * The value is recorded among the host's settings under @p key, and
+ * written onto the named device classes where they are already
+ * installed; a class installed later takes the setting up through
+ * xpost_dev_class_option_default(). A page-device request naming the
+ * same key still overrides it, at the copy an instance is made by.
+ *
+ * @param[in] ctx The context.
+ * @param[in] key The key the driver reads off its device dictionary.
+ * @param[in] value The value.
+ * @param[in] classname The class's name in the private dictionary.
+ * @param[in] altclassname A second class the same driver body makes,
+ *            or NULL.
+ * @return 0, or the error the recording was refused with.
+ */
+int xpost_dev_option_default(Xpost_Context *ctx,
+                             const char *key,
+                             int value,
+                             const char *classname,
+                             const char *altclassname);
+
+/**
+ * @brief Take up an embedder's recorded default as a class is installed.
+ *
+ * @param[in] ctx The context.
+ * @param[in] classdic The device class being installed.
+ * @param[in] key The key to take up.
+ * @return 0, or the error the class refused the entry with.
+ */
+int xpost_dev_class_option_default(Xpost_Context *ctx,
+                                   Xpost_Object classdic,
+                                   const char *key);
+
 int xpost_dev_blit_row(Xpost_Context *ctx, Xpost_Object dict);
 
 /**

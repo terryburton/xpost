@@ -1897,7 +1897,12 @@ currentglobal true setglobal
     %                   within, which a device may hold less than the
     %                   page for (PLRM 6.2)
     % Every other key is stored on the device dictionary, which is how
-    % device features (TextAlphaBits, WhiteIsOpaque, ...) are reached.
+    % device features (TextAlphaBits, WhiteIsOpaque, the codec knobs
+    % png_compression_level, png_interlaced, png_filter, jpeg_quality,
+    % ...) are reached. They arrive there twice: written onto the
+    % instance as it is copied from its class, so a driver reading one
+    % as the device is created sees it, and again on the finished
+    % device.
     % Same-device requests merge over the previous ones, so a partial
     % dictionary adjusts the page; switching OutputDevice starts from
     % the new device's defaults. The outgoing device is destroyed, the
@@ -2047,6 +2052,28 @@ currentglobal true setglobal
             //.xpostsys /.imagingrows get exec
             dup null eq { pop }{ graphicsdict /.rasterband 3 -1 roll put } ifelse
         }{ pop pop } ifelse
+        % The device features of this request: every accumulated key the
+        % page machinery does not read itself. Split out once, because
+        % they go to the device twice -- left here for the
+        % class-to-instance copy the maker below runs, which takes them
+        % and writes them onto the instance as it is born
+        % (.classcopydict, data/device.ps), so that a key a device reads
+        % as it is created is on its dictionary by then; and put onto
+        % the finished device again below, where the completion reads
+        % them. A maker that stops before the copy leaves the entry
+        % standing, which is the .rasterband residue again: every route
+        % that makes a device states this entry before its Create, so a
+        % leaving is overwritten and never inherited.
+        /feat merged length dict def
+        merged { % key value
+            1 index /OutputDevice eq
+            2 index /PageSize eq or
+            2 index /HWResolution eq or
+            2 index /OutputFile eq or
+            2 index /PageOffset eq or
+            { pop pop }{ feat 3 1 roll put } ifelse
+        } forall
+        graphicsdict /.devrequest feat put
         % the new device builds under its own local name -- DEVICE
         % everywhere means the accessor reading the graphics state, and
         % the machinery's frozen references to it must not see the
@@ -2096,17 +2123,13 @@ currentglobal true setglobal
             } if
         } if
 
-        % remaining keys are device features, recorded before the device
-        % is finished: the process colour model arrives among them, and
-        % which marking methods fit the device depends on it
-        merged { % key value
-            1 index /OutputDevice eq
-            2 index /PageSize eq or
-            2 index /HWResolution eq or
-            2 index /OutputFile eq or
-            2 index /PageOffset eq or
-            { pop pop }{ newdev 3 1 roll put } ifelse
-        } forall
+        % the device features again, on the finished device before the
+        % completion reads them: the process colour model arrives among
+        % them, and which marking methods fit the device depends on it.
+        % The copy above already wrote them onto the instance the maker
+        % built; this writes the same values, and is what puts them on a
+        % device whose class carries a copy procedure of its own.
+        feat { newdev 3 1 roll put } forall
         merged /OutputDevice dev put
         userdict /.pagedevice merged put
 

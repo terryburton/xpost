@@ -416,21 +416,25 @@ done < "$work/keys.trait"
 
 # ---- the tuning options, which are not on a class either
 #
-# A compiled driver may read a knob out of userdict when it builds or
-# opens its instance -- how hard its codec compresses, whether its image
-# interlaces, which row filters its codec may choose between. Such a
-# knob is not a key on a class, so the comparison above cannot see it;
-# what it is is a word in the run's vocabulary, and a word added to one
-# member of the family must force the question for the rest exactly as
-# a class entry does.
+# A compiled driver may read a knob off its device dictionary when it
+# builds or opens its instance -- how hard its codec compresses, whether
+# its image interlaces, which row filters its codec may choose between.
+# The knob arrives as a key of a setpagedevice request or as a default
+# an embedder recorded on the class, so on the plain installs above no
+# class carries it and the comparison cannot see it; what it is is a
+# word in the request's vocabulary, and a word added to one member of
+# the family must force the question for the rest exactly as a class
+# entry does.
 #
 # The population is derived by the mechanism, not the spelling: a read
-# of userdict through xpost_dict_get(ctx, ud, xpost_name_cons(ctx,
-# "...")) in a device's driver is a tuning option whatever it is called.
-# A device is charged with every option its driver body reads, which is
-# what makes two devices out of one body carry the same set. Comments
-# are stripped first, string contents kept, so a call written about is
-# not a call.
+# of the device dictionary through xpost_dict_get(ctx, devdic,
+# xpost_name_cons(ctx, "...")) in a device's driver is a tuning option
+# whatever it is called -- less the keys the devices were seen stating
+# above, since a read of an entry the class itself carries is the class
+# comparison's business and already held there. A device is charged
+# with every option its driver body reads, which is what makes two
+# devices out of one body carry the same set. Comments are stripped
+# first, string contents kept, so a call written about is not a call.
 : > "$work/tune.derived"
 while read -r d; do
     f=$(driver_of "$d")
@@ -452,8 +456,9 @@ while read -r d; do
             }
             printf "%s ", out
         }' "$f" \
-    | grep -o 'xpost_dict_get(ctx, *ud, *xpost_name_cons(ctx, *"[A-Za-z0-9_]*")' \
+    | grep -o 'xpost_dict_get(ctx, *devdic, *xpost_name_cons(ctx, *"[A-Za-z0-9_]*")' \
     | sed 's/.*"\([A-Za-z0-9_]*\)")$/\1/' \
+    | grep -vxF -f "$work/keys.seen" \
     | while read -r o; do echo "$o $d" >> "$work/tune.derived"; done
 done < "$work/made"
 sort -u "$work/tune.derived" -o "$work/tune.derived"
@@ -461,10 +466,10 @@ sort -u "$work/tune.derived" -o "$work/tune.derived"
 awk '{ print $1 }' "$work/tune.derived" | sort -u > "$work/tune.keys"
 guard_held=0
 guard_hold "$work/tune.keys" "$work/keys.tune" \
-    "read out of userdict by a device driver and not classified by
-      tests/device-facts. A knob one member of the family grew is a
-      question the rest have been asked; say what it tunes and which
-      devices read it." \
+    "read off the device dictionary by a device driver and not
+      classified by tests/device-facts. A knob one member of the family
+      grew is a question the rest have been asked; say what it tunes
+      and which devices read it." \
     "classified as a tuning option and read by no driver. The knob is
       gone or renamed; the line excusing it is cover for the next one."
 [ "$guard_held" -eq 0 ] || fail=1

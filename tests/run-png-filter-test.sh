@@ -25,6 +25,11 @@
 #     nothing, which is the defect class the device modes were closed
 #     against.
 #
+# The knob is a page-device key: each run below asks for its word with
+# a setpagedevice request prepended to the page, which is the channel a
+# program configures a device by, and the run saying nothing carries no
+# request at all.
+#
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
@@ -42,9 +47,15 @@ cat > "$work/page.ps" <<'PSEOF'
 showpage
 PSEOF
 
-render() {   # <outfile> [xpost args...]
-    _o=$1; shift
-    out=$("$xpost" -q -d png "$@" -o "$_o" "$work/page.ps" </dev/null 2>&1)
+render() {   # <outfile> [filter-word]
+    _o=$1
+    if [ $# -gt 1 ]; then
+        { printf '<< /png_filter (%s) >> setpagedevice\n' "$2"
+          cat "$work/page.ps"; } > "$work/drive.ps"
+    else
+        cat "$work/page.ps" > "$work/drive.ps"
+    fi
+    out=$("$xpost" -q -d png -o "$_o" "$work/drive.ps" </dev/null 2>&1)
     verdict_run "$?" "$out" "the png run" || exit 1
     [ -s "$_o" ] || { echo "FAIL: $_o was not written"; exit 1; }
     # the eight bytes every png opens with
@@ -54,9 +65,9 @@ render() {   # <outfile> [xpost args...]
 }
 
 render "$work/default.png"
-render "$work/adaptive.png" -Dpng_filter=adaptive
-render "$work/nsu.png"      -Dpng_filter=none-sub-up
-render "$work/none.png"     -Dpng_filter=none
+render "$work/adaptive.png" adaptive
+render "$work/nsu.png"      none-sub-up
+render "$work/none.png"     none
 
 # naming the default is the default
 cmp -s "$work/default.png" "$work/adaptive.png" || {
@@ -120,10 +131,18 @@ d=$(sz "$work/default.png"); u=$(sz "$work/nsu.png"); n=$(sz "$work/none.png")
     exit 1; }
 echo "sizes trade the declared way (none $n > adaptive $d, none-sub-up $u)"
 
-# a word outside the vocabulary is refused by name, with the roster
+# A word outside the vocabulary is refused by name, with the roster.
+# The refusal surfaces through the request: setpagedevice re-creates
+# the device, the driver refuses the word as the instance is made, and
+# the request errors with rangecheck -- so the run fails, the roster is
+# on its standard error, and no page is written.
 rm -f "$work/refused.png"
-out=$("$xpost" -q -d png -Dpng_filter=fastest -o "$work/refused.png" \
-      "$work/page.ps" </dev/null 2>&1)
+{ printf '<< /png_filter (fastest) >> setpagedevice\n'
+  cat "$work/page.ps"; } > "$work/refuse.ps"
+out=$("$xpost" -q -d png -o "$work/refused.png" \
+      "$work/refuse.ps" </dev/null 2>&1) && {
+    echo "FAIL: a run asking for an unknown filter word finished cleanly"
+    exit 1; }
 case $out in
     *'takes no filter "fastest"'*) ;;
     *) echo "FAIL: an unknown filter word was not refused by name; the run said:"

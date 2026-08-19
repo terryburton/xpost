@@ -300,12 +300,11 @@ XPAPI Xpost_Context *xpost_create(const char *device,
  * added to userdict after a context is created using xpost_create,
  * presumably before calling xpost_run.
  *
- * Definitions may be used by the ps program or to supply control
- * information to specific devices.
- *
- * This will present some duplication of features once the
- * setpagedevice and setuserparams operators are implemented.
- * But it still represents a useful construct for postscript code.
+ * Definitions may be used by the ps program. Control information for
+ * a device is not supplied this way: a device is configured through
+ * the keys of a setpagedevice request, or through the defaults an
+ * embedder records with xpost_dev_png_options_set() and
+ * xpost_dev_jpeg_options_set().
  */
 XPAPI int xpost_add_definitions(Xpost_Context *ctx,
                                 int cnt,
@@ -708,36 +707,35 @@ XPAPI void xpost_destroy(Xpost_Context *ctx);
 XPAPI void xpost_output_buffer_release(unsigned char **buffer);
 
 /**
- * @brief Set quality value for compression of JPEG files.
+ * @brief Set the default quality for compression of JPEG files.
  *
  * @param ctx The context to use.
  * @param quality The quality value, between 0 and 100.
  *
- * This function is a helper to set the quality value for compressing
- * a JPEG file to @p quality. It internally uses
- * xpost_add_definitions(). @p quality must be between 0 and 100. On
- * error, nothing is done.
- *
- * @see xpost_add_definitions()
+ * This function records @p quality as the default under the
+ * /jpeg_quality key of the JPEG device class, so every JPEG device
+ * made in this context compresses at that quality. A program's own
+ * page-device request naming /jpeg_quality still overrides it.
+ * @p quality must be between 0 and 100. On error, nothing is done.
  */
 XPAPI void
 xpost_dev_jpeg_options_set(Xpost_Context *ctx,
                            int quality);
 
 /**
- * @brief Set quality value for compression of PNG files.
+ * @brief Set the default compression and interlacing of PNG files.
  *
  * @param ctx The context to use.
  * @param compression_level The compression level, between 0 and 9.
  * @param interlaced Whether the PNG file is interlaced or not.
  *
- * This function is a helper to set the compression level and whether
- * the PNG file is interlaced or not with respectively
- * @p compression_level and @p interlaced. It internally uses
- * xpost_add_definitions(). @p compression_level must be between 0 and
- * 9. On error, nothing is done.
- *
- * @see xpost_add_definitions()
+ * This function records @p compression_level and @p interlaced as the
+ * defaults under the /png_compression_level and /png_interlaced keys
+ * of the two PNG device classes (plain and alpha), so every PNG
+ * device made in this context writes with them. A program's own
+ * page-device request naming either key still overrides it.
+ * @p compression_level must be between 0 and 9. On error, nothing is
+ * done.
  */
 XPAPI void
 xpost_dev_png_options_set(Xpost_Context *ctx,
