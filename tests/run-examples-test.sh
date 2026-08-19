@@ -30,6 +30,13 @@
 # test timeout. Neither kind may raise an interpreter error: a raised
 # error prints the %%[ Error: ... ]%% banner, and a program that
 # trapped one itself is a program that needed to.
+#
+# A build without a face library answers a face-backed font request
+# with invalidfont; that refusal is the build's contract, not the
+# example's failure. In such a build an example that fails with
+# invalidfont is reported and skipped -- what it draws needs a face,
+# and every build that carries one holds it to a clean run -- and any
+# other failure still fails.
 #   $1  path to the built xpost binary
 #   $2  path to the examples directory
 set -u
@@ -50,7 +57,20 @@ trap 'rm -rf "$tmp"' 0
 # within its first second on an idle machine.
 window=3
 
+# whether this build carries a face library: the faceless build seeds
+# NOFACES into systemdict, and the skip below exists only for it
+printf 'systemdict /NOFACES known { (NOFACES) = } if\n' > "$tmp/probe.ps"
+nofaces=$("$xpost" -q -d null -o /dev/null --no-sandbox "$tmp/probe.ps" </dev/null 2>&1 | grep -c NOFACES)
+
+# in a faceless build, a run that failed by the refusal contract is a
+# skip: report it and count it, judge nothing else about it
+faceless_refusal() {
+    [ "$nofaces" -gt 0 ] || return 1
+    grep -q '%%\[ Error: invalidfont' "$1"
+}
+
 fail=0
+skipped=0
 n=0
 for f in "$dir"/*.ps; do
     [ -e "$f" ] || continue
@@ -93,6 +113,11 @@ for f in "$dir"/*.ps; do
         else
             wait "$pid"
             est=$?
+            if faceless_refusal "$tmp/out-$name"; then
+                echo "SKIPPED: example $name needs a face this build does not carry"
+                skipped=$((skipped + 1))
+                continue
+            fi
             cat "$tmp/out-$name"
             echo "FAILURES: example $name declares itself unbounded but stopped"
             echo "      (status $est)"
@@ -102,11 +127,16 @@ for f in "$dir"/*.ps; do
         out=$( cd "$dir" && "$xpost" -q -d null -o /dev/null --no-sandbox \
                    "$run" </dev/null 2>&1 )
         status=$?
+        printf '%s\n' "$out" > "$tmp/out-$name"
+        if [ "$status" -ne 0 ] && faceless_refusal "$tmp/out-$name"; then
+            echo "SKIPPED: example $name needs a face this build does not carry"
+            skipped=$((skipped + 1))
+            continue
+        fi
         if ! verdict_run "$status" "$out" "example $name"; then
             printf '%s\n' "$out"
             fail=1
         fi
-        printf '%s\n' "$out" > "$tmp/out-$name"
     fi
 
     # an error the program raised, or raised and trapped its own way
@@ -128,5 +158,9 @@ if [ "$fail" -ne 0 ]; then
     echo "FAILURES: $n examples run, some did not run cleanly"
     exit 1
 fi
-echo "SUCCESS ($n examples)"
+if [ "$skipped" -ne 0 ]; then
+    echo "SUCCESS ($n examples, $skipped skipped: this build carries no face library)"
+else
+    echo "SUCCESS ($n examples)"
+fi
 exit 0
