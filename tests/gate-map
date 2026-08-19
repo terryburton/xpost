@@ -169,7 +169,7 @@ device test device-*
 device test devices
 device test dsc-parse
 device test dsc-tool
-device test view-usage
+device testif view-usage
 device test fill-span
 device test golden-render
 device test job-page
