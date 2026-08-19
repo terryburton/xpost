@@ -538,10 +538,10 @@ banding {
     % quantity is read. The class is the specialised copy the driver
     % leaves for the maker to build from, a build without the recording
     % driver leaving none.
-    /recordDEVICE where {
-        pop recordDEVICE /.bandbytes
+    .privatedict /.xpost_RECORDDEVICE 2 copy known {
+        get /.bandbytes
             rp.b 0 gt { rp.b rowbytes mul }{ 1000000000 } ifelse put
-    } if
+    }{ pop pop } ifelse
     << /PageSize [W rp.h] /OutputFile rp.file >> setpagedevice
     % the device this page goes to, named while it is the current one:
     % the Emit wrapped above reads the record through it, and by then

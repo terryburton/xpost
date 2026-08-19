@@ -91,7 +91,7 @@
 % --- the raster device's methods --------------------------------------
 
 loadrasterdevice
-/dev 4 4 newrasterdevice def
+/dev 4 4 .privatedict /newrasterdevice get exec def
 
 /putpix   dev /PutPix get def
 /getpix   dev /GetPix get def

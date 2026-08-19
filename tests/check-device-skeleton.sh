@@ -689,10 +689,21 @@ done
 #     the devices whose declaration makes it reachable.
 banded=0
 for f in $fleet xpost_dev_win32.c; do
-    # the class this device specialises, and whether that class says its
-    # page may arrive in bands
-    base=$(sed -n 's/.*xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, "\(\.xpost_[A-Za-z0-9_]*\)")).*/\1/p' \
-           "$libdir/$f" | sort -u)
+    # The classes this file installs in the private dictionary: the
+    # names it puts there, read joined because the puts wrap lines, and
+    # a ternary carries both names of a body that makes two classes.
+    tr '\n' ' ' < "$libdir/$f" \
+        | grep -oE 'xpost_dict_put[(]ctx, ctx->privatedict,[^;]*' \
+        | grep -oE '"\.xpost_[A-Za-z0-9_]*"' | tr -d '"' \
+        | LC_ALL=C sort -u > "$work/skel.installs"
+    # The class this device specialises, and whether that class says its
+    # page may arrive in bands. What the file loads less what it
+    # installs: a maker loads the finished class its own loader put
+    # there, and a file cannot specialise from a class it installs
+    # itself.
+    sed -n 's/.*xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, "\(\.xpost_[A-Za-z0-9_]*\)")).*/\1/p' \
+           "$libdir/$f" | LC_ALL=C sort -u > "$work/skel.loads"
+    base=$(LC_ALL=C comm -23 "$work/skel.loads" "$work/skel.installs")
     inherits=0
     for b in $base; do
         for c in $classes; do
@@ -704,11 +715,9 @@ for f in $fleet xpost_dev_win32.c; do
     done
     [ "$inherits" -eq 1 ] || continue
 
-    # the classes this file installs: the class names it writes that are
-    # not the one it copies, and one where it writes none
-    nclass=$(grep -o '"\.xpost_[A-Za-z0-9_]*"' "$libdir/$f" | tr -d '"' \
-             | sort -u | { [ -n "$base" ] && grep -vxF "$base" || cat; } \
-             | grep -c . || true)
+    # how many classes this file installs, and one where it installs
+    # none, its single class reached through the maker it registers
+    nclass=$(grep -c . "$work/skel.installs" || true)
     [ "$nclass" -gt 0 ] || nclass=1
 
     says=$(grep -cE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)' \

@@ -992,7 +992,7 @@ int _destroy(Xpost_Context *ctx,
 }
 
 /* operator function to instantiate a new window device.
-   installed in userdict by calling 'loadXXXdevice'.
+   installed in the private dictionary by calling 'loadXXXdevice'.
  */
 static
 int newpngdevice(Xpost_Context *ctx,
@@ -1004,7 +1004,7 @@ int newpngdevice(Xpost_Context *ctx,
 
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "pngDEVICE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_PNGDEVICE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
@@ -1024,7 +1024,7 @@ int newpngalphadevice(Xpost_Context *ctx,
 
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "pngalphaDEVICE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_PNGALPHADEVICE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
@@ -1081,7 +1081,7 @@ int loadpngalphadevice(Xpost_Context *ctx)
 }
 
 /* replace procedures in the class with newly created special operators.
-   defines the device class (pngDEVICE or pngalphaDEVICE) in userdict
+   defines the device class (pngDEVICE or pngalphaDEVICE) in the private dictionary.
    and the matching newXXXdevice operator. The alpha class carries
    /AlphaChannel for Create and an /Erase method for erasepage. */
 static
@@ -1112,7 +1112,6 @@ int _loaddevicecont_common(Xpost_Context *ctx,
         { "Erase", "pngErase", (Xpost_Op_Func)_erase, XPOST_DEV_M_PAGE }
     };
 
-    Xpost_Object userdict;
     Xpost_Object op;
     int ret;
 
@@ -1208,20 +1207,12 @@ int _loaddevicecont_common(Xpost_Context *ctx,
             return ret;
     }
 
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-
-    ret = xpost_dict_put(ctx, userdict,
-                         xpost_name_cons(ctx, alpha ? "pngalphaDEVICE" : "pngDEVICE"),
-                         classdic);
-    if (ret)
-        return ret;
-
-    /* and where the machinery reaches a class by name rather than a
-       program reaching a maker: the classes the boot files define are
-       mirrored into the private dictionary (data/device.ps) and one a
-       driver defines has to arrive there the same way, since a record
-       asked to be played into this device is specialised from the class
-       it finds there */
+    /* The class and its maker live in the private dictionary, beside the
+       classes the boot files define: a program reaches a device through
+       the page-device request, the machinery reaches the class by name
+       here, and a record asked to be played into this device is
+       specialised from the class it finds here. Nothing of the driver's
+       is defined where a program could shadow it. */
     ret = xpost_dict_put(ctx, ctx->privatedict,
                          xpost_name_cons(ctx, alpha ? ".xpost_PNGALPHADEVICE"
                                                     : ".xpost_PNGDEVICE"),
@@ -1233,7 +1224,7 @@ int _loaddevicecont_common(Xpost_Context *ctx,
         op = xpost_operator_cons(ctx, "newpngalphadevice", (Xpost_Op_Func)newpngalphadevice, 2, integertype, integertype);
     else
         op = xpost_operator_cons(ctx, "newpngdevice", (Xpost_Op_Func)newpngdevice, 2, integertype, integertype);
-    ret = xpost_dict_put(ctx, userdict,
+    ret = xpost_dict_put(ctx, ctx->privatedict,
                          xpost_name_cons(ctx, alpha ? "newpngalphadevice" : "newpngdevice"),
                          op);
     if (ret)

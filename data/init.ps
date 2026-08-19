@@ -1916,9 +1916,11 @@ currentglobal true setglobal
     % defaults to the running one, so on such a device every
     % setpagedevice raises rangecheck and the page cannot be resized.
     %
-    % The makers written in PostScript live in privatedict; the ones a
-    % C driver registers are reached through its loader, so that the
-    % driver is brought in on first use rather than at startup.
+    % Every maker lives in privatedict, the ones the boot files define
+    % and the ones a C driver registers alike. A driver's is not there
+    % until its loader has run -- the driver is brought in on first use
+    % rather than at startup -- so those makers look first and load on
+    % a miss, the load leaving the maker where the look looked.
     currentglobal true setglobal
     .xpostsys /.devicemakers <<
         /pgm { .privatedict /newPGMIMAGEdevice get exec }
@@ -1930,15 +1932,24 @@ currentglobal true setglobal
         /pdfwrite { .privatedict /newPDFWRITEdevice get exec }
         /svgwrite { .privatedict /newSVGWRITEdevice get exec }
         /dscwrite { .privatedict /newDSCWRITEdevice get exec }
-        /png { /newpngdevice where { pop }{ loadpngdevice } ifelse newpngdevice }
-        /pngalpha { /newpngalphadevice where { pop }{ loadpngalphadevice } ifelse newpngalphadevice }
-        /jpeg { /newjpegdevice where { pop }{ loadjpegdevice } ifelse newjpegdevice }
-        /bgr { /newbgrdevice where { pop }{ loadbgrdevice } ifelse newbgrdevice }
-        /raster { /newrasterdevice where { pop }{ loadrasterdevice } ifelse newrasterdevice }
-        /record { /newrecorddevice where { pop }{ loadrecorddevice } ifelse newrecorddevice }
-        /xcb { /newxcbdevice where { pop }{ loadxcbdevice } ifelse newxcbdevice }
-        /gdi { /newwin32device where { pop }{ loadwin32device } ifelse newwin32device }
-        /gl { /newwin32device where { pop }{ loadwin32device } ifelse newwin32device }
+        /png { .privatedict /newpngdevice 2 copy known not
+               { loadpngdevice } if get exec }
+        /pngalpha { .privatedict /newpngalphadevice 2 copy known not
+               { loadpngalphadevice } if get exec }
+        /jpeg { .privatedict /newjpegdevice 2 copy known not
+               { loadjpegdevice } if get exec }
+        /bgr { .privatedict /newbgrdevice 2 copy known not
+               { loadbgrdevice } if get exec }
+        /raster { .privatedict /newrasterdevice 2 copy known not
+               { loadrasterdevice } if get exec }
+        /record { .privatedict /newrecorddevice 2 copy known not
+               { loadrecorddevice } if get exec }
+        /xcb { .privatedict /newxcbdevice 2 copy known not
+               { loadxcbdevice } if get exec }
+        /gdi { .privatedict /newwin32device 2 copy known not
+               { loadwin32device } if get exec }
+        /gl { .privatedict /newwin32device 2 copy known not
+               { loadwin32device } if get exec }
     >> put
     % A driver the build left out registers no loader, so the maker
     % above would answer undefined. Drop those entries instead, and an

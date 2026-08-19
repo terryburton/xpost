@@ -891,7 +891,7 @@ int _destroy(Xpost_Context *ctx,
 }
 
 /* operator function to instantiate a new window device.
-   installed in userdict by calling 'loadXXXdevice'.
+   installed in the private dictionary by calling 'loadXXXdevice'.
  */
 static
 int newjpegdevice(Xpost_Context *ctx,
@@ -903,7 +903,7 @@ int newjpegdevice(Xpost_Context *ctx,
 
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "jpegDEVICE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_JPEGDEVICE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
@@ -940,8 +940,8 @@ int loadjpegdevice(Xpost_Context *ctx)
 }
 
 /* replace procedures in the class with newly created special operators.
-   defines the device class jpegDEVICE in userdict.
-   defines a new operator in userdict: newjpegdevice
+   defines the device class jpegDEVICE in the private dictionary.
+   defines its maker beside it: newjpegdevice
  */
 static
 int loadjpegdevicecont(Xpost_Context *ctx,
@@ -965,7 +965,6 @@ int loadjpegdevicecont(Xpost_Context *ctx,
         { ".moveband", "jpegMoveBand", (Xpost_Op_Func)_moveband, XPOST_DEV_M_BAND }
     };
 
-    Xpost_Object userdict;
     Xpost_Object op;
     int ret;
 
@@ -1021,25 +1020,19 @@ int loadjpegdevicecont(Xpost_Context *ctx,
 
 
 
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-
-    ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "jpegDEVICE"), classdic);
-    if (ret)
-        return ret;
-
-    /* and where the machinery reaches a class by name rather than a
-       program reaching a maker: the classes the boot files define are
-       mirrored into the private dictionary (data/device.ps) and one a
-       driver defines has to arrive there the same way, since a record
-       asked to be played into this device is specialised from the class
-       it finds there */
+    /* The class and its maker live in the private dictionary, beside the
+       classes the boot files define: a program reaches a device through
+       the page-device request, the machinery reaches the class by name
+       here, and a record asked to be played into this device is
+       specialised from the class it finds here. Nothing of the driver's
+       is defined where a program could shadow it. */
     ret = xpost_dict_put(ctx, ctx->privatedict,
                          xpost_name_cons(ctx, ".xpost_JPEGDEVICE"), classdic);
     if (ret)
         return ret;
 
     op = xpost_operator_cons(ctx, "newjpegdevice", (Xpost_Op_Func)newjpegdevice, 2, integertype, integertype);
-    ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newjpegdevice"), op);
+    ret = xpost_dict_put(ctx, ctx->privatedict, xpost_name_cons(ctx, "newjpegdevice"), op);
     if (ret)
         return ret;
 

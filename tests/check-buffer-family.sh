@@ -92,10 +92,14 @@ awk '/\.devicemakers *<</ { in_t = 1; next }
      in_t && />> *put/    { in_t = 0 }
      in_t && /^ *\/[a-z]/ {
          name = $1; sub(/^\//, "", name)
-         # the maker is the last operator the entry names
+         # the maker is the last maker name the entry carries -- spelled
+         # as a literal name, the entry reaching it in the private
+         # dictionary rather than executing it bare
          maker = ""
          for (i = 2; i <= NF; i++)
-             if ($i ~ /^new[A-Za-z0-9_]+device$/) maker = $i
+             if ($i ~ /^\/?new[A-Za-z0-9_]+device$/) {
+                 maker = $i; sub(/^\//, "", maker)
+             }
          if (maker != "") print name, maker
      }' "$init_ps" | sort -u > "$work/makers"
 

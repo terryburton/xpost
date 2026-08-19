@@ -3561,7 +3561,7 @@ static int newrecorddevice(Xpost_Context *ctx,
 
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "recordDEVICE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_RECORDDEVICE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
@@ -4127,11 +4127,10 @@ static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
 }
 
 /* Fill the class's method slots with this device's operators and define
-   the class and its maker in userdict. */
+   the class and its maker in the private dictionary. */
 static int loadrecorddevicecont(Xpost_Context *ctx,
                                 Xpost_Object classdic)
 {
-    Xpost_Object userdict;
     Xpost_Object op;
     int ncomp;
     int ret;
@@ -4146,17 +4145,20 @@ static int loadrecorddevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-
-    ret = xpost_dict_put(ctx, userdict,
-                         xpost_name_cons(ctx, "recordDEVICE"), classdic);
+    /* The class and its maker live in the private dictionary, beside the
+       classes the boot files define: a program reaches a device through
+       the page-device request, and the machinery reaches the class by
+       name here. Nothing of the driver's is defined where a program
+       could shadow it. */
+    ret = xpost_dict_put(ctx, ctx->privatedict,
+                         xpost_name_cons(ctx, ".xpost_RECORDDEVICE"), classdic);
     if (ret)
         return ret;
 
     op = xpost_operator_cons(ctx, "newrecorddevice",
                              (Xpost_Op_Func)newrecorddevice, 2,
                              integertype, integertype);
-    ret = xpost_dict_put(ctx, userdict,
+    ret = xpost_dict_put(ctx, ctx->privatedict,
                          xpost_name_cons(ctx, "newrecorddevice"), op);
     if (ret)
         return ret;

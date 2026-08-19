@@ -181,8 +181,8 @@ band_prologue() {
     printf '      { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse\n'
     printf '    /.rowcost get exec\n'
     printf '  end exch pop %s mul\nput\n' "$BANDROWS"
-    printf '/recordDEVICE where { pop recordDEVICE /.bandbytes\n'
-    printf '  .privatedict /.xpost_RECORD get /.bandbytes get put } if\n'
+    printf '.privatedict /.xpost_RECORDDEVICE 2 copy known { get /.bandbytes\n'
+    printf '  .privatedict /.xpost_RECORD get /.bandbytes get put }{ pop pop } ifelse\n'
 }
 
 # What a banded run says about itself: the class that painted its page

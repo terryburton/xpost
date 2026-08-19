@@ -477,7 +477,7 @@ int _destroy(Xpost_Context *ctx,
 
 
 /* operator function to instantiate a new window device.
-   installed in userdict by calling 'loadXXXdevice'.
+   installed in the private dictionary by calling 'loadXXXdevice'.
  */
 static
 int newbgrdevice(Xpost_Context *ctx,
@@ -489,7 +489,7 @@ int newbgrdevice(Xpost_Context *ctx,
 
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "bgrDEVICE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_BGRDEVICE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
@@ -529,8 +529,8 @@ int loadbgrdevice(Xpost_Context *ctx)
 }
 
 /* replace procedures in the class with newly created special operators.
-   defines the device class bgrDEVICE in userdict.
-   defines a new operator in userdict: newbgrdevice
+   defines the device class bgrDEVICE in the private dictionary.
+   defines its maker beside it: newbgrdevice
  */
 static
 int loadbgrdevicecont(Xpost_Context *ctx,
@@ -550,7 +550,6 @@ int loadbgrdevicecont(Xpost_Context *ctx,
         { "Destroy", "bgrDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
     };
 
-    Xpost_Object userdict;
     Xpost_Object op;
     int ret;
 
@@ -597,14 +596,18 @@ int loadbgrdevicecont(Xpost_Context *ctx,
 
 
 
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-
-    ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "bgrDEVICE"), classdic);
+    /* The class and its maker live in the private dictionary, beside the
+       classes the boot files define: a program reaches a device through
+       the page-device request, and the machinery reaches the class by
+       name here. Nothing of the driver's is defined where a program
+       could shadow it. */
+    ret = xpost_dict_put(ctx, ctx->privatedict,
+                         xpost_name_cons(ctx, ".xpost_BGRDEVICE"), classdic);
     if (ret)
         return ret;
 
     op = xpost_operator_cons(ctx, "newbgrdevice", (Xpost_Op_Func)newbgrdevice, 2, integertype, integertype);
-    ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newbgrdevice"), op);
+    ret = xpost_dict_put(ctx, ctx->privatedict, xpost_name_cons(ctx, "newbgrdevice"), op);
     if (ret)
         return ret;
 

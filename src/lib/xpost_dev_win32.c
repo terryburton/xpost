@@ -977,7 +977,7 @@ static void _reclaim(void *block)
 }
 
 /* operator function to instantiate a new window device.
-   installed in userdict by calling 'loadXXXdevice'.
+   installed in the private dictionary by calling 'loadXXXdevice'.
 */
 static
 int newwin32device(Xpost_Context *ctx,
@@ -994,7 +994,7 @@ int newwin32device(Xpost_Context *ctx,
        an invalid name should cause an undefined error to propagate
        with extra handling here */
 
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "win32DEVICE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_WIN32DEVICE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
@@ -1039,8 +1039,8 @@ int loadwin32device(Xpost_Context *ctx)
 }
 
 /* replace procedures in the class with newly created special operators.
-   defines the device class XXXDEVICE in userdict.
-   defines a new operator in userdict: newXXXdevice
+   defines the device class XXXDEVICE in the private dictionary.
+   defines its maker beside it: newXXXdevice
 */
 static
 int loadwin32devicecont(Xpost_Context *ctx,
@@ -1064,7 +1064,6 @@ int loadwin32devicecont(Xpost_Context *ctx,
         { "Destroy", "win32Destroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
     };
 
-    Xpost_Object userdict;
     Xpost_Object op;
     int ret;
 
@@ -1138,15 +1137,19 @@ int loadwin32devicecont(Xpost_Context *ctx,
 
 
 
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-
-    ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "win32DEVICE"), classdic);
+    /* The class and its maker live in the private dictionary, beside the
+       classes the boot files define: a program reaches a device through
+       the page-device request, and the machinery reaches the class by
+       name here. Nothing of the driver's is defined where a program
+       could shadow it. */
+    ret = xpost_dict_put(ctx, ctx->privatedict,
+                         xpost_name_cons(ctx, ".xpost_WIN32DEVICE"), classdic);
     if (ret)
         return ret;
 
     op = xpost_operator_cons(ctx, "newwin32device", (Xpost_Op_Func)newwin32device, 2,
                              integertype, integertype);
-    ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newwin32device"), op);
+    ret = xpost_dict_put(ctx, ctx->privatedict, xpost_name_cons(ctx, "newwin32device"), op);
     if (ret)
         return ret;
 

@@ -127,10 +127,9 @@
 % with the compiled rasterisers. A page is marked through the second, so
 % the second is the one a program's error arrives in.
 %
-% A class is reached through its maker, and a maker is found wherever it
-% lives: most are procedures a boot file left in the private dictionary,
-% and the recording class's is an operator its driver installs where a
-% program can see it. That class holds its page as marks and paints it by
+% A class is reached through its maker, and every maker lives in the
+% private dictionary: most are procedures a boot file left there, and
+% the recording class's is an operator its driver installs beside them. That class holds its page as marks and paints it by
 % playing them into a device that does paint, so its marking methods,
 % Create, GetPix and Destroy are compiled operators that open no
 % dictionary; what it has of the shape measured here is /Ground and the

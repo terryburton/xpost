@@ -347,18 +347,19 @@ savedcase
     % other grid, and the first page is then where one raster is
     % exchanged for another.
     banding {
-        /recordDEVICE where {
-            pop
-            /bc.was recordDEVICE /.bandbytes get store
-            recordDEVICE /.bandbytes BANDBYTES put
+        .privatedict /.xpost_RECORDDEVICE 2 copy known {
+            get /bc.rdev exch store
+            /bc.was bc.rdev /.bandbytes get store
+            bc.rdev /.bandbytes BANDBYTES put
         }{
+            pop pop
             (FAIL the recording class cannot be reached, so nothing here ) print
             (can ask for a band grid before the device exists\n) print
             /bc.bad true store
         } ifelse
     } if
     << /PageSize [W H] /OutputFile pagename >> setpagedevice
-    banding bc.bad not and { recordDEVICE /.bandbytes bc.was put } if
+    banding bc.bad not and { bc.rdev /.bandbytes bc.was put } if
     % and the device really was built on it, since a case that quietly
     % held its page whole would exercise none of what it is here for
     banding bc.bad not and {
