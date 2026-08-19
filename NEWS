@@ -1,0 +1,3 @@
+Automake's GNU strictness asks a project for a NEWS file; this one
+exists to satisfy that and carries nothing else. What changed and when
+lives in the git history and in the documents under doc/.

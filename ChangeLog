@@ -1,0 +1,3 @@
+Automake's GNU strictness asks a project for a ChangeLog; this one
+exists to satisfy that and carries nothing else. The change history is
+the git log, which records every change with its reasoning.
