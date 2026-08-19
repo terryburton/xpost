@@ -1465,11 +1465,20 @@ int xpost_op_string_print (Xpost_Context *ctx,
    format parameter chooses the number representation; disabled (the
    default) the writers refuse with undefined. */
 
+/* The parameter lives in the interpreter's private namespace, so a
+   program reaches it only through the two operators and cannot write a
+   value the range check below never saw. The put is recorded against
+   the save in force like any dictionary write, which is what makes the
+   parameter subject to save and restore; a context whose namespace is
+   not built yet has no parameter to read, which reads as disabled. */
 static
 int _objfmt_get(Xpost_Context *ctx)
 {
-    Xpost_Object ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    Xpost_Object v = xpost_dict_get(ctx, ud,
+    Xpost_Object v;
+
+    if (xpost_object_get_type(ctx->privatedict) != dicttype)
+        return 0;
+    v = xpost_dict_get(ctx, ctx->privatedict,
         xpost_name_cons(ctx, ".objectformat"));
 
     return xpost_object_get_type(v) == integertype ? v.int_.val : 0;
@@ -1479,11 +1488,11 @@ static
 int xpost_op_int_setobjectformat(Xpost_Context *ctx,
                                  Xpost_Object n)
 {
-    Xpost_Object ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-
     if (n.int_.val < 0 || n.int_.val > 4)
         return rangecheck;
-    return xpost_dict_put(ctx, ud,
+    if (xpost_object_get_type(ctx->privatedict) != dicttype)
+        return undefined;
+    return xpost_dict_put(ctx, ctx->privatedict,
         xpost_name_cons(ctx, ".objectformat"), n);
 }
 
