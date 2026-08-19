@@ -1,0 +1,55 @@
+# Every touch of userdict in the boot files, as (file, following token),
+# each a deliberate decision that userdict is the right place. Checked by
+# tests/check-userdict-reach.sh alongside the compiled side: a new touch
+# and a vanished one both fail until this file says so.
+#
+# userdict is the program's workspace. What belongs in it is what a
+# program owns or a published convention expects to find there; what
+# does not is machinery state, which a program can shadow or corrupt
+# where the machinery parked it. The page-device request and the output
+# binding used to be parked there and now live with the graphics
+# machinery and the device; these are what remain:
+#
+#   the bootstrap        init.ps builds .xpostsys and .internaldict in
+#                        userdict because nothing else exists yet, and
+#                        the lockdown seals and removes them (the /exch
+#                        and //.xpostsys rows are that relocation and
+#                        removal, and .gstatetemplate's move to the
+#                        private dictionary); DATA_DIR arrives as a
+#                        boot definition and is moved among the host's
+#                        settings the same way
+#   the language's own   statusdict, serverdict, UserObjects and the
+#                        interactive quit are userdict members by the
+#                        language's published shape, and err.ps keeps
+#                        the program-visible error state there while
+#                        mirroring the machinery's own reference
+#   job workspaces       s.ps, m.ps, gstate.ps and err.ps open userdict
+#                        to define program-facing procedures; init.ps
+#                        opens it once for the same reason
+#   a test's question    test.ps asks whether currentdict is userdict
+#
+# QUIET is a userdict occupant with no row here because no boot file
+# writes it: -q writes systemdict and a -D definition lands in userdict
+# through xpost_add_definitions (see tests/userdict_reach.golden). It
+# stays reachable by ordinary lookup deliberately -- job streams in the
+# field execute it as a bare name (tests/corpus/ghostscript/waterfal.ps,
+# `QUIET not { ... } if`), so it is a program-facing convention the
+# banner's own probe honours, not machinery state to evacuate.
+#
+err.ps begin
+err.ps /.error
+gstate.ps begin
+init.ps begin
+init.ps /DATA_DIR
+init.ps exch
+init.ps /.gstatetemplate
+init.ps /.internaldict
+init.ps /quit
+init.ps /serverdict
+init.ps /statusdict
+init.ps /UserObjects
+init.ps /.xpostsys
+init.ps //.xpostsys
+m.ps begin
+s.ps begin
+test.ps eq

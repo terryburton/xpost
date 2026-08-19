@@ -1,6 +1,7 @@
 #!/bin/sh
-# Meson test wrapper: every reach from compiled code into userdict is
-# registered, with the reason it is the program's business.
+# Meson test wrapper: every reach into userdict is registered with the
+# reason it is the program's business -- from compiled code, and from
+# the boot files.
 #
 # userdict is the program's workspace. Compiled code has exactly one way
 # to reach it -- fetching slot 2 of the dictionary stack from the bottom
@@ -25,6 +26,8 @@ src=${1:?usage: check-userdict-reach.sh <srcroot>}
 guard_require_srcroot "$src"
 golden="$src/tests/userdict_reach.golden"
 [ -s "$golden" ] || { echo "FAILURES: no usable register at $golden"; exit 1; }
+psgolden="$src/tests/userdict_parked.golden"
+[ -s "$psgolden" ] || { echo "FAILURES: no usable register at $psgolden"; exit 1; }
 
 guard_workdir
 
@@ -104,5 +107,42 @@ if [ "$guard_held" -ne 0 ]; then
     echo "FAILURES: the reaches into userdict and their register disagree"
     exit 1
 fi
-echo "SUCCESS: every reach into userdict is registered ($nline sites)"
+# ---- and the boot files' own touches of userdict --------------------
+#
+# The same question of the PostScript side, by the same kind of
+# mechanism: the token userdict, read with comments stripped and string
+# contents blanked, paired with the token that follows it -- which for a
+# put is the name being parked. A boot file that starts keeping
+# machinery state in userdict grows a row here and fails until the
+# register owns the decision.
+: > "$work/ps.derived"
+for f in "$src"/data/*.ps; do
+    sed 's|(%[^)]*)|(STR)|g; s|%.*||' "$f" \
+        | awk -v file="$(basename "$f")" \
+            '{ for (i=1;i<=NF;i++) if ($i=="userdict")
+                   print file, (i<NF ? $(i+1) : "-") }' >> "$work/ps.derived"
+done
+sort -u "$work/ps.derived" > "$work/ps.derived.set"
+grep -v '^[[:space:]]*#' "$psgolden" | grep . | sort -u > "$work/ps.golden.set"
+
+if [ ! -s "$work/ps.derived.set" ] || [ ! -s "$work/ps.golden.set" ]; then
+    echo "FAILURES: the boot-file scan derived nothing or the register names"
+    echo "      nothing; an empty side would hold everything to nothing"
+    exit 1
+fi
+
+guard_hold "$work/ps.derived.set" "$work/ps.golden.set" \
+    "a boot file touches userdict at sites the register does not own.
+      userdict is the program's workspace: machinery state parked there
+      is a program's to shadow or corrupt. Register the touch with its
+      reason, or move the state where its consumers live:" \
+    "the register owns a touch of userdict no boot file makes. The site
+      is gone or renamed; the line excusing it is cover for the next
+      one:"
+
+if [ "$guard_held" -ne 0 ]; then
+    echo "FAILURES: the reaches into userdict and their registers disagree"
+    exit 1
+fi
+echo "SUCCESS: every reach into userdict is registered ($nline compiled sites)"
 exit 0
