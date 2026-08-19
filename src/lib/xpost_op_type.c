@@ -578,29 +578,40 @@ int Scvr(Xpost_Context *ctx,
     return 0;
 }
 
-/* helper function: fill buffer with radix representation of num */
+/* the digits of num under rad, written into s. num is unsigned: the
+   caller has already decided what bit pattern is being rendered, and
+   every value of it has digits. Answers the count written, or -1 for
+   a string the digits do not fit. */
 static
-int conv_rad(int num,
-             int rad,
+int conv_rad(dword num,
+             unsigned int rad,
              char *s,
              int n)
 {
     const char *vec = "0123456789" "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ";
-    int off;
-    if (n == 0) return 0;
-    if (num < rad)
-    {
-        *s = vec[num];
-        return 1;
-    }
-    off = conv_rad(num/rad, rad, s, n);
-    if ((off == n) || (off == -1)) return -1;
-    s[off] = vec[num%rad];
-    return off+1;
+    char t[sizeof(dword) * 8]; /* radix two writes one digit per bit */
+    int len = 0, i;
+
+    do { t[len++] = vec[num % rad]; num /= rad; } while (num);
+    if (len > n) return -1;
+    for (i = 0; i < len; i++)
+        s[i] = t[len - 1 - i];
+    return len;
 }
 
+static
+int AScvs (Xpost_Context *ctx,
+           Xpost_Object any,
+           Xpost_Object str);
+
 /* number radix string  cvrs  string
-   convert number to a radix representation in string */
+   convert number to a radix representation in string
+
+   Radix ten is cvs by definition, so a real keeps its real syntax
+   there. Every other radix renders the value truncated toward zero
+   and unsigned at the integer's own width, a negative number
+   arriving as its two's-complement bit pattern; a real beyond what
+   the integer holds is refused. */
 static
 int NRScvrs(Xpost_Context *ctx,
             Xpost_Object num,
@@ -611,12 +622,20 @@ int NRScvrs(Xpost_Context *ctx,
     /* the digits are written into the string, so it needs write access */
     if (!xpost_object_is_writeable(ctx, str))
         return invalidaccess;
-    if (xpost_object_get_type(num) == realtype)
-        num = xpost_int_cons((integer)num.real_.val);
     r = rad.int_.val;
     if (r < 2 || r > 36)
         return rangecheck;
-    n = conv_rad(num.int_.val, r, xpost_string_get_pointer(ctx, str), str.comp_.sz);
+    if (r == 10)
+        return AScvs(ctx, num, str);
+    if (xpost_object_get_type(num) == realtype)
+    {
+        double v = (double)num.real_.val;
+        if (v >= XPOST_INTEGER_HI_D + 1.0 || v <= XPOST_INTEGER_LO_D - 1.0)
+            return rangecheck;
+        num = xpost_int_cons((integer)v);
+    }
+    n = conv_rad((dword)num.int_.val, (unsigned int)r,
+                 xpost_string_get_pointer(ctx, str), str.comp_.sz);
     if (n == -1)
         return rangecheck;
     /* the written length is compared against the string's own in the

@@ -589,6 +589,7 @@ width test mask-cache-range
 width test name-length
 width test op-cvi
 width test op-cvs
+width test op-cvrs
 width test op-intoverflow
 width test op-math
 width test op-radix

@@ -2840,6 +2840,11 @@ test('op-cvs',
   args: [ xpost_exe, files('tests/op_cvs_test.ps') ],
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+test('op-cvrs',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_cvrs_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # array and string get/put require an integer index (a real is a typecheck).
 test('op-index-type',

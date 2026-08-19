@@ -195,6 +195,7 @@ op_control_test.ps                         once   unexplained
 op_cvi_test.ps                             zero
 op_cvn_test.ps                             once   unexplained
 op_cvs_test.ps                             costs  unexplained
+op_cvrs_test.ps                            zero
 op_dict_capacity_test.ps                   fits
 op_dictstack_test.ps                       once   unexplained
 op_dispatch_typecheck_test.ps              zero
