@@ -5801,7 +5801,7 @@ pkgmod = import('pkgconfig')
 
 pkgmod.generate(
     libxpost_lib,
-    description: 'Postscript level 2 interpreter.',
+    description: 'PostScript LanguageLevel 3 interpreter.',
     filebase: 'xpost',
     name: 'Xpost',
     variables: 'pkgincludedir=' + '-' + v_maj,
