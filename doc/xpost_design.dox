@@ -1,223 +1,1239 @@
 /**
  * @page xpost_design Design
  *
- * XPost3 is being designed along different principles. Transparency
- * (debugability), simplicity (borrowing certain OOP concepts like
- * encapsulation), speed (choosing appropriate algorithms),
- * extensibility (growing stacks. support for multiple contexts).
+ * xpost is a PostScript LanguageLevel 3 interpreter built as a shared
+ * library with programs over it. The design holds to a few commitments
+ * throughout: every allocation is indexed rather than addressed, so
+ * storage can be rearranged, snapshotted and given back; the language's
+ * own machinery is written in PostScript wherever PostScript can
+ * express it, over a small sealed core, with C reserved for what the
+ * language cannot say and for the paths where speed is the point;
+ * memory for a page is bounded by policy rather than by the page's
+ * size; and every structural rule the design states is enforced by a
+ * test that fails when the rule is broken, so this description and the
+ * tree cannot quietly diverge. doc/INTERNALS is the module map,
+ * doc/ROOTS enumerates the collector's root set, doc/MANUAL is the
+ * user's side, and doc/GATING.md describes the test architecture the
+ * last commitment rests on.
  *
- * Those multiple contexts are execution contexts within one
- * interpreter, held in that interpreter's context table; they are not
- * multiple interpreters. A process holds one interpreter instance,
- * which is what xpost_create() returns a context of and
- * xpost_destroy() ends.
+ * @section design_toc Contents
  *
- * @section xpost_modules Modules
+ * @li @ref design_langsplit
+ * @li @ref design_boot
+ * @li @ref design_objects
+ * @li @ref design_vm
+ * @li @ref design_stacks
+ * @li @ref design_names
+ * @li @ref design_dicts
+ * @li @ref design_save
+ * @li @ref design_gc
+ * @li @ref design_free
+ * @li @ref design_return
+ * @li @ref design_loop
+ * @li @ref design_scanner
+ * @li @ref design_errors
+ * @li @ref design_jobs
+ * @li @ref design_contexts
+ * @li @ref design_devices
+ * @li @ref design_imaging
+ * @li @ref design_colour
+ * @li @ref design_vector
+ * @li @ref design_banding
+ * @li @ref design_spill
+ * @li @ref design_fonts
+ * @li @ref design_resources
+ * @li @ref design_files
+ * @li @ref design_forms
+ * @li @ref design_confinement
+ * @li @ref design_dsc
+ * @li @ref design_testing
+ * @li @ref design_perf
+ * @li @ref design_distinctives
  *
- * @subsection xpost_modules_toc Modules TOC
+ * @section design_langsplit What is C and what is PostScript
  *
- * @subsection xpost_modules_layers Modules layers
+ * The C core implements what the language cannot express about itself:
+ * the memory files and their tables, objects, the segmented stacks,
+ * the save machinery, the garbage collector, the scanner, the operator
+ * table and its dispatch, files and filters, and the compiled halves
+ * of the output devices. Everything above that is PostScript, loaded
+ * at boot from the data directory: the error mechanism (err.ps),
+ * resources, and the whole of the graphics language -- paths,
+ * painting, colour spaces, clipping, images, patterns, shadings,
+ * halftones, the device classes and the band loop -- in graphics.ps
+ * and the files it loads. The interpreter runs without any of the
+ * graphics loaded (\--no-graphics), and the graphics arrive lazily the
+ * first time something asks for them.
  *
- * @section xpost_vm Virtual memory
+ * The load chain is concrete and shallow: init.ps builds the
+ * machinery and loads the error mechanism, the sort and resource
+ * machinery and the job layer; graphics.ps, when asked for, loads
+ * the device layer, the graphics state, colour, paths, clipping,
+ * painting, text, patterns and shadings; the device layer loads the
+ * imaging core, the structural devices and the writers; and the
+ * imaging core loads the raster format classes. Each file is loaded
+ * through one module loader, so where a file may be found is decided
+ * in one place. The interpreter locates its data directory by a
+ * five-step search -- an environment override, the directory derived
+ * from the shared library's own location, the source tree recorded
+ * at configure time, the installed data directory, and finally the
+ * working directory's neighbourhood -- which is what makes an
+ * uninstalled build self-sufficient from any working directory.
  *
- * @subsection xpost_vm_mfile mfile
+ * The boundary is guarded on both sides. systemdict is sealed in C
+ * once boot completes, so a program cannot redefine what the core
+ * depends on. The PostScript machinery keeps its own state in private
+ * dictionaries off the dictionary stack, reached by explicit fetch
+ * rather than by name lookup, and its dispatch tables hold operator
+ * values rather than names -- so a program that redefines a standard
+ * operator changes what programs see without changing what the
+ * machinery does. The compiled helpers the graphics use (the scanline
+ * fills, the row blitter, the sorters, the compressors) live under dot
+ * names in an internal dictionary that is not on any lookup path;
+ * nothing of the machinery's is defined where a program could shadow
+ * it, and userdict starts holding nothing of the machinery at all.
+ * This is hygiene rather than a security boundary: it makes the
+ * interpreter robust against ordinary redefinition and keeps the
+ * namespace a job sees empty of implementation detail.
  *
- * At the heart is the "m" module: the memory-file and
- * memory-tables. Every mfile starts with an mtab. Every mtab lives in
- * an mfile. An mfile is a raw memory space cleverly(?) macro-ized to
- * use either malloc/realloc/free or mmap/mremap/munmap. This memory
- * space is sub-allocated with a segmented index, the mtabs.
+ * Within the graphics, the split between the two languages is drawn by
+ * profiling rather than by principle. The raster device classes are
+ * PostScript -- one shared method suite parameterised per format --
+ * and stay PostScript where a method runs once per page; the methods
+ * that run once per mark, per span or per pixel are compiled, and are
+ * swapped into a class as an instance is made. A rectangle fill, the
+ * scanline polygon fill, the pixel blenders, the row writers, the
+ * image-row blitter and the base64 and flate encoders are C; the logic
+ * that decides what to fill, where the page begins and ends, and what
+ * a device promises, is PostScript. The swap is conditional and
+ * honest: a compiled fill that writes the class's array of rows is
+ * only installed on a device that has such an array, a device with a
+ * buffer of its own keeps its own compiled methods, and the null
+ * device keeps a no-op fill so that discarded pages are not rendered
+ * first and thrown away after.
  *
- * A datum stored in memory is here alternately called an "entity"
- * (when referring to the abstract data type, ie. the object data
- * itself, the raw bytes) or an "entry" (when referring to the
- * allocation metadata in the table (its allocated size, the address
- * of the data).
+ * One process holds one interpreter, which xpost_create() returns an
+ * execution context of and xpost_destroy() ends. The @c fork operator
+ * makes further contexts inside the same interpreter; a fork shares
+ * both memory files and gets stacks of its own.
  *
- * An execution context has two mfiles: one for global VM, one for
- * local VM. There will be 3 ways of forking a new context:
+ * @section design_boot Booting, and fast initialisation from an image
  *
- * -# Create copies of both global and local VM.
- * -# Share global VM, but create a copy of local VM.
- * -# Share both global and local VM.
+ * A cold boot interprets about a megabyte and a third of PostScript --
+ * init.ps, the error machinery, and on demand the graphics chain --
+ * into virtual memory, then seals systemdict and locks the machinery
+ * down. Every launch of the same build does exactly the same work to
+ * reach exactly the same state, which is what makes the fast path
+ * possible: the state can be written once and read back.
  *
- * @subsection xpost_vm_mtab mtab
+ * A virtual-memory image is both banks written whole -- the bytes of
+ * each arena, the table that indexes each, the arena's own
+ * bookkeeping, and the few members of the context that name what the
+ * arenas hold (which stacks are which, the allocation mode, the
+ * one-shot flags the lockdown spent). Virtual memory is
+ * position-independent by construction -- every reference in it is an
+ * entity number or a byte offset, never an address -- so nothing in an
+ * image needs relocating: a run that has one pays for reading a file
+ * instead of for running the boot files. The image is written at the
+ * point where the language stands complete -- after the graphics load
+ * and the lockdown, before any device exists -- and only from the
+ * first context a process makes. XPOST_VM_IMAGE names the file to
+ * read, XPOST_VM_IMAGE_WRITE the file to write, and
+ * XPOST_NO_VM_IMAGE turns reading off without moving the file.
  *
- * At address 0 of the mfile is an mtab, a Memory Table. An mtab is
- * one segment of a chain of address tables which hold the allocation
- * info (size, flags) and the "pointer" to the data itself. All VM
- * "pointers" are integer byte-offsets from the vm base pointer.
+ * What an image does not carry is as much of the design as what it
+ * does. Host state is excluded by construction: where this process
+ * mapped the arenas, which descriptors are open, and the addresses of
+ * the C functions in the operator table are all this process's own.
+ * The function addresses are written as zeros and rebuilt at the read
+ * from the operator table the reading process built for itself --
+ * which is safe only because the image carries the operator names in
+ * row order and the read holds this build's table to them row for
+ * row; an operator object carries nothing but its row number, so a
+ * table in another order would dispatch to the wrong operator, and
+ * the check is what makes that impossible rather than unlikely. A
+ * block held outside virtual memory (a device's state, a stream, a
+ * face) is named in VM by a handle only this process can resolve, so
+ * an image is refused at the write if any entity carries one: nothing
+ * in a written image stands for a thing only the writing process had.
+ *
+ * An image is a picture of one build's memory, not a portable
+ * document, and it says so up front: its head carries stamps for the
+ * object width, the sizes of every structure the arena holds at a
+ * fixed shape, the byte order, the build version, and a hash of every
+ * boot file the language was assembled from. The last four bytes are
+ * a digest of all the rest. A stamp that disagrees, a digest that
+ * does not check, a file that is short, absent or foreign -- every
+ * way an image can be unusable ends the same way: the read declines
+ * with the context untouched, and the run boots from the files. A
+ * refusal costs the time the image would have saved and nothing else,
+ * which is what lets the mechanism default to being trusted with
+ * nothing: the digest catches damage, not forgery, and an image wants
+ * exactly the trust the boot files beside it already need.
+ *
+ * @section design_objects Objects
+ *
+ * A PostScript object is a small tagged value: a tag word, and fields
+ * whose meaning the tag selects. A composite object (array, string,
+ * dictionary, file) carries four -- tag, size, ent, offset -- where
+ * @c ent indexes a memory table rather than addressing memory, and
+ * the size and offset make @c getinterval a field adjustment rather
+ * than a copy. Simple objects carry their payload in the same space:
+ * an integer is tag plus a value word, an operator holds the number
+ * of its row in the operator table, a name holds its index in the
+ * name string stack. The tag also carries the access attributes, the
+ * literal/executable flag, the bank flag saying which memory file a
+ * composite lives in, and a flag distinguishing packed procedures --
+ * which is what lets @c bind tell a packed procedure it should
+ * descend into from a read-only array it should leave alone.
+ *
+ * The tree builds at two widths, and both are first-class: the whole
+ * test suite runs at each. The default build gives each object field
+ * 16 bits; the large-object build (-Dlarge-object=true) gives it 32,
+ * and widens the integer to 64 bits and the real to double. The
+ * bounds that follow:
+ *
+ *   field width          16 bit          32 bit
+ *   composite length     65,535          4,294,967,295
+ *   entity numbers       524,287         2,147,483,647
+ *   integer              32 bit          64 bit
+ *   real                 float           double
+ *
+ * The narrow composite bound is the architectural limit PLRM
+ * Appendix B.1 documents; the entity range is wider than the length
+ * field because the entity number borrows the tag's spare bits.
+ *
+ * Packed procedures are the language's compact, read-only procedure
+ * form (@c setpacking selects them; the scanner then packs the
+ * procedures it builds). Here they are ordinary arrays wearing the
+ * packed flag: the compactness is the arena's business, and the
+ * flag's real work is telling @c bind that this read-only procedure
+ * is one it should descend into and freeze, so deeply nested
+ * generated procedures bind all the way down.
+ *
+ * @section design_vm Virtual memory: the arena and its table
+ *
+ * Virtual memory is two banks -- local and global -- each an
+ * Xpost_Memory_File: one large region, called the arena, sub-allocated
+ * through an Xpost_Memory_Table sitting at its base. Global memory
+ * holds what survives save and restore -- the operator table, the
+ * frozen library, fonts and resources; local memory holds the job's
+ * own allocations and is what the save machinery rewinds. A global
+ * container may not hold a reference to a local object (local memory
+ * is the perishable bank, and such a reference would dangle);
+ * local may hold global freely. Allocation goes to the bank the
+ * current VM mode selects.
+ *
+ * The region is obtained by whichever of three arrangements the host
+ * offers, all chosen for the same property -- the base never moves as
+ * the file grows:
+ *
+ *   a mapping extended in place      mmap with mremap
+ *   a reservation committed piecewise  mmap without mremap, and Win64
+ *   the host allocator               a host with neither
+ *
+ * The middle arrangement reserves the whole range an offset can
+ * address without being charged for it, and commits more (in one-MiB
+ * steps) as the file fills. Under the allocator the region grows by a
+ * factor of one and a half plus the request, and the grow may copy;
+ * under the first two it never does. Only the first two own the pages
+ * beneath the arena, so only they can give storage back (see
+ * @ref design_return). The configure summary reports which
+ * arrangement a build has as its "memory backing", and each is
+ * exercised deliberately: -Dmmap=false forces the allocator,
+ * -Dmremap=false forces the reservation, and XPOST_GROW_MOVES forces
+ * a moving grow, which is how the relocation discipline is stress
+ * tested on a host whose mappings would otherwise never move.
+ *
+ * Every "pointer" within the arena is an integer byte-offset from the
+ * base, and every allocation is 8-aligned with the arena's cursor
+ * advanced by the aligned extent. The coding rule that follows -- do
+ * not hold a C pointer across an allocation -- is what the whole
+ * design buys its freedom with: because nothing holds addresses,
+ * storage can move (compaction), be written out and read back (the
+ * image), and be handed back to the operating system (page return).
  *
  * @image html mtab.png
  * @image latex mtab.eps
  *
- * @subsection xpost_vm_mtab0 mtab[0] special entities
+ * The figure is the memory file. @c base is the address the process
+ * mapped the region at -- the one datum that is host state rather
+ * than arena state. At offset zero of the region sits the table.
+ * Its header carries @c nextent, the number the next fresh row will
+ * get (a counter that only rises); @c max, the number of row slots
+ * allocated (doubling from a thousand as rows are spent); and the
+ * sixteen free-list heads (see @ref design_free). Each row describes
+ * one entity -- one allocated thing:
  *
- * The first several entries of mtab[0] are "special entities". All
- * mfiles have (in the mtab[0]) a save stack (VS), a free-list (FREE)
- * and a context-list (CTXLIST) which contains `cid`s of all contexts
- * sharing that particular mfile. This was devised to help encapsulate
- * the context's global state within the mfile construct. Even the
- * operator table OPTAB is a special entity and lives in global VM,
- * not "global memory". (In case somebody needs custom operators, it
- * is possible).
+ *   @c adr    where the entity's bytes begin, as an offset from base
+ *   @c used   how many of those bytes are in use -- an entity may
+ *             occupy a larger block than it needs, when it was served
+ *             from the free list
+ *   @c sz     the size of the whole allocated block
+ *   @c mark   the collector's mark bits and the save machinery's
+ *             level bookkeeping; for file entities, the birth stamp
+ *             (see @ref design_save)
+ *   @c tag    what kind of thing the block holds, where the collector
+ *             or the handle machinery needs to know -- it is how the
+ *             collector closes a file it reclaims, and how a block
+ *             holding a handle on host state is recognised
  *
- * Both VMs go on to hold NAMES, NAMET and BOGUSNAME. NAMES and NAMET
- * are for the Name String stack and Name Tree, a ternary search
- * tree. The same old ternary search tree, this time updated to live
- * in the memory file.
+ * A sixth field, @c nextfree, links rows into the free lists; it
+ * lives in the row precisely so that freed storage itself holds
+ * nothing the allocator reads. The cursor -- the @c used field of the
+ * file itself, distinct from any row's -- is where live storage ends
+ * and the next fresh allocation begins. @c vmstatus reports it, which
+ * is why that figure is a high-water mark in ordinary running and
+ * falls only when compaction closes the arena up.
  *
- * Bogusname is an allocated name string corresponding to the
- * Not-Found result. So zero means no and asking what no means is
- * Bogus.
+ * The first several rows of each bank are special entities, built
+ * once at boot and serving as infrastructure rather than allocations:
+ * the free-list heads (FREE), the save stack (VS), the list of
+ * contexts sharing the file (CTXLIST), the name string stack and name
+ * tree (NAMES, NAMET), and a distinguished string for the
+ * name-not-found answer (BOGUSNAME). The operator table (OPTAB) is a
+ * special entity of the global bank only. The collector's domain
+ * begins just past them -- the memory file records that boundary as
+ * its @c start -- so the special entities are roots by construction,
+ * not things to be marked and swept.
  *
- * OPTAB is unique to global memories.
+ * An allocation, end to end: the free lists are consulted first (a
+ * bounded search; see @ref design_free); failing that, a row number
+ * is taken -- preferably from the list of rows whose storage
+ * compaction took, so spent numbers are reissued rather than leaked
+ * -- and fresh bytes are taken at the cursor, growing the region if
+ * the cursor would pass its end. The last stretch of entity numbers
+ * is held in reserve for the machinery that reports errors, so a
+ * program that exhausts the table is refused with a @c limitcheck it
+ * can catch (the width of the number is an implementation limit;
+ * memory was not actually spent) rather than failing inside the
+ * failure report.
  *
- * FIXME: put the table here
- *
- * The special entities in the mtab facilitate bookkeeping of the
- * mtabs themselves (FREE, VS), locating associated contexts
- * (CTXLIST), and internal context data (possibly shared) (NAMES,
- * NAMET, OPTAB). If everything works right, the presence of BOGUSNAME
- * should have no visible effect to the user.
- *
- * @section xpost_stacks Stacks
- *
- * Patterned after the model of the memory-table chain is the "s"
- * module: the segmented stack.
- *
- * And making use of both of these is the "v" module: the *virtual*
- * part of the virtual-memory, the save/restore stacks which live in
- * the memory file.
- *
- * The three single-letter modules (m, s, & v) are considered the
- * "core" of the whole thing. I wrote these and then sat on them for
- * over a year while making revisions to xpost2, periodically
- * re-reading the code to make sure it still made sense.
- *
- * HOLD is a stack to hold arguments popped from the operand stack
- * before being passed to operator functions. This facilitates
- * argument passing by cracking the hold stack array (since the hold
- * stack should be at most one segment. The desired objects from the
- * operand stack may span a segment boundary, but in the hold stack,
- * they are rooted (so we the stack as an array, so we can select
- * (switch) a function call based on the number of objects).
- *
- * At one time HOLD was a special entity, as were all of the
- * stacks. But it is now referenced directly in the context struct, as
- * are all of the stacks.
+ * @section design_stacks Stacks
  *
  * @image html stack.png
  * @image latex stack.eps
  *
- * @section xpost_co Composite objects
+ * Stacks are chains of fixed-size segments -- a thousand objects each
+ * -- living in the memory files, each segment an entity with a row of
+ * its own, naming its neighbours by entity number. In the figure,
+ * @c nextseg is that link, and @c top counts how many slots of the
+ * segment are in use; the topmost value of the whole stack lives in
+ * the last segment at slot top-1. The root segment also names the
+ * segment currently holding the top, so reaching the top of a deep
+ * stack costs no walk, and a segment emptied by popping is kept
+ * chained for the next push to move back into rather than being
+ * given up.
  *
- * Array, String and Dictionary functions now come in 2 flavors, a
- * "raw" version which expects to have the mfile specified, and a
- * "friendly" version which interprets the BANK field in the tag to
- * determine whether to look in the local or global VM.
+ * The operand, execution, dictionary and hold stacks belong to the
+ * context, not to a memory file, so contexts sharing memory keep
+ * independent execution state. The hold stack is a working area the
+ * operator dispatch moves arguments into: bounded to one segment, it
+ * can be read as a flat array, which is what lets a C operator
+ * receive its operands as ordinary arguments. The save stack, by
+ * contrast, belongs to the bank itself -- what it records is the
+ * bank's history, not any context's.
  *
- * - Raw array functions begin with "arr".
- * - Banked array " " " "bar".
- * - Raw dictionary " " " "dic".
- * - Banked dictionary " " " "bdc". (not thrilled with this one)
- * - Raw string " " " "str".
- * - Banked string " " " "bst".
+ * Pushes and pops resolve the segment chain as they go, but the
+ * common runs are batched: a run of pushes resolves the root and top
+ * segment once and copies the whole run through held pointers, and
+ * @c roll, @c copy and @c counttomark snapshot the top run in one
+ * pass, so each is linear in the depth it touches.
  *
- * Perhaps the banked ones should have normal names, and the "raw"
- * ones should have funky names. (cf. Murphy's Law)
+ * @section design_names Names
  *
- * @section xpost_sr Save and restore
+ * Names are interned: the characters are stored once per bank, and a
+ * name object carries only an index. Each bank holds a ternary search
+ * tree mapping strings to indices and a name string stack holding the
+ * reverse mapping, both as special entities. All tree nodes live in
+ * one entity and name each other by node number, exactly as objects
+ * name storage by entity number, so the tree survives the arena
+ * moving like everything else. An out-of-band terminator ends a name
+ * inside the tree, so a NUL byte is an ordinary name character, as
+ * @c cvn requires.
  *
- * The save stack holds save-records with two entities, the source and
- * the copy. restore merely has to exchange the addresses of the two
- * entities. All array and dictionary write operations ensure that the
- * memory is saved at the current level before writing. This should be
- * more efficient than any of my previous drafts. "True" copy-on-write
- * and no pointer-chasing.
+ * Interning consults the local bank first, then the global, and the
+ * order is load-bearing: the same spelling may be interned in both
+ * banks, and the two are different objects with different indices --
+ * different dictionary keys. System names are interned globally at
+ * boot (the operator table lives in the global bank and records its
+ * names by global index); a name a program makes goes wherever the
+ * VM mode says. A name once interned is never given back: names are
+ * identities, and the cost of keeping them is the string and a
+ * node per character, once.
  *
- * Arrays ("ar") and dictionaries ("di") are automatically copied
- * before writing if the save-level has risen, giving cheap
- * 'save's. 'restore' has an easy job of popping the save-stack and
- * exchanging the addresses in the memory-tables: cheap 'restore's!!
+ * The name-not-found answer is itself a name: index zero of the
+ * local stack is a distinguished bogus name, so the machinery can
+ * pass "no such name" through channels that carry names without a
+ * side channel, and a correct interpreter never shows it to a
+ * program.
  *
- * @section xpost_gc Garbage collection
+ * A lookup that misses both trees -- the first interning -- copies
+ * the characters out of virtual memory before inserting, because
+ * insertion allocates and the characters being interned may
+ * themselves live in the arena that allocation may move. The search
+ * itself allocates nothing and reads the caller's bytes in place.
  *
- * The garbage collector module ("gc") implements a simple (?)
- * mark-sweep algorithm. It operates on a per-mfile basis. Local VM is
- * collected, and so is global VM. A collection marks both banks in one
- * pass -- an object in one may be named from the other -- and then
- * reclaims whichever banks it was asked for. All contexts sharing an
- * mfile must be traversed in the /mark/ phase.
+ * @section design_dicts Dictionaries
  *
- * I've tried to keep the algorithm very simple, because the memory
- * interface itself is so complicated. Even conceptually simple
- * operations like copying a pointer from the free list get pretty
- * involved, eg.
+ * A dictionary is an open-hash table over key/value record pairs,
+ * sized to an odd count with at least one slot always empty so a
+ * probe can terminate on null. The internal table is allocated a
+ * quarter larger than the requested capacity and grows by doubling,
+ * so the load factor stays under a half. Three lengths are kept
+ * deliberately distinct: @c length is the pairs in use, @c maxlength
+ * is the capacity the program asked for, and the internal size is
+ * neither -- it is what full-and-grow decisions read.
  *
- * @verbatim
-memcpy(mem->base+z, mem->base+adrent(mem,e), sizeof(unsigned));
-   @endverbatim
+ * Keys hash over exactly the fields their own type occupies -- a
+ * composite over its entity, size and offset; a number over its
+ * bits; a name over its index and bank -- multiplied out by the
+ * golden-ratio constant. Hashing the whole object regardless of type
+ * is the classic mistake this avoids: fields a type does not use are
+ * padding, and padding hashes forty thousand distinct numbers into
+ * seventeen buckets. Probing is linear with an inlined name
+ * comparison, names being most keys.
  *
- * This line copies the "pointer" (unsigned) value indicated by the
- * entity e into the memory "pointed to" by the "pointer" z.
+ * Growth does not move the dictionary the program holds: a new table
+ * is built at twice the capacity, every pair re-entered, and then the
+ * two entities exchange storage, so every existing reference to the
+ * dictionary now reaches the bigger table. Deletion re-slots the
+ * probe cluster following the hole (Knuth's Algorithm R), so nothing
+ * becomes unreachable behind it. Both writes run the copy-on-write
+ * check first, which is the whole of the dictionary's part in save
+ * and restore.
  *
- * The free list head is in special entity FREE in mtab[0]. Its size
- * is reported as 0, but the adr points to an unsigned int value which
- * holds the ent number of the next element of the the free list. An
- * ent number of zero terminates the list.
+ * @section design_save Save and restore
  *
- * It's there. It compiles. We'll see how well it works as I keep
- * building. Most allocation calls do a traversal of the free-list, so
- * the machinery is being exercised even though the testing is not
- * very comprehensive yet.
+ * @c save is copy-on-write. The save stack holds records pairing a
+ * source entity with its copy; the first write into an array or
+ * dictionary above the current save level copies it once, and
+ * @c restore exchanges the two addresses in the table -- one exchange
+ * per touched entity, no pointer chasing, nothing at all for what was
+ * not written. Global memory is exempt (PLRM 3.7.3): what a program
+ * puts there survives restore and is reclaimed by collection alone,
+ * which is why the collector covers both banks.
  *
- * @section xpost_oh Operator handling
+ * Two refinements keep restore proportional to what it must actually
+ * do. The record stacks that back each save level are pooled per
+ * level rather than allocated per save, so a job that saves and
+ * restores per request does not spend a stack's worth of memory every
+ * time round. And the sweep that closes files opened since the save
+ * -- required by the language -- is driven by a census rather than a
+ * walk: each bank keeps a count of live file entities by birth stamp
+ * (the save depth at their creation, kept in the file row's mark
+ * field, which files, exempt from copy-on-write, do not otherwise
+ * use), so a restore knows without walking the table whether any file
+ * was born above the restored depth, and the walk runs only when it
+ * will find something.
  *
- * Xpost3 continues to use the same bizarre twisted loop to check the
- * stack contents for a combined typecheck/stackunderflow-error +
- * polymorphic variadic dispatch, copying argument from the postscript
- * stack to the operator-function's calling frame. It's all very
- * perverse and clever.
+ * An embedder serving many jobs from one context can also disable the
+ * per-job VM snapshot entirely; the interpreter otherwise brackets
+ * each job in a save/restore of its own.
  *
- * But profiling xpost2 showed a big bottleneck with all this
- * trickery. So a possible optimization is to replace the
- * operator-signature type with a dedicated function pointer to a
- * function that implements the desired stack-checking. This would
- * factor-out quite a bit of redundant computation, I think. For
- * instance, most operators are not defined to accept the `anytype`
- * pattern, therefore most operators would check the stack faster by
- * omitting this clause.
+ * @section design_gc Garbage collection
  *
- * This will likely require some truly heinous name-mangling.
+ * The collector is mark-sweep over the memory files, with the root
+ * set enumerated bank by bank in doc/ROOTS: the save stack of each
+ * bank, the stacks of every context sharing it, and the special
+ * entities. The mark phase walks an explicit worklist rather than the
+ * C stack, so a deep object graph costs queue entries rather than
+ * stack frames.
  *
- * @section xpost_merge Bringing it all together
+ * Marking covers the banks the sweep will read, no more. A collection
+ * of both banks walks across the boundary, because an object in one
+ * may be named from the other. A collection of local memory alone
+ * stays in the local bank and stops at any reference that leaves it:
+ * what lies beyond is not swept, and local may name global freely, so
+ * crossing would walk the whole global graph -- some fifteen thousand
+ * composites of frozen library, against a few hundred live local
+ * objects -- to protect storage the sweep never touches. The
+ * references the other way are enumerable: a global container may
+ * hold no reference into local memory except the local dictionaries
+ * systemdict names through sanctioned windows, and those are marked
+ * as anchors whichever way the walk is asked for. The register of
+ * windows is held to the code, and each anchored name to survival of
+ * a local-only collection, by tests/check-global-local-anchors.sh.
  *
- * New itp structure holds context table ctab, and mfile tables ltab
- * and gtab. New special entry CTXLIST lists all contexts associated
- * with the mfile.
+ * Collections are paced two ways, both cheap to ask. Bytes: an
+ * allocation debit against a threshold (four megabytes by default --
+ * a measured value: wall time is flat from about a megabyte up, and
+ * a much larger threshold buys no time while holding several times
+ * the memory; XPOST_GC_THRESHOLD and @c setvmthreshold override it). Entity numbers: past a table-size watermark, a
+ * per-allocation budget is spent so a job that churns rows without
+ * churning many bytes still collects before the table saturates.
+ * Either way the allocator only marks a collection pending; it is
+ * taken at the interpreter's safe point between operators. The
+ * collector carries its own diagnostics -- an independent
+ * reachability verifier, a cross-bank scan and a census, switched on
+ * by environment variables -- which the structural tests run and
+ * require silent.
  *
- * So the garbage collector's root-set for any given mfile is the VS
- * (the save stack) (only one for each mfile, shared contexts are
- * blocked during save/restore sections), and the stacks from each
- * associated context. It has also been made bank-aware. A local
- * collection marks both banks when it is asked for both, so that an
- * object one bank holds in the other is not taken for garbage; a bank is
- * reclaimed only by a collection that marked it.
+ * @section design_free The free list
  *
- * Context IDs, `cid`s, are generated sequentially, starting from 1.
- * They are designed so that `(cid - 1) % MAXCONTEXT` will yield
- * the index in the ctab of the context. So the allocator increments
- * until this formula yields an empty slot. This lets us re-use slots
- * while still maintaining unique IDs for all processes in the history
- * (until the `unsigned` wraps TO//DO fix this timebomb -- not a
- * problem, see http://programmers.stackexchange.com/questions/199635/
- * ).
+ * Storage a collection recovers goes on free lists bucketed by size
+ * class: sixteen buckets, each covering a doubling of sizes, heads
+ * kept in the FREE special entity's data area. Freeing pushes in
+ * constant time. An allocation searches its own class best-fit but
+ * examines at most eight entries there before taking a guaranteed
+ * fit from a higher bucket or fresh space -- the bound matters:
+ * without one the cost of allocating is proportional to everything
+ * the job has ever released, a quadratic product on churny jobs, and
+ * with it an allocation's search is constant. An oversized block serves a smaller request by
+ * carving the tail off rather than carrying the slack for the life
+ * of the allocation.
  *
- * Just learned from the PLRM that names should live in local-vm, not
- * global. But I'm thinking I'll keep a global table for the system
- * names. Since the optab lives in global-vm, I want operator names to
- * be accessible in the same mfile. But "user" names should be
- * allocated in local vm. This means names need to be banked just like
- * composites.
-*/
+ * The links live in the entity rows, not in the freed bytes. The
+ * storage a freed entity stands for holds nothing the allocator
+ * reads, so a stale write into freed storage can spoil no link, a
+ * sanitizer can be told the whole extent is off limits rather than
+ * all but its first word, and pages lying entirely inside free
+ * blocks can be given back to the operating system without taking
+ * the chain with them. A corrupt node found during the search --
+ * a number out of range, a row that is not free -- empties all
+ * sixteen heads and asks for a collection to rebuild them, rather
+ * than following the corruption.
+ *
+ * @section design_return Compaction, and giving storage back
+ *
+ * The immediate forms of @c vmreclaim collect and then compact. An
+ * operand of 1 collects local memory at once and marks the local
+ * arena for compaction; 2 collects both banks and marks both arenas
+ * (the negative operands and zero only govern which banks automatic
+ * collection may sweep, per the language). Compaction itself runs at
+ * the interpreter's next safe point, not inside the operator: the
+ * live entities are sorted by address and slid
+ * down over the free blocks between them, so the free storage
+ * gathers into one run at the top, and the cursor comes back to
+ * where live storage ends. This is writable at all only because
+ * every block in the arena carries a table row -- a block without
+ * one could not be seen and would be slid over -- and the one field
+ * that says where an entity's bytes are is the row's, so moving an
+ * entity is rewriting one field as the bytes move.
+ *
+ * The blocks slid over stop existing: the lists that named them are
+ * emptied, and their rows -- rows now describing nothing -- go on a
+ * list of their own to be reissued with fresh storage. Without that
+ * second list a job that fragments and compacts repeatedly would
+ * spend the whole range of entity numbers without spending any
+ * memory.
+ *
+ * Then the pages under the freed run go back to the operating system
+ * in a single call, each host by its own route:
+ *
+ *   Linux          madvise MADV_DONTNEED
+ *   Windows        DiscardVirtualMemory
+ *   other POSIX    the range re-mapped in place, MAP_FIXED
+ *
+ * The portable route serves Linux too at about three times the cost
+ * of the native call, and XPOST_RETURN_REMAPS asks for it anyway,
+ * which is how it is exercised on hosts that would not otherwise
+ * take it. All three leave the range writable, so nothing need be
+ * asked before the storage is used again; what a discarded page
+ * costs is the fault to fill it back in, paid by whichever later
+ * allocation touches it. Storage is returned a page at a time,
+ * which is not the grain the region is handed out in (on Windows the
+ * two differ sixteenfold), and the two grains are kept as separate
+ * numbers.
+ *
+ * Compaction happens only at the interpreter's outermost loop, never
+ * inside the operator that asked: moving the arena invalidates every
+ * pointer derived from an entity's address, an operator runs
+ * underneath machinery holding such pointers, and so does every
+ * nested procedure run, each holding the storage of the array it is
+ * stepping. Only the outermost loop has none of those below it, and
+ * tests/check-compaction-safe-point.sh holds the code to that. A
+ * reclaim asked deep inside a procedure waits for the procedure, and
+ * loses nothing by waiting: the program asked for a reclaim, not for
+ * a moment.
+ *
+ * After compaction @c vmstatus reports where live storage ends. In
+ * ordinary running its @c used figure is a cursor that only rises --
+ * reuse from the free lists does not move it -- so it equals live
+ * bytes only immediately after a compaction. The trade is stated
+ * rather than hidden: compaction costs moving every live byte now
+ * and faulting pages back later, and a program asking for it is
+ * saying it would rather pay that than hold the memory.
+ *
+ * @section design_loop The interpreter loop
+ *
+ * The outermost loop runs one executable object per turn, and
+ * between turns does the work that must not happen inside one: take
+ * a pending collection (reading and clearing the pending flag of
+ * both banks -- a job may allocate in either), take a pending
+ * compaction, surface a refused stack push as the @c VMerror it is,
+ * hear an interrupt raised from a signal handler, and every
+ * thousand or so turns check the stacks against their ceilings so a
+ * runaway recursion is reported once rather than per turn.
+ *
+ * Dispatch by type is a direct switch -- operators to the operator
+ * dispatcher, procedures to the procedure walker, names to
+ * resolution, literals pushed -- because a switch predicts where an
+ * indirect jump through a table does not; the table survives for the
+ * rare types.
+ *
+ * Name resolution goes through a per-context cache keyed by name and
+ * bank, validated by a generation counter that every operation
+ * changing what a name can resolve to bumps: dictionary puts and
+ * undefs, begin and end, restore, and clearing the dictionary
+ * stack. A hit costs an array read and a generation compare; a miss
+ * walks the dictionary stack segments topmost-first and stamps the
+ * answer. A @c def into the topmost dictionary rewrites the one
+ * cache entry in place instead of invalidating the world, since its
+ * effect on the visible binding is deterministic. When a collection
+ * of one bank runs, only entries whose value lives in the collected
+ * bank are retired -- for a local collection the frozen global
+ * library, which is most of what resolutions land on, stays cached;
+ * this matters to a serving process that collects at every job,
+ * which otherwise refilled the cache with a dictionary-stack walk
+ * per name afterwards.
+ *
+ * The procedure walker is where the interpreter spends its life, and
+ * it is aggressively flattened. Stepping a procedure resolves the
+ * array's storage and the stack segment pointers once and steps
+ * elements in a C loop rather than re-entering the interpreter per
+ * element. Literals go straight to the operand stack. A name
+ * resolving through the cache to another procedure is stepped in
+ * place -- a procedure call without surfacing -- and @c if and
+ * @c ifelse continue into the chosen branch in the same frame.
+ * Twenty operators are executed inline when their operands sit in
+ * the operand stack's top segment: the stack shufflers (pop, exch,
+ * dup, index, roll), integer add, sub and mul with overflow falling
+ * back to the general case, the six relationals, the conditionals,
+ * def, array get and put, and type. Every fused body reuses the
+ * operator's own shared core -- the same access checks, the same
+ * range-preserving arithmetic, the same comparison -- and any
+ * precondition failure falls through to the generic path, keeping
+ * error behaviour identical; a structural test extracts the fused
+ * list from the source and requires an equivalence case for each
+ * (152 cases), so an operator cannot join the fast path without
+ * joining the proof. The walker re-derives its cached pointers
+ * whenever either arena has moved, roots the element being executed
+ * so an anonymous procedure is not swept mid-element, and repeats
+ * the collection safe point and the push-refusal check inside the
+ * loop so a long fused stretch starves neither.
+ *
+ * Operator dispatch matches the operand stack against up to eight
+ * typed signatures per operator: an arity check, then per-operand
+ * type patterns (exact, any, number, float -- promoting integers to
+ * reals in place and rolling the promotion back if no signature
+ * matches -- and procedure). The matched signature's C function is
+ * called with the operands as ordinary arguments, moved as a block
+ * into the single-segment hold stack and cracked as an array. Two
+ * fast paths carry most traffic: a lone zero-operand C signature is
+ * called directly, skipping the counting and the move (nearly half
+ * the calls a rendering job makes are the looping operators'
+ * rescheduled step operators, which are exactly this shape), and
+ * the operand count is gauged from the top segment rather than by
+ * walking the whole stack, so the guard on every call is constant
+ * rather than O(depth). Operators implemented in PostScript occupy the same
+ * table with a procedure body in place of a signature; the
+ * dispatcher runs them by leaving a bracketed frame on the
+ * execution stack, so to a program they are operators -- the
+ * self-redefinition idioms work -- while to the machinery they are
+ * procedures.
+ *
+ * @section design_scanner The scanner
+ *
+ * The scanner is an operator (@c token) like any other, and reads
+ * the full lexical language: radix numbers in bases 2 to 36 with
+ * overflow detected rather than wrapped, ASCII base-85 string
+ * literals with their five-to-four packing, and the binary token
+ * encodings -- fixed-format objects introduced by bytes 128 through
+ * 159 where a token is expected, covering binary object sequences,
+ * both byte orders of integers and fixed-point numbers, three
+ * string forms, homogeneous number arrays, and names by index into
+ * the standard system name table. The scanner's buffer is sized to
+ * the longest legal string literal a 16-bit length field can name,
+ * which base-85 z-runs can reach from modest input. Its conformance
+ * suite is adjudicated against two independent implementations,
+ * with the differences recorded.
+ *
+ * @section design_errors Errors
+ *
+ * The error mechanism bridges the two languages. The C side raises:
+ * an operator that refuses returns an error code, and the
+ * interpreter's error path unwinds the stacks to their depths at the
+ * innermost live wrapped call -- an operator leaves nothing behind
+ * when it refuses, neither the values its own body pushed nor the
+ * machinery's structures -- before anything is recorded. The
+ * PostScript side reports: err.ps installs the standard @c $error
+ * dictionary and the per-error handlers, and the handler snapshots
+ * the operand, execution and dictionary stacks into @c $error (the
+ * snapshot can be declined by clearing @c recordstacks), records the
+ * error's name and the offending command, and either prints the
+ * familiar banner or, when asked, emits the report as a binary
+ * object sequence. The program-visible error state lives in
+ * userdict, where the language's published shape puts it, while the
+ * machinery keeps its own reference beside it -- so a program may
+ * inspect, replace or extend error handling without being able to
+ * starve the machinery of it.
+ *
+ * Two guards keep failure failing safely. An error raised while an
+ * error is being reported is allowed -- handlers are programs too --
+ * but a cascade is bounded (four thousand and ninety-six deep)
+ * before the interpreter concludes the error machinery itself is
+ * broken and stops, so a corrupted handler cannot loop the process
+ * forever. And an interrupt is a flag raised from a signal handler
+ * -- one volatile word, nothing else touched in signal context --
+ * which the outermost loop turns into the language's own
+ * @c interrupt error at the next safe point, so an interrupt lands
+ * between operators like every other intervention, never inside
+ * one.
+ *
+ * @section design_jobs The job layer and the interactive top level
+ *
+ * Above the interpreter proper sits a small job layer, in
+ * PostScript. A job is bracketed: the server encapsulates each job
+ * in a save/restore of its own (an embedder can decline the
+ * snapshot), runs it, and routes a job that ends in an error
+ * through one handler that reports and cleans up, so a failed job
+ * leaves the next job a clean interpreter. The language-shaped
+ * furniture lives where the published shape puts it: statusdict
+ * (host and device status a program may change), serverdict with
+ * @c exitserver (the escape from job encapsulation), and
+ * UserObjects -- all userdict members by convention, and all local
+ * dictionaries reached through systemdict by the machinery. An
+ * interactive run adds the executive: a prompt loop that scans,
+ * executes and reports per statement, layered on the same job
+ * machinery rather than beside it. The quiet flag a run starts
+ * with governs the boot narration and is part of what a VM image
+ * carries, which is why an image and the run reading it must agree
+ * about it.
+ *
+ * @section design_contexts Contexts, scheduling and embedding
+ *
+ * Execution contexts are threads of PostScript execution inside one
+ * interpreter, held in its context table; they are not multiple
+ * interpreters. The @c fork operator shares both memory files with
+ * the child and gives it stacks of its own; context identifiers are
+ * issued so a slot can be reused while every identifier in the
+ * process's history stays unique. Blocking I/O is a scheduling
+ * event: an operator that would block returns the loop an
+ * i/o-blocked verdict, and the loop switches to another runnable
+ * context -- and context validation happens exactly here, once per
+ * switch, rather than once per object executed.
+ *
+ * The same loop is the embedder's seam. A run can be created with
+ * showpage semantics that suspend the program just before showpage
+ * returns, handing control back to the caller with the page's
+ * raster available; calling run again resumes the suspended program
+ * for the next page. The interpreter can also run a nested
+ * PostScript call from inside C -- the graphics machinery does this
+ * constantly -- bounded at a stated depth and refused with
+ * @c limitcheck past it. Every route by which the machinery calls
+ * back into program code -- a pattern's paint procedure, a Type 3
+ * build procedure, a tint transform, an image's data source or
+ * decode, a spot function, a transfer function -- goes through one
+ * shared bracket, so the bookkeeping that makes a callback safe
+ * (what to restore, what errors mean, what the callback may see) is
+ * written once rather than once per callback kind. The window
+ * devices hang their event handling off the loop's idle hook, which
+ * is also why a process runs at most one window device: the loop
+ * has one seat for a handler needing constant attention.
+ *
+ * @section design_devices Devices
+ *
+ * A device is a dictionary of named methods -- a small systemdict
+ * for marks. The raster formats are classes implemented in
+ * PostScript over one shared method suite, specialised per format
+ * by a class generator: grayscale and colour are parameterisations,
+ * bilevel and TIFF are copies with emission overridden. A class can
+ * be subclassed, overriding as much or as little as it needs. An
+ * instance is a copy of its class with the page's dimensions and
+ * the run's requests written over it.
+ *
+ * The compiled drivers -- PNG, JPEG, the embedder's raster and BGR
+ * buffers, the window devices -- install C operators over the same
+ * shape: each overrides the marking methods (pixel put and blend,
+ * rectangle fill, and for the window devices line and polygon fill
+ * too), Create, Emit and Destroy, and keeps the class's PostScript
+ * for everything that runs once per page. A device that keeps a
+ * buffer of its own rather than the class's array of rows must
+ * override every inherited method that would reach for that array
+ * -- including the band loop's row mover -- because the inherited
+ * method would answer for rows the instance does not carry.
+ * Declarations are restated rather than inherited where a copy
+ * would otherwise carry its parent's answer: whether a page may
+ * arrive in bands, and what a row costs, are stated by every class
+ * for itself, and a structural test holds every class to having
+ * said something.
+ *
+ * A compiled device's C-side state -- its raster, a writer's
+ * accumulated content -- lives outside virtual memory, and what the
+ * instance dictionary holds under /Private is a handle: a number
+ * issued by a registry that records which block, of what kind and
+ * size, was issued to which dictionary. Resolution is checked at
+ * every step -- a handle naming no live block, a block of another
+ * kind or size, or a handle copied into a dictionary it was not
+ * issued to resolves to nothing and the reader reports rather than
+ * follows -- so a program that forges or moves the number gets a
+ * refusal, never an address. Each block carries its release with it
+ * from the moment it is issued, and is given back when the entity
+ * carrying the handle is reclaimed, from whichever of the three
+ * routes reaches it first (the sweep, an explicit free, teardown).
+ * No raw pointer is ever held in a
+ * device dictionary, and the same property is what makes VM images
+ * refusable: an image is declined at the write if any entity carries
+ * a handle, because a handle stands for nothing in another process.
+ *
+ * Configuration flows one way. A device's tunable features are
+ * device parameters set through @c setpagedevice -- unknown keys
+ * and out-of-range values are refused loudly, against a roster each
+ * driver states beside the code that reads the knob -- or from the
+ * command line with @c -p, or by an embedder before any run. The
+ * early settings land in the host dictionary and are copied onto a
+ * driver's class as the class is built, so the call means the same
+ * thing whenever it is made; a page-device request always wins,
+ * because its keys are written over the class's entries as the
+ * instance is made; and one pending request is armed at a time, so
+ * a driver reload cannot take a request armed for another device.
+ * The roster is gathered from what this build compiled in, so a
+ * knob belonging to an omitted driver is not offered. Which devices
+ * exist, and what their selection strings mean, is doc/MANUAL's
+ * table -- machine-read by a test, so the roster cannot drift from
+ * the drivers.
+ *
+ * @section design_imaging The imaging pipeline
+ *
+ * Painting resolves marks into device space above the device, so
+ * every device -- compiled or PostScript, painting or recording --
+ * is asked the same small questions: put or blend a pixel, fill a
+ * rectangle, fill a polygon's spans. The span machinery is
+ * compiled: edges are sorted with the comparison written in, a
+ * fill's cost is proportional to total edge height rather than
+ * edges times page height, and the settled spans go to the device
+ * through the compiled rectangle fill without an interpreted loop
+ * between them.
+ *
+ * Images take one of two routes. Where the mapping is axis-aligned,
+ * the clip is rectangular and the device keeps rows, each image row
+ * is written through one compiled row blitter, with the colour
+ * pipeline baked ahead of the loop: a one-component space bakes
+ * decode, conversion and transfer into a single 256-entry table by
+ * running each possible sample through the interpreter's own
+ * machinery once; multi-component spaces take per-component decode
+ * tables and apply transfer after conversion. The blitter resolves,
+ * per sample and per device row, the run of device columns that
+ * sample covers, and states the run either into the device's rows
+ * or -- for a device keeping its own buffer -- as one call to its
+ * compiled rectangle fill; masks arrive as bits or ranges saying
+ * which pixels to leave unpainted. Everything else -- rotated
+ * images, exotic clips, devices without rows -- takes the general
+ * route, one rectangle per sample, through the same operators as
+ * any other mark. The two routes end at the same two sinks, which
+ * is what keeps a page painted directly and a page replayed from a
+ * record byte-identical.
+ *
+ * Halftoning asks one compiled question -- ink or no ink for this
+ * device pixel at this coverage -- from one site, with the
+ * threshold cell's geometry derived once and its names resolved
+ * once rather than per span.
+ *
+ * @section design_colour Colour, patterns, shadings, halftones
+ *
+ * Colour spaces are implemented as a family in the PostScript
+ * graphics layer: the device spaces, the CIE-based spaces, indexed
+ * and separation spaces, each knowing its component count, its
+ * reduction to the device's native space, and its role on the image
+ * path. Setting a colour reduces it through one walk of that
+ * pipeline rather than one walk per question asked later; on the
+ * image fast path the whole pipeline -- decode, conversion,
+ * transfer -- is baked into lookup tables before the first sample,
+ * which is what lets a million samples pay the pipeline's cost
+ * once. The family's shape is held by a facts register: every
+ * space's declared properties are compared against the
+ * implementation by a gate, in both directions, so a space cannot
+ * be added or changed without the register saying so.
+ *
+ * Patterns paint their cells by running the pattern's paint
+ * procedure once per cell -- program code, through the shared
+ * callback bracket -- with the cell's marks going to the device
+ * like any others (and into the record, when the page is recorded,
+ * once per cell: a pattern's cells fall under no bitmap-sharing
+ * rule, because each cell is a fresh run of a program). Shadings
+ * subdivide their geometry to a stated target -- half a device unit,
+ * with a cap on the halvings -- so their smoothness is a function of
+ * the device resolution rather than a constant chosen once.
+ * Halftone screens are threshold cells derived once per screen
+ * change: the cell's geometry is computed at one site whatever
+ * shape described it, the per-pixel question is asked at one
+ * compiled site, and a screen in force is state a record carries
+ * across band and page boundaries rather than a mark inside them.
+ *
+ * @section design_vector The vector writers
+ *
+ * Three devices write structure rather than pixels: pdfwrite,
+ * svgwrite and dscwrite. Each is a PostScript class implementing
+ * the same driver contract as the rasters -- they receive the same
+ * resolved marks, which is what keeps their output geometrically
+ * identical to the rendered page -- and each holds its page whole:
+ * banding is a raster economy, and a writer's page is text. The
+ * document being accumulated lives outside virtual memory, in
+ * blocks named by content handles, for the same reason a raster
+ * does: a restore must not tear a half-written document, and
+ * @c vmstatus should not bill the program for the writer's own
+ * buffers. The per-byte work is compiled -- flate compression and
+ * base64 encoding are C helpers -- while the structure (objects and
+ * cross-reference tables, elements and attributes, structuring
+ * comments) is PostScript. The writers' process-wide bookkeeping is
+ * allocated once per process rather than per document, so a process
+ * serving many documents does not grow by a document's bookkeeping
+ * per request. dscwrite emits the
+ * structuring conventions the DSC library parses -- the two are the
+ * write and read halves of the same convention, and deliberately do
+ * not share code: a writer that read its own output would only
+ * prove it agrees with itself.
+ *
+ * A fourth structural device, bbox, renders nothing and reports the
+ * bounding box of what would have been painted. It declares the
+ * fill-path method so it reads extents off the path itself --
+ * exact, and independent of the device resolution -- rather than
+ * accumulating the marks' own bounds.
+ *
+ * @section design_banding The recorded page, and banding by default
+ *
+ * A raster costs width times height whatever is painted on it.
+ * xpost's answer is to hold a page as the marks that made it -- a
+ * record -- and to play those marks into the device a band of rows
+ * at a time, so the pixel storage for a page is bounded by a budget
+ * rather than by the page.
+ *
+ * The record lives outside virtual memory: @c restore does not
+ * reach it and @c vmstatus does not count it. The recording device
+ * implements the driver contract but, instead of painting, writes
+ * down what it was asked to paint. It declares exactly the five
+ * marking methods it records -- pixel put and blend, line,
+ * rectangle, polygon -- and no optional method, so everything above
+ * the device resolves clips, outlines and page resets into those
+ * five before they arrive; a recorder declaring more would put
+ * marks beyond the record's reach. An entry is one of nine kinds:
+ * the five marks, a placed picture, a screen cell, a glyph mask,
+ * and a placed drawing (a form). Every entry carries the run of
+ * rows it can reach, conservatively, so a band replay visits only
+ * the entries whose range meets the band.
+ *
+ * Bulk pixels follow one rule: a bitmap produced once is held once
+ * and re-emitted per band. A picture is one entry naming its
+ * samples, transform and decode; a glyph is one entry naming a
+ * coverage mask, shared on its bytes; a screen cell is state, not a
+ * mark -- played in order, exempt from the row filter, surviving
+ * the page boundary. A recorder is not told when a page ends: it
+ * reads the boundary off the marks (a page reset arrives as a
+ * covering rectangle), which is what keeps @c copypage's
+ * transmit-without-erase meaning what it says.
+ *
+ * Whether a page bands at all is one number against another. A
+ * class declares what a row of its raster costs; a run has a byte
+ * budget (four megabytes unless \--band-bytes names another --
+ * above the ordinary sheets' rasters, so letter and A4 paint
+ * directly and a tall strip bands); the band height is the budget
+ * over the row cost, and a page bands exactly when the budget buys
+ * fewer rows than the page has. The decision is taken where a
+ * device is made, at the page that device is to hold. None of this
+ * is a page-device parameter -- the language bars a program from
+ * choosing how many times its marks are played -- but a program may
+ * ask: @c currentsystemparams reports the budget and the band
+ * height in force. An /ImagingBBox declaration narrows the page to
+ * the rows it can reach on both routes, whole rows being what a
+ * row-holding device can drop.
+ *
+ * The band loop moves one raster rather than making one per band --
+ * a retired device's rows are not given back, so a device per band
+ * would end the loop holding the whole page. The rows array stays
+ * the height of the page and the band's rows are the only ones with
+ * width, so the row blitter needs no offset arithmetic and a
+ * zero-width row is how a device says it holds no pixels there. A
+ * band whose only mark is the page's own clearing colour, covering
+ * it entirely, is not materialised at all. Replay is batched -- a
+ * few hundred compiled marking calls per turn of the interpreter,
+ * so collections and interrupts still get their safe point -- and a
+ * method that is a procedure rather than an operator is played by
+ * the interpreter itself, at two turns per mark.
+ *
+ * The correctness contract is byte identity: every gate that
+ * compares pages renders the same page whole and in bands, down to
+ * band heights of one row, and requires the outputs identical byte
+ * for byte. Scan conversion is outside the language, so the
+ * whole-page render of the same tree is the only oracle there is --
+ * and the band route is held to it exactly. The cost is also
+ * stated: a page that is almost entirely marks costs about twice as
+ * much played in bands as painted directly, and a gate holds the
+ * ratio at 23/10 -- a ratio, not a time, because a time would be a
+ * statement about the machine the suite runs on.
+ *
+ * @section design_spill Where a record's marks are kept
+ *
+ * A record is held in memory while it is worth less than the raster
+ * banding saves, and goes to a scratch file past that
+ * (\--spill=auto|never|always). The weighing is O(1): a running
+ * count of the record's blocks maintained as they are taken and
+ * given up, asked every sixty-four marks and at any entry big
+ * enough to cross the threshold alone -- never a walk over the
+ * masks and picture tables, which, asked per mark, would multiply
+ * to masks-times-marks on a page of text.
+ *
+ * The scratch file has no name: created and unlinked in the same
+ * breath (delete-on-close on Windows), it is unreachable through
+ * the file machinery and the path sandbox has no path to confine.
+ * Whether scratch space exists is settled by making the file and
+ * writing to it when the device is made -- a permissions check
+ * would answer yes for a full filesystem. One stream in mark order,
+ * one write buffer and one read window (64 KiB each): order is what
+ * a record is for, and a chain per band would cost it. What one
+ * stream costs is a pass over the file per band; a shallower band
+ * is paid in reading rather than in memory. Everything the record
+ * holds goes to the file -- samples, masks, cells -- and what stays
+ * resident is the buffers, one small entry per distinct bulk item,
+ * and the tables a picture is decoded through.
+ *
+ * Failure never yields a short page. A page missing a mark looks
+ * like a page, so a record refused a mark -- a write that failed, a
+ * read that came back short -- remembers, refuses every mark and
+ * every replay after it, and reports @c ioerror rather than
+ * @c VMerror: a caller told memory ran out when a filesystem filled
+ * looks in the wrong place. A run under @c auto that cannot have a
+ * scratch file is told once and goes on holding marks in memory;
+ * only @c always makes no-scratch-space fatal.
+ *
+ * @section design_fonts Text
+ *
+ * Text runs through three kinds of font: host faces found by
+ * fontconfig and rendered by FreeType, procedural (Type 3) fonts
+ * described in PostScript, and Type 42 fonts carrying a TrueType
+ * program. The machinery resolves its names once, as the operators
+ * install, rather than per call: a show reaches the graphics state,
+ * the font, the device and the colour through references resolved at
+ * install time, where resolving them by name would cost tens of
+ * dictionary walks per string painted.
+ *
+ * Three caches back the path. Faces: opening a face costs the file
+ * and the derived objects, so faces are cached per font name, 32
+ * entries, least-recently-used -- a name past the cache costs a
+ * reopen, never a wrong font, and eviction cannot pull a face from
+ * under a font that holds it, every font dictionary carrying its
+ * own claim. Rendered glyphs: keyed by face, glyph, the exact
+ * fixed-point transform and size, bounded in bytes and in count
+ * (the language's cache parameters read and set the real bounds),
+ * evicted least-recently-used; a glyph larger than the per-glyph
+ * ceiling renders uncached rather than evicting the world. Type 3
+ * glyphs: a build procedure's output is captured once as a coverage
+ * mask through @c setcachedevice and re-placed thereafter, keyed by
+ * a font serial that lives in C precisely so a @c restore cannot
+ * wind it back while the masks it keys live on; the cache serves
+ * only where placing the mask is exactly what painting would have
+ * done -- within a clip that holds the whole raster, never under a
+ * pattern -- and builds direct otherwise. Small stencil masks
+ * additionally cache their resolved runs by content, because
+ * driver-generated bitmap text paints the same few masks over and
+ * over.
+ *
+ * The face library is optional by policy, not by accident: a build
+ * without FreeType (-Dfreetype=disabled, or \--without-freetype) is
+ * a font system with no faces, not one with a hole. Every font
+ * operator exists; a name that needs a face is refused with
+ * @c invalidfont at @c findfont, a font program that needs one at
+ * @c definefont; and Type 3 fonts still define, still answer
+ * @c findfont, and render byte-identically to the full build. The
+ * faceless configuration cannot arrive silently -- a missing
+ * library fails configuration unless the faceless build was asked
+ * for by name -- and it runs in a CI lane of its own.
+ *
+ * @section design_resources Resources
+ *
+ * The resource machinery is the language's registry of named
+ * instances per category, held in global memory. A category is two
+ * things made together -- a table of its instances, and its
+ * implementation dictionary, itself an instance of the /Category
+ * category -- so defining an instance in /Category is what brings a
+ * new category into existence, exactly as the language specifies
+ * programs may. Fonts are the busiest category: findfont resolves
+ * through the font directory and, for host faces, through
+ * fontconfig's substitution -- with the steering recorded so the
+ * suite can hold a name to the face it lands on -- and the
+ * encodings are resources like any other.
+ *
+ * @section design_files Files and filters
+ *
+ * Files are objects over a small method table, and filters are
+ * files layered on files, so everything that reads bytes reads them
+ * one way. The stream decoders hold to a strict end-of-data
+ * discipline -- a decoder consumes its marker at the read that
+ * meets it -- so layered and consecutive filters stay in step on
+ * the underlying stream. The method table carries an optional
+ * block-write beside the byte operations: the disk stream writes a
+ * device row as one call with one error poll, while filters keep
+ * the byte path and its semantics. Restore's obligation to close
+ * files created since the save is served by the birth-stamp census
+ * (@ref design_save); a stream is bound to its entity by the same
+ * handle registry as everything else outside VM, so a file entity
+ * cannot be reclaimed out from under an open stream, and a freed
+ * stream cannot be closed twice.
+ *
+ * @section design_forms Forms
+ *
+ * The language permits an interpreter to keep a form's output and
+ * substitute it for re-execution. What is kept is a record of the
+ * form's marks, not a raster: one execution serves every placement
+ * under the same linear transformation wherever it falls -- the key
+ * is the form and the linear part of the matrix, position
+ * deliberately excluded -- and a use is one placement entry, so a
+ * drawing placed twenty-five times costs one drawing, and nested
+ * forms cost each distinct drawing once rather than their product.
+ * Placement is bounded to a stated nesting depth, refused with
+ * @c limitcheck past it. A description is captured only where
+ * placing the marks is exactly what painting them would have been:
+ * nothing cut on the way in, every mark inside the box the form
+ * declares -- both checked, and a form failing either paints afresh
+ * at every use. The cache holds thirty-two drawings, evicting the
+ * oldest capture and destroying its record explicitly, a record not
+ * being anything virtual memory would give back.
+ *
+ * @section design_confinement Confinement and enforcement
+ *
+ * Three separable mechanisms, in order of strength. The path
+ * sandbox confines what the file operators may open, and is on by
+ * default. The access attributes of the language -- read-only,
+ * execute-only, no-access -- are enforced across arrays, strings
+ * and dictionaries, including on the interpreter's own fast paths,
+ * so a program's barriers hold everywhere. And the interpreter's
+ * internals are evacuated from the program-visible namespaces and
+ * its cross-boundary references are checked numbers rather than
+ * addresses -- entity numbers into tables, handles into a registry
+ * that verifies kind, size and owner -- so the classic corruption
+ * routes (a forged pointer in a device dictionary, a stale free, a
+ * link written through freed storage) resolve to refusals. The
+ * three are stated separately because they answer different
+ * questions; none is a claim that a hostile program is harmless,
+ * and the memory-safety work behind that question is ongoing and
+ * test-held.
+ *
+ * @section design_dsc The DSC library
+ *
+ * Document Structuring Conventions -- the @c %% metadata comments a
+ * conforming document carries -- are read by a second, independent
+ * library, libxpost_dsc, which parses a document's header and page
+ * table without executing it. The @c xpost_dsc program prints what
+ * the comments say; the @c xpost_view viewer uses the per-page
+ * offsets to render one page at a time. The interpreter itself
+ * never parses DSC -- comments are comments -- while the two output
+ * devices that emit DSC-conforming structure write it, which is the
+ * other direction.
+ *
+ * @section design_testing The testing architecture
+ *
+ * The suite is part of the design, and its architecture is what the
+ * rest of this page leans on when it says a rule is held. Around
+ * four hundred registered tests run at both object widths, in
+ * profiles from a fast gate to the full slow suite, and they divide
+ * into kinds with different jobs.
+ *
+ * Behavioural tests state what the language does, and never lock in
+ * a known deviation as if it were right: a deviation is recorded as
+ * a deviation, so conformance work burns down a list rather than
+ * fighting the suite. Byte goldens hold whole outputs -- rendered
+ * pages, error transcripts, listings -- so a refactor that changes
+ * nothing observable can prove it changed nothing observable, and
+ * the band-versus-whole identity is checked byte for byte down to
+ * one-row bands.
+ *
+ * Structural guards hold this page's kind of claim: a register of
+ * facts (which devices exist, what each declares, which colour
+ * spaces there are, what a workload's second run may cost, which
+ * windows the memory barrier opens) is compared against the tree in
+ * both directions, derived from the code by mechanism rather than
+ * from a list kept beside it, so the state a new thing arrives in
+ * -- absent from every list -- is the one state a guard cannot miss.
+ * The gate map routes every test by area, and a test registered in
+ * no area fails the map's own gate. Where a guard reads the tree,
+ * it reads through a mirror and refuses wrong paths with a stated
+ * reason; a meta-gate feeds every guard a set of decoy trees --
+ * hollowed, reshaped, emptied, absent -- and requires sixty-nine
+ * guards to succeed on the real tree and refuse three hundred odd
+ * wrong ones, each refusal saying why. Guards are themselves
+ * sabotage-tested: the way to trust a gate is to break the thing it
+ * holds and watch it go red, because a gate that has never been seen
+ * red is indistinguishable from one that cannot go red.
+ *
+ * The discipline the numbers come from: measurements land in commit
+ * messages with their machines and inputs; bounds a gate holds are
+ * stated in counts and ratios rather than seconds, so they survive
+ * a loaded machine; and a claim this document makes that the suite
+ * can check, the suite checks.
+ *
+ * @section design_perf Performance characteristics
+ *
+ * The interpreter's cost model, stated as properties of the current
+ * design. The governing rule everywhere is that a cost grows with
+ * the thing being done, never with the size of something standing
+ * nearby: not with stack depth, not with everything ever freed, not
+ * with the page's height when only a band of it is wanted.
+ *
+ * Costs that are constant. An allocation's free-list search (a
+ * bounded scan of bounded buckets); the guard on an operator call's
+ * operand count (read off the top segment); reaching the top of any
+ * stack (the root names the top segment); asking whether a record
+ * should spill (a running count, not a walk); the per-pixel halftone
+ * question (one compiled site, cell geometry derived per screen
+ * change); the names the marking paths use (resolved at install
+ * time -- a per-span or per-string name walk is a cost no algorithm
+ * underneath it can win back).
+ *
+ * Costs that are linear in their own work. @c roll, @c copy and
+ * @c counttomark in the depth they touch; path building in the
+ * path's length (the layout check resumes where it last left off);
+ * a restore in what it must actually undo (copy-on-write records
+ * plus a file-closing sweep driven by a census, so a restore that
+ * closes nothing walks nothing); a scanline fill in the total edge
+ * height rather than edges times page height; a band replay in the
+ * entries whose row range meets the band.
+ *
+ * Where the hot loop's cycles go. Procedure elements step through
+ * the flattened walker without re-entering the interpreter; the
+ * twenty commonest operators run inline there when their operands
+ * sit in the top segment; names resolve through the
+ * generation-checked cache; a lone zero-operand C signature -- the
+ * shape of nearly half the calls a rendering job makes -- dispatches
+ * directly; type dispatch is a predictable switch. @c bind descends
+ * through packed procedures, so generated programs run fully bound.
+ * Release builds carry link-time optimisation, which is worth more
+ * than any single algorithmic choice in the hot loop.
+ *
+ * The stated trades. Banding costs about twice direct painting on a
+ * page that is almost entirely marks, and a gate holds the ratio at
+ * 23/10 -- a ratio, not a time, because a time would be a statement
+ * about the machine the suite runs on. Spilling trades memory for a
+ * pass over the file per band. Page return trades residency now for
+ * refaults later, and runs only when asked. Compaction moves every
+ * live byte, and runs only when asked. The image boot costs a file
+ * read; a refused image costs the boot it would have saved and
+ * nothing else. Collection pacing is a measured threshold: wall
+ * time is flat from about a megabyte of allocation between
+ * collections upward, so the default sits at four megabytes and the
+ * program or the environment may move it.
+ *
+ * Bounds a gate holds are stated in counts and ratios -- name
+ * lookups per span, replay ratio, bytes per row -- because a count
+ * survives a loaded machine and a second is a fact about one host.
+ *
+ * @section design_distinctives Distinctives
+ *
+ * The properties that most define this implementation, stated
+ * without comparison:
+ *
+ * A page's memory is bounded by policy -- record, band, budget,
+ * spill -- under a byte-identity guarantee between the banded and
+ * whole-page routes, held to one row. Virtual memory is indexed
+ * rather than addressed, and everything follows from that: it
+ * compacts, it returns storage to the operating system, and it
+ * boots from an image of itself. The build has two object widths
+ * with the whole suite run at both; an optional face library whose
+ * absence is loud and contractual; a graphics system implemented in
+ * the language it serves over a sealed core; full enforcement of
+ * the language's access attributes; and cross-boundary references
+ * that are checked numbers, never trusted addresses. And the
+ * documentation is load-bearing: the rosters, registers and stated
+ * bounds in this page and its companions are read by the test
+ * suite, so a change that falsifies them fails a gate rather than
+ * aging the prose.
+ */

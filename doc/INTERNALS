@@ -124,10 +124,12 @@ structure. Objects live in stacks, but they can also live in arrays or
 dicts. Arrays and dicts and strings are, of course, all objects
 themselves.
 
-The collector is interested in both memory files at once: it marks the
-two banks in one pass, because an object in one may be named from the
-other, and then reclaims whichever it was asked for. All contexts sharing
-a memory file are traversed in the mark phase.
+The collector marks the banks the sweep will read, no more: a collection
+of both banks walks across the boundary, because an object in one may be
+named from the other, while a collection of local VM alone stays in its
+bank and relies on the anchored exceptions for the enumerable references
+global memory holds into it. All contexts sharing a memory file are
+traversed in the mark phase.
 
 
       Layers
@@ -260,8 +262,8 @@ and lives in global VM, not "global memory".
 
 Both VMs go on to hold NAMES, NAMET and BOGUSNAME.
 NAMES and NAMET are for the Name String stack and Name Tree,
-a ternary search tree. The same old ternary search tree,
-this time updated to live in the memory file.
+a ternary search tree living in the memory file like everything
+else.
 
 Bogusname is an allocated name string corresponding to the
 Not-Found result. So zero means No and asking what No means
@@ -429,11 +431,10 @@ in the hold stack, they are rooted (so we can use the stack as an array,
 so we can select (switch) a function call based on the number of
 objects).
 
-At one time HOLD was a special entity, as were all of the stacks.
-But it is now referenced directly in the context struct, as are
-all of the stacks. The stacks cannot be special entities if the
-vm is shared between two contexts, they must be part of the
-per-context data not per-memory-file data.
+HOLD is referenced directly in the context struct, as are all of
+the execution stacks. They cannot be special entities of a memory
+file: the vm may be shared between two contexts, so the stacks are
+per-context data, not per-memory-file data.
 
 
 Composite Objects
@@ -478,12 +479,21 @@ Garbage Collection
 
 The garbage collector module ("xpost_garbage") implements a simple (?)
 mark-sweep algorithm. It operates on a per-Xpost_Memory_File basis. Local VM is
-collected, and so is global VM. A collection marks both banks in one pass --
-an object in one may be named from the other, so a walk that stopped at the
-boundary would take a named object for garbage -- and then reclaims whichever
-banks it was asked for. All contexts sharing an Xpost_Memory_File must be
-traversed in the /mark/ phase. PLRM 8.2's vmreclaim chooses which banks an
-immediate collection reclaims, and which the automatic ones do.
+collected, and so is global VM. Marking covers the banks the sweep will read,
+no more. A collection of both banks walks across the boundary -- an object in
+one may be named from the other. A collection of one bank stays in it and
+stops at any reference that leaves it: what lies beyond is not swept, and
+local may name global freely, so crossing would walk the whole global graph
+to protect storage the sweep never touches. The references the other way are
+enumerable -- a global container may hold no reference into local memory
+(PLRM 3.7.2) except the local dictionaries systemdict names through
+sanctioned windows -- and those are marked as anchors either way;
+tests/check-global-local-anchors.sh holds the register of windows to the
+code and each anchor to survival of a local-only collection. A bank is swept
+only by a collection that marked it. All contexts sharing an
+Xpost_Memory_File must be traversed in the /mark/ phase. PLRM 8.2's vmreclaim
+chooses which banks an immediate collection reclaims, and which the
+automatic ones do.
 
 The root set is doc/ROOTS, thing by thing, with the bank each lives in.
 
