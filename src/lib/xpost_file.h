@@ -94,6 +94,12 @@ typedef struct Xpost_File_Methods
        already wrapped, so it could not refuse what it exists to refuse. */
     long long (*tell)(Xpost_File*);
     int (*seek)(Xpost_File*, long long);
+    /* A run of bytes lodged in one call, answering how many it took.
+       A stream that leaves this unset takes runs a byte at a time
+       through writech instead; only a stream whose backing can take a
+       run wholesale carries one, since the point of it is to write the
+       run without a call per byte. */
+    int (*writeblock)(Xpost_File*, const unsigned char *buf, int n);
 } Xpost_File_Methods;
 
 /* A filter holds the stream it decodes from (or encodes to) as a plain

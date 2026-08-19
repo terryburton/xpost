@@ -980,6 +980,20 @@ disk_writech(Xpost_File *file, int c)
 }
 
 static int
+disk_writeblock(Xpost_File *file, const unsigned char *buf, int n)
+{
+    Xpost_DiskFile *df = (Xpost_DiskFile*) file;
+    size_t wrote;
+
+    if (!df->file)
+        return EOF;
+    wrote = fwrite(buf, 1, (size_t)n, df->file);
+    if (ferror(df->file))
+        return EOF;
+    return (int)wrote;
+}
+
+static int
 disk_close(Xpost_File *file)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
@@ -1081,7 +1095,8 @@ struct Xpost_File_Methods disk_methods =
     disk_purge,
     disk_unreadch,
     disk_tell,
-    disk_seek
+    disk_seek,
+    disk_writeblock
 };
 
 /* A file that is a stream in its own right rather than a filter over one:
@@ -6250,6 +6265,17 @@ int xpost_file_read(char *buf, int size, int count, Xpost_File *fp)
 int xpost_file_write(const char *buf, int size, int count, Xpost_File *fp)
 {
     int i, j, k = 0;
+
+    /* a stream that takes a run wholesale is handed the whole run;
+       every other stream takes it a byte at a time */
+    if (fp->methods->writeblock)
+    {
+        int wrote = fp->methods->writeblock(fp, (const unsigned char *)buf,
+                                            size * count);
+        if (wrote == EOF)
+            return 0;
+        return wrote / size;
+    }
 
     for (i = 0; i < count; ++i)
         for (j = 0; j < size; ++j)
