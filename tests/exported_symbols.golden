@@ -462,6 +462,7 @@ xpost_stack_init_in
 xpost_stack_peek_top
 xpost_stack_pop
 xpost_stack_push
+xpost_stack_push_run
 xpost_stack_topdown_fetch
 xpost_stack_topdown_find_type
 xpost_stack_topdown_replace

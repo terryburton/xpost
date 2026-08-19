@@ -1082,7 +1082,6 @@ static
 int _exec_wrapped_proc(Xpost_Context *ctx, unsigned opcode, Xpost_Object proc)
 {
     Xpost_Object fr[6];
-    int k;
 
     fr[0] = xpost_int_cons((integer)opcode);
     fr[1] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->os));
@@ -1090,15 +1089,13 @@ int _exec_wrapped_proc(Xpost_Context *ctx, unsigned opcode, Xpost_Object proc)
     fr[3] = _wrapped_save_operands(ctx);
     fr[4] = XPOST_OP(ctx, wrapdone);
     fr[5] = xpost_object_cvx(proc);
-    for (k = 0; k < 6; k++)
+    /* the frame goes on as one run: fr is a C array, and the run either
+       lodges all six or puts back what it placed, so a refusal leaves
+       the exec stack as this call found it */
+    if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 6))
     {
-        if (!xpost_stack_push(ctx->lo, ctx->es, fr[k]))
-        {
-            xpost_operator_wrapped_release(ctx, fr[3]);
-            while (k--)
-                (void)xpost_stack_pop(ctx->lo, ctx->es);
-            return execstackoverflow;
-        }
+        xpost_operator_wrapped_release(ctx, fr[3]);
+        return execstackoverflow;
     }
     return 0;
 }

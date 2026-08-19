@@ -180,6 +180,22 @@ XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
                                 Xpost_Object obj);
 
 /**
+ * @brief Put a run of @p n objects on top of the stack, first last on top.
+ *
+ * One resolution of the stack's top segment covers the whole run, where
+ * a loop of xpost_stack_push resolves the root and the top segment
+ * again for every object. @p objs must be host storage -- a C array --
+ * never a pointer into @p mem, whose base may move when the run links a
+ * fresh segment. The run lodges all of its objects or none of them:
+ * a refusal takes back whatever part of the run was already placed, so
+ * on 0 the stack stands as it did before the call.
+ */
+XPOST_TEST_VISIBLE int xpost_stack_push_run(Xpost_Memory_File *mem,
+                                unsigned int stackent,
+                                const Xpost_Object *objs,
+                                int n);
+
+/**
  * @brief Index the stack from the top down, fetching object.
  */
 Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,

@@ -294,16 +294,17 @@ int Sforall(Xpost_Context *ctx,
     (void)interval;
     (void)val;
     (void)ret;
-    /* loop frame, as for the array forall */
-    if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, forall)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(S)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                XPOST_OP(ctx, stringforallcont)))
-        return execstackoverflow;
+    /* loop frame, as for the array forall, placed as one run */
+    {
+        Xpost_Object fr[4];
+
+        fr[0] = XPOST_OP(ctx, forall);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = xpost_object_cvlit(S);
+        fr[3] = XPOST_OP(ctx, stringforallcont);
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 4))
+            return execstackoverflow;
+    }
     return 0;
 }
 

@@ -140,24 +140,22 @@ int xpost_op_int_int_int_proc_for (Xpost_Context *ctx,
     assert(ctx->gl->base);
 
     /* loop frame: the sentinel loop operator (which exit searches for)
-       under literal state that the iterate operator updates in place */
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, opfor)))
-            return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, incr))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, lim))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons(i + j)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, forcont)))
-        return execstackoverflow;
+       under literal state that the iterate operator updates in place.
+       The frame goes on as one run resolving the exec stack's top
+       segment once; fr is a C array, as the run requires. */
+    {
+        Xpost_Object fr[7];
 
-    if (!xpost_stack_push(ctx->lo, ctx->es, P))
-        return execstackoverflow;
+        fr[0] = XPOST_OP(ctx, opfor);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = incr;
+        fr[3] = lim;
+        fr[4] = xpost_int_cons(i + j);
+        fr[5] = XPOST_OP(ctx, forcont);
+        fr[6] = P;
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 7))
+            return execstackoverflow;
+    }
     if (!xpost_stack_push(ctx->lo, ctx->os, init))
         return stackoverflow;
 
@@ -256,23 +254,20 @@ int xpost_op_real_real_real_proc_for (Xpost_Context *ctx,
     int up = j > 0;
     if (up? i > n : i < n) return 0;
 
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, opfor)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, incr))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, lim))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_real_cons(i + j)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, forcont)))
-        return execstackoverflow;
+    /* the same loop frame as the integer variant, placed as one run */
+    {
+        Xpost_Object fr[7];
 
-    if (!xpost_stack_push(ctx->lo, ctx->es, P))
-        return execstackoverflow;
+        fr[0] = XPOST_OP(ctx, opfor);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = incr;
+        fr[3] = lim;
+        fr[4] = xpost_real_cons(i + j);
+        fr[5] = XPOST_OP(ctx, forcont);
+        fr[6] = P;
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 7))
+            return execstackoverflow;
+    }
     if (!xpost_stack_push(ctx->lo, ctx->os, init))
         return stackoverflow;
     return 0;
@@ -290,19 +285,18 @@ int xpost_op_int_proc_repeat (Xpost_Context *ctx,
     if (n.int_.val < 0) return rangecheck;
     if (n.int_.val == 0) return 0;
 
-    /* loop frame, as for the for operator */
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, repeat)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons(n.int_.val - 1)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, repeatcont)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, P))
-        return execstackoverflow;
+    /* loop frame, as for the for operator, placed as one run */
+    {
+        Xpost_Object fr[5];
+
+        fr[0] = XPOST_OP(ctx, repeat);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = xpost_int_cons(n.int_.val - 1);
+        fr[3] = XPOST_OP(ctx, repeatcont);
+        fr[4] = P;
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 5))
+            return execstackoverflow;
+    }
 
     return 0;
 }
@@ -360,15 +354,17 @@ static
 int xpost_op_proc_loop (Xpost_Context *ctx,
                         Xpost_Object P)
 {
-    /* loop frame, as for the for operator */
-    if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, loop)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, loopcont)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, P))
-        return execstackoverflow;
+    /* loop frame, as for the for operator, placed as one run */
+    {
+        Xpost_Object fr[4];
+
+        fr[0] = XPOST_OP(ctx, loop);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = XPOST_OP(ctx, loopcont);
+        fr[3] = P;
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 4))
+            return execstackoverflow;
+    }
     return 0;
 }
 

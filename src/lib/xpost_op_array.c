@@ -321,17 +321,18 @@ int xpost_op_array_proc_forall(Xpost_Context *ctx,
     (void)interval;
     (void)element;
     /* loop frame: the sentinel forall operator (which exit searches
-       for) under literal state that the iterate operator consumes */
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                XPOST_OP(ctx, forall)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(A)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                XPOST_OP(ctx, arrayforallcont)))
-        return execstackoverflow;
+       for) under literal state that the iterate operator consumes,
+       placed as one run */
+    {
+        Xpost_Object fr[4];
+
+        fr[0] = XPOST_OP(ctx, forall);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = xpost_object_cvlit(A);
+        fr[3] = XPOST_OP(ctx, arrayforallcont);
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 4))
+            return execstackoverflow;
+    }
     return 0;
 }
 

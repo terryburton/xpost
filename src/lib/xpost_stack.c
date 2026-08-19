@@ -33,6 +33,7 @@
 #endif
 
 #include <stdlib.h> /* NULL */
+#include <string.h> /* memcpy */
 
 #include "xpost.h"
 #include "xpost_log.h"
@@ -212,6 +213,73 @@ XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
     }
 
     s->data[s->top++] = obj; /* push value */
+
+    return 1;
+}
+
+XPOST_TEST_VISIBLE int xpost_stack_push_run(Xpost_Memory_File *mem,
+                                            unsigned int stackent,
+                                            const Xpost_Object *objs,
+                                            int n)
+{
+    Xpost_Stack *root;
+    Xpost_Stack *s;
+    int done = 0;
+    int k;
+
+    /* each object is held to the same rule the single push applies: an
+       object that was never made goes on no stack. Checked up front so
+       the run lodges all of its objects or none of them. */
+    for (k = 0; k < n; k++)
+        if (xpost_object_get_type(objs[k]) == invalidtype)
+            return 0;
+
+    /* The stack's root and top segment are resolved once and the run is
+       copied through the held pointers. Holding them across the copy is
+       sound because nothing here can move the storage they point into:
+       collection and compaction run only at the interpreter's mainloop
+       safe point, never inside a push, so within one operator's work the
+       segments stay where they are. The one act in this function that
+       can move the memory file is linking a fresh segment when the top
+       one fills, and both pointers are re-derived from their entity
+       numbers after it. For the same reason @p objs must be host
+       storage, a C array, never a pointer into the file being pushed
+       into. Nothing is held past the return. */
+    root = xpost_stack_at(mem, stackent);
+    s = xpost_stack_at(mem, root->prevseg);
+
+    while (done < n)
+    {
+        int room = XPOST_STACK_SEGMENT_SIZE - (int)s->top;
+        int take = n - done;
+
+        if (take > room)
+            take = room;
+        if (take > 0)
+        {
+            memcpy(s->data + s->top, objs + done,
+                   (size_t)take * sizeof(Xpost_Object));
+            s->top += (unsigned int)take;
+            done += take;
+        }
+        if (done == n)
+            break;
+
+        /* the top segment is full: one object goes through the single
+           push, which advances to -- or links and allocates -- the next
+           segment and leaves the object as its first element */
+        if (!xpost_stack_push(mem, stackent, objs[done]))
+        {
+            /* refused (the single push has recorded why): take back
+               what this run lodged, so the caller sees all or nothing */
+            while (done--)
+                (void)xpost_stack_pop(mem, stackent);
+            return 0;
+        }
+        done++;
+        root = xpost_stack_at(mem, stackent);
+        s = xpost_stack_at(mem, root->prevseg);
+    }
 
     return 1;
 }

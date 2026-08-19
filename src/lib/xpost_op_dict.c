@@ -513,21 +513,20 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
         return err;
 
     /* loop frame: the sentinel forall operator (which exit searches
-       for) under literal state that the iterate operator consumes */
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, forall)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(D)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons((integer)cursor)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          XPOST_OP(ctx, dictforallcont)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, P))
-        return execstackoverflow;
+       for) under literal state that the iterate operator consumes,
+       placed as one run */
+    {
+        Xpost_Object fr[6];
+
+        fr[0] = XPOST_OP(ctx, forall);
+        fr[1] = xpost_object_cvlit(P);
+        fr[2] = xpost_object_cvlit(D);
+        fr[3] = xpost_int_cons((integer)cursor);
+        fr[4] = XPOST_OP(ctx, dictforallcont);
+        fr[5] = P;
+        if (!xpost_stack_push_run(ctx->lo, ctx->es, fr, 6))
+            return execstackoverflow;
+    }
     return 0;
 }
 
