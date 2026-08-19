@@ -127,6 +127,12 @@ install_headers(libxpost_headers_src,
   install_dir : dir_pkginclude + '-' + v_maj
 )
 
+# the dsc library's public header, installed beside the core set as the
+# autotools build installs it
+install_headers(files(['xpost_dsc.h']),
+  install_dir : dir_pkginclude + '-' + v_maj
+)
+
 # libxpost_dsc
 
 libxpost_dsc_src = files([
