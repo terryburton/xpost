@@ -3,6 +3,13 @@
 %systemdict /ud userdict put %trigger backup error handler
 
 %procedures in systemdict
+
+% QUIET is a job convention, not machinery state: real-world job streams
+% execute it as a bare name -- tests/corpus/ghostscript/waterfal.ps reads
+% `QUIET not { ... } if` -- so it must resolve by ordinary dictionary
+% lookup, and a definition of it (-q writes systemdict, a -D definition
+% lands in userdict) is deliberately left where a program's lookup finds
+% it. The probe honours the same convention.
 /QUIET where { pop }{ (loading init.ps...\n) print } ifelse
 
 %(35\n) print
@@ -2012,15 +2019,15 @@ currentglobal true setglobal
         % nothing carries across a device change
         /merged
         pd /OutputDevice 2 copy known {
-            get /.pagedevice where {
-                pop .pagedevice /OutputDevice 2 copy known
+            get graphicsdict /.pagedevice 2 copy known {
+                get /OutputDevice 2 copy known
                     { get }{ pop pop null } ifelse
-            }{ null } ifelse ne
+            }{ pop pop null } ifelse ne
         }{ pop pop false } ifelse
             { pd length 8 add dict }
-            { /.pagedevice where
-                { pop .pagedevice dup length pd length add dict copy }
-                { pd length 8 add dict }
+            { graphicsdict /.pagedevice 2 copy known
+                { get dup length pd length add dict copy }
+                { pop pop pd length 8 add dict }
             ifelse }
         ifelse def
         pd { merged 3 1 roll put } forall
@@ -2043,13 +2050,6 @@ currentglobal true setglobal
         /phf size 1 get sy mul def
         /pw pwf ceiling cvi def
         /ph phf ceiling cvi def
-
-        % device constructors read /OutputFileName via where; the
-        % host's binding persists across page device changes, as an
-        % output file given on a command line does
-        merged /OutputFile 2 copy known {
-            get userdict /OutputFileName 3 -1 roll put
-        }{ pop pop } ifelse
 
         graphicsdict /.exactpagedims [pwf phf] put
         % PLRM 6.2: a program supplying an imaging bounding box asserts
@@ -2084,6 +2084,23 @@ currentglobal true setglobal
             2 index /PageOffset eq or
             { pop pop }{ feat 3 1 roll put } ifelse
         } forall
+        % The output binding is a page-device parameter: a request's
+        % /OutputFile is the one way a program changes it, and it goes
+        % to the device among the features, under the spelling the
+        % machinery reads. What is stored is a copy made read-only
+        % here, so the path the file-permit machinery vets at the open
+        % is the path the page goes to -- a program keeping a reference
+        % to its request's own string cannot steer the output after the
+        % request was checked. The copy is stored back on the
+        % accumulated request as well, which is what currentpagedevice
+        % reports; like every parameter it accumulates on the device
+        % and a device switch starts from the new device's defaults,
+        % the run's own -o binding among them.
+        merged /OutputFile 2 copy known {
+            get dup length string copy readonly
+            dup merged /OutputFile 3 -1 roll put
+            feat /OutputFileName 3 -1 roll put
+        }{ pop pop } ifelse
         graphicsdict /.devrequest feat put
         % the new device builds under its own local name -- DEVICE
         % everywhere means the accessor reading the graphics state, and
@@ -2142,7 +2159,7 @@ currentglobal true setglobal
         % device whose class carries a copy procedure of its own.
         feat { newdev 3 1 roll put } forall
         merged /OutputDevice dev put
-        userdict /.pagedevice merged put
+        graphicsdict /.pagedevice merged put
 
         % post-construction fixups, the same ones the device the
         % interpreter started with receives (data/device.ps)
@@ -2185,9 +2202,9 @@ currentglobal true setglobal
 
     % -  currentpagedevice  dict
     /currentpagedevice [ ] {
-        /.pagedevice where { pop
-            .pagedevice dup length 1 add dict copy
-        }{
+        graphicsdict /.pagedevice 2 copy known { get
+            dup length 1 add dict copy
+        }{ pop pop
             << /PageSize [ DEVICE /dimensions get aload pop ] >>
         } ifelse
     } //.xpostsys /.defop get exec

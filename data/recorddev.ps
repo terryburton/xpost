@@ -356,8 +356,8 @@ end } bind put
 2 dict {
     /pp.page exch def
     /pp.rec exch def
-    /.pagedevice where {
-        pop .pagedevice {
+    graphicsdict /.pagedevice 2 copy known {
+        get {
             pop
             dup /Private eq
                 { pop }
@@ -367,7 +367,7 @@ end } bind put
                   ifelse }
             ifelse
         } forall
-    } if
+    }{ pop pop } ifelse
 } //.xpostsys /.indict get exec } bind put
 setglobal
 

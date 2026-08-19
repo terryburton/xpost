@@ -37,4 +37,5 @@ lifetime /.formlast
 lifetime /.exactpagedims
 lifetime /.rasterband
 lifetime /.devrequest
+lifetime /.pagedevice
 lifetime /.outputdevice

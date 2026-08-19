@@ -85,12 +85,11 @@ currentglobal true setglobal
     dup /width known {
         dup { /dimensions [width height] def } //.xpostsys /.indict get exec
     } if
-    % the file name in force: what a program bound on the dictionary
-    % stack, or failing that what this run was started with
-    /OutputFileName where
-        { /OutputFileName get }
-        { /OutputFileName //.xpostsys /.hostvalue get exec }
-    ifelse
+    % the file name this run was started with. A request's own binding
+    % is a device feature and arrives through the merge below, writing
+    % over this; there is no third source, the output path being a
+    % page-device parameter and not a name a program defines.
+    /OutputFileName //.xpostsys /.hostvalue get exec
     dup null eq { pop }{ 1 index exch /OutputFileName exch put } ifelse
     % the request's features, taken, kept on the instance under
     % /.devrequest -- the recording class reads them back there for the
@@ -350,8 +349,8 @@ currentglobal true setglobal
 % goes to, then run the device's Emit.
 %
 % The name is settled here, once, for every device there is. The template
-% is /OutputFileName -- the device's own, or the binding the host left on
-% the dictionary stack for a device made without one -- and a %d in it is
+% is /OutputFileName -- the device's own, put there when it was made from
+% the run's binding or the request's /OutputFile -- and a %d in it is
 % replaced with the page number, from the one counter .pagefilename keeps,
 % so every device numbers its pages alike. A device with no name at all
 % writes to the standard output, which is where a page goes when nobody
@@ -366,9 +365,8 @@ currentglobal true setglobal
 .xpostsys /.transmitpage {
     dup /OutputFileName 2 copy known
         { get }
-        { pop pop /OutputFileName where { pop OutputFileName }{
-            /OutputFileName //.xpostsys /.hostvalue get exec
-            dup null eq { pop (%stdout) } if } ifelse }
+        { pop pop /OutputFileName //.xpostsys /.hostvalue get exec
+          dup null eq { pop (%stdout) } if }
     ifelse
     //.xpostsys /.pagefilename get exec
     1 index exch /.outputfile exch put
@@ -574,10 +572,10 @@ end } bind put
     /out (%stderr) (w) file def
     /n 20 string def
     /asked
-        /.pagedevice where {
-            pop .pagedevice /OutputDevice 2 copy known
+        graphicsdict /.pagedevice 2 copy known {
+            get /OutputDevice 2 copy known
                 { get }{ pop pop null } ifelse
-        }{ null } ifelse
+        }{ pop pop null } ifelse
         dup null eq {
             pop /graphicsdict where {
                 pop graphicsdict /.outputdevice 2 copy known
@@ -829,9 +827,9 @@ currentglobal true setglobal
 % The handler the current page device carries under that name, or null where
 % it carries none.
 .xpostsys /.pagehandler {
-    /.pagedevice where {
-        pop .pagedevice exch 2 copy known { get }{ pop pop null } ifelse
-    }{ pop null } ifelse
+    graphicsdict /.pagedevice 2 copy known {
+        get exch 2 copy known { get }{ pop pop null } ifelse
+    }{ pop pop pop null } ifelse
 } bind put
 
 % dict  .checkpagehandlers  dict
