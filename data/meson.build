@@ -25,11 +25,7 @@ xpost_data_src = files([
   'font.ps',
   'init.ps',
   'prepr.ps',
-  'm.pic',
-  'm.ps',
   'qsort.ps',
-  's.pic',
-  's.ps',
   'readstring.ps',
   'test.ps'
 ])

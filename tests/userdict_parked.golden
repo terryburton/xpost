@@ -23,9 +23,9 @@
 #                        language's published shape, and err.ps keeps
 #                        the program-visible error state there while
 #                        mirroring the machinery's own reference
-#   job workspaces       s.ps, m.ps, gstate.ps and err.ps open userdict
-#                        to define program-facing procedures; init.ps
-#                        opens it once for the same reason
+#   job workspaces       gstate.ps and err.ps open userdict to define
+#                        program-facing procedures; init.ps opens it
+#                        once for the same reason
 #   a test's question    test.ps asks whether currentdict is userdict
 #
 # QUIET is a userdict occupant with no row here because no boot file
@@ -50,6 +50,4 @@ init.ps /statusdict
 init.ps /UserObjects
 init.ps /.xpostsys
 init.ps //.xpostsys
-m.ps begin
-s.ps begin
 test.ps eq

@@ -45,7 +45,11 @@ doc/MANUAL \
 doc/Doxyfile \
 doc/xpost.dox \
 doc/xpost_design.dox \
+doc/m.pic \
+doc/m.ps \
 doc/mtab.eps \
 doc/mtab.png \
+doc/s.pic \
+doc/s.ps \
 doc/stack.eps \
 doc/stack.png

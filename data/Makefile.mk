@@ -27,11 +27,7 @@ data/cid.ps \
 data/font.ps \
 data/init.ps \
 data/prepr.ps \
-data/m.pic \
-data/m.ps \
 data/qsort.ps \
-data/s.pic \
-data/s.ps \
 data/readstring.ps \
 data/test.ps
 
@@ -64,11 +60,7 @@ data/cid.ps \
 data/font.ps \
 data/init.ps \
 data/prepr.ps \
-data/m.pic \
-data/m.ps \
 data/qsort.ps \
-data/s.pic \
-data/s.ps \
 data/readstring.ps \
 data/test.ps
 
