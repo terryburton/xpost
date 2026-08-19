@@ -626,10 +626,12 @@
  * rescheduled step operators, which are exactly this shape), and
  * the operand count is gauged from the top segment rather than by
  * walking the whole stack, so the guard on every call is constant
- * rather than O(depth). Operators implemented in PostScript occupy the same
- * table with a procedure body in place of a signature; the
- * dispatcher runs them by leaving a bracketed frame on the
- * execution stack, so to a program they are operators -- the
+ * rather than O(depth). Operators implemented in PostScript occupy the
+ * same table and state typed signatures exactly as compiled ones do
+ * -- including up to eight alternative operand shapes, tried in
+ * stated order -- so the dispatcher enforces the statement before
+ * the body runs; the body itself runs through a bracketed frame on
+ * the execution stack, so to a program they are operators -- the
  * self-redefinition idioms work -- while to the machinery they are
  * procedures.
  *
