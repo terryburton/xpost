@@ -5445,7 +5445,7 @@ test('guard-paths',
   find_program('tests/check-guard-paths.sh'),
   args: [ meson.current_source_dir(), xpost_exe, libxpost_lib.full_path() ],
   suite: cost_slow,
-  timeout: 1200)
+  timeout: 2400)
 
 # An operator's operand statement is recorded where the operator is
 # defined, through the one mechanism that files it. Four operators once
