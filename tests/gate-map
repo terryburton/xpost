@@ -529,6 +529,16 @@ doc test check-dist-lists
 doc test check-device-roster
 doc width witness
 
+# ---- examples: the example programs, which nothing loads
+#
+# An example reaches no interpreter behaviour: what a change to one can
+# break is the example's own run, and the test that runs every program
+# the directory holds answers for that. The directory's makefile is
+# build description and is classified above.
+examples path examples/**
+examples test examples
+examples width witness
+
 # ---- width: what reads the object width directly
 #
 # The `width` area names no path. It is not a part of the tree; it is

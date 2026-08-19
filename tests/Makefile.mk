@@ -413,6 +413,7 @@ tests/run-device-restore-test.sh \
 tests/run-devices-test.sh \
 tests/run-error-binary-test.sh \
 tests/run-error-format-test.sh \
+tests/run-examples-test.sh \
 tests/run-file-lifetime-test.sh \
 tests/run-file-limit-test.sh \
 tests/run-filenameforall-large-test.sh \

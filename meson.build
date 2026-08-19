@@ -3655,6 +3655,17 @@ test('nographics',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The examples run, every one of them. The wrapper takes its population
+# from the examples directory itself, so an example added tomorrow is
+# tested the day it arrives; what a program needs to run -- sample
+# ARGUMENTS, or a deadline because it draws until interrupted -- is
+# read off markers in the program, not off a list in the harness.
+test('examples',
+  find_program('tests/run-examples-test.sh'),
+  args: [ xpost_exe, meson.current_source_dir() / 'examples' ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Filter EOD consumption: a decode filter must swallow its own end-of-data marker
 # so that the next fresh filter reading the same currentfile stream stays in sync
 # -- the dvips/colorimage per-scanline idiom. Guards the regressions where
