@@ -87,7 +87,7 @@ ntests=$(grep -c . "$work/tests" || true)
 # the case the walk is for.
 ( cd "$src" && git ls-files ) > "$work/files" 2>/dev/null
 if [ "$(grep -c . "$work/files" || true)" -lt 100 ]; then
-    ( cd "$src" && find data doc m4 src tests tools -type f -print \
+    ( cd "$src" && find data doc examples m4 src tests tools -type f -print \
         2>/dev/null ) > "$work/files"
     ( cd "$src" && find . -maxdepth 1 -type f -print 2>/dev/null |
         sed 's|^\./||' ) >> "$work/files"
