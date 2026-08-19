@@ -411,6 +411,7 @@ tests/run-device-ground-test.sh \
 tests/run-device-quit-test.sh \
 tests/run-device-restore-test.sh \
 tests/run-devices-test.sh \
+tests/run-dsc-tool-test.sh \
 tests/run-error-binary-test.sh \
 tests/run-error-format-test.sh \
 tests/run-examples-test.sh \
@@ -481,6 +482,7 @@ tests/run-font-name-steer-test.sh \
 tests/run-vm-threshold-test.sh \
 tests/run-vm-image-load-test.sh \
 tests/run-vendor-bwipp.sh \
+tests/run-view-usage-test.sh \
 tests/run_input_close_test.c \
 tests/run_status_test.c \
 tests/cli_sandbox_test.ps \

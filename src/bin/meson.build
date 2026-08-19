@@ -33,7 +33,7 @@ executable('xpost_client', 'xpost_client.c',
 
 # xpost_dsc
 
-executable('xpost_dsc', 'xpost_dsc.c',
+xpost_dsc_exe = executable('xpost_dsc', 'xpost_dsc.c',
   c_args: '-DHAVE_CONFIG_H',
   dependencies: [ libxpost_dep, libxpost_dsc_dep ],
   include_directories: [
@@ -63,7 +63,7 @@ if sys_windows or xcb_dep.found()
     xpost_view_dep += xcb_dep
   endif
 
-  executable('xpost_view', xpost_view_src,
+  xpost_view_exe = executable('xpost_view', xpost_view_src,
     c_args: '-DHAVE_CONFIG_H',
     dependencies: xpost_view_dep,
     include_directories: [

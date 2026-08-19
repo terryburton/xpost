@@ -7,6 +7,16 @@ libxpost; the `xpost` program is a small application over that library
 (src/bin/xpost_main.c), and src/bin/xpost_client.c is a smaller example
 of embedding it.
 
+Beside the interpreter the tree builds a second, independent library,
+libxpost_dsc, which reads a document's structuring comments -- the
+`%%`-prefixed metadata a conforming document carries -- into a header
+and a table of per-page offsets, without executing the document. Two
+programs sit over it: `xpost_dsc file.ps` prints what the comments say
+(version, title, page count, bounding box, and where each page starts),
+and `xpost_view file.ps` is a viewer that uses the page offsets to
+render one page at a time, built only where a window system is
+available (X through xcb, or Windows).
+
 It implements PostScript LanguageLevel 3, including the graphics: paths,
 paint, colour spaces, clipping, images, patterns, shadings, halftones,
 and text through host faces found by fontconfig and rendered by

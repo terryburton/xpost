@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        printf("Usage: %s file.ps", argv[0]);
+        printf("Usage: %s file.ps\n", argv[0]);
         return -1;
     }
 
@@ -117,9 +117,9 @@ int main(int argc, char *argv[])
             break;
     }
     PRINT_STR_ARRAY("document fonts", document_fonts);
-    printf("title : %s\n", dsc.header.title);
-    printf("creator : %s\n", dsc.header.creator);
-    printf("creation date : %s\n", dsc.header.creation_date);
+    printf("title : %s\n", dsc.header.title ? dsc.header.title : "");
+    printf("creator : %s\n", dsc.header.creator ? dsc.header.creator : "");
+    printf("creation date : %s\n", dsc.header.creation_date ? dsc.header.creation_date : "");
     printf("for whom : %s\n", dsc.header.for_whom ? dsc.header.for_whom : "");
     printf("pages : %d\n", dsc.header.pages);
     printf("bounding box : %d %d %d %d\n",

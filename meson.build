@@ -3830,6 +3830,20 @@ dsc_parse_exe = executable('dsc_parse_test',
   install: false)
 test('dsc-parse', dsc_parse_exe, suite: cost_fast)
 
+# The programs over libxpost_dsc: the metadata printer always builds,
+# the viewer only where a window system does, and each is held to what
+# it can answer without a display.
+test('dsc-tool',
+  find_program('tests/run-dsc-tool-test.sh'),
+  args: [ xpost_dsc_exe ],
+  suite: cost_fast)
+if sys_windows or xcb_dep.found()
+  test('view-usage',
+    find_program('tests/run-view-usage-test.sh'),
+    args: [ xpost_view_exe ],
+    suite: cost_fast)
+endif
+
 # A test must be able to fail. Each rule here encodes a defect this suite
 # actually carried: a failure counter incremented with def inside a scratch
 # dictionary (the increment is discarded, so the suite prints FAIL lines and
