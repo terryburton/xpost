@@ -340,8 +340,8 @@ dladdr(NULL, NULL);
    LIBS="${LIBS_save}"
 
    AC_MSG_RESULT([${have_dl}])
-   if test "x${have_dl}" = "xno" ; then
-      AC_MSG_ERROR([dladdr() function is mandatory, exiting...])
+   if test "x${have_dl}" = "xyes" ; then
+      AC_DEFINE([HAVE_DLADDR], [1], [Define to 1 if dladdr is available])
    fi
 fi
 

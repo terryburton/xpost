@@ -109,24 +109,31 @@ xpost_init(void)
         return _init_gave_up();
     (void)xpost_at_quit(xpost_log_quit);
 
-    if (!xpost_module_path_get(xpost_init, _xpost_lib_dir, XPOST_PATH_MAX))
-        return _init_gave_up();
-
-    l = strlen(_xpost_lib_dir);
-    memcpy(tmp1, _xpost_lib_dir, l);
-    memcpy(tmp1 + l, "/../share/xpost", sizeof("/../share/xpost"));
-    /* An uninstalled build has no <libdir>/../share/xpost: try the
-       source tree's data directory next, relative to the built library
-       (build/src/lib and src/lib/.libs both sit three levels below the
-       tree root), so the built interpreter runs from any directory.
-       A miss is not fatal -- the interpreter's init.ps search verifies
-       each candidate and falls back to XPOST_DATA_DIR and to data/
-       relative paths (see setlocalconfig). */
-    _xpost_data_dir = xpost_realpath(tmp1);
-    if (!_xpost_data_dir)
+    /* The library's own path is the first data-dir candidate: an
+       installed build finds <libdir>/../share/xpost beside itself. A
+       host that cannot name the path -- one without dladdr -- loses
+       only this candidate; _xpost_lib_dir stays empty, _xpost_data_dir
+       stays unset, and the interpreter's own search still has the
+       environment and the compiled-in directories to try. */
+    if (xpost_module_path_get(xpost_init, _xpost_lib_dir, XPOST_PATH_MAX))
     {
-        memcpy(tmp1 + l, "/../../../data", sizeof("/../../../data"));
+        l = strlen(_xpost_lib_dir);
+        memcpy(tmp1, _xpost_lib_dir, l);
+        memcpy(tmp1 + l, "/../share/xpost", sizeof("/../share/xpost"));
+        /* An uninstalled build has no <libdir>/../share/xpost: try the
+           source tree's data directory next, relative to the built
+           library (build/src/lib and src/lib/.libs both sit three
+           levels below the tree root), so the built interpreter runs
+           from any directory. A miss is not fatal -- the interpreter's
+           init.ps search verifies each candidate and falls back to
+           XPOST_DATA_DIR and to data/ relative paths (see
+           setlocalconfig). */
         _xpost_data_dir = xpost_realpath(tmp1);
+        if (!_xpost_data_dir)
+        {
+            memcpy(tmp1 + l, "/../../../data", sizeof("/../../../data"));
+            _xpost_data_dir = xpost_realpath(tmp1);
+        }
     }
     /* coming up is what asks to be taken down */
     (void)xpost_at_quit(_data_dir_drop);

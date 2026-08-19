@@ -72,7 +72,9 @@
 # include <errno.h>
 # undef WIN32_LEAN_AND_MEAN
 #else
-# include <dlfcn.h> /* dladdr */
+# ifdef HAVE_DLADDR
+#  include <dlfcn.h> /* dladdr */
+# endif
 # include <unistd.h> /* isatty */
 #endif
 
@@ -404,9 +406,10 @@ xpost_putenv(const char *name, const char *value)
 unsigned char
 xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
 {
+#if defined (_WIN32) || defined (__CYGWIN__) || defined (HAVE_DLADDR)
     void *addr;
+#endif
 
-    
 #if defined (_WIN32) || defined (__CYGWIN__)
     MEMORY_BASIC_INFORMATION mbi;
 
@@ -478,7 +481,7 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
 # endif
         }
     }
-#else
+#elif defined (HAVE_DLADDR)
     Dl_info xpost_info;
 
     if (sizeof addr != sizeof fp)
@@ -505,6 +508,12 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
             }
         }
     }
+#else
+    /* this host cannot name the module's own path; the caller's
+       resolution chain falls back to its remaining candidates */
+    (void)fp;
+    (void)buf;
+    (void)size;
 #endif
 
     return 0;

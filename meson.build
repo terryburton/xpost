@@ -422,10 +422,15 @@ else
     config_h.set10('HAVE_SYS_SELECT_H', true)
   endif
 
-# dladdr
-  dl_dep = dependency('dl')
-  if not cc.has_function('dladdr', dependencies: dl_dep)
-    error('dladdr() is mandatory on UNIX')
+# dladdr: how the library names its own path, which is the candidate
+# the data-directory resolution tries first beside an installed
+# binary. Sought rather than required: a host without it loses only
+# that candidate, and the resolution falls back to the remaining ones
+# -- the environment, the compiled-in installed and source
+# directories.
+  dl_dep = dependency('dl', required: false)
+  if cc.has_function('dladdr', dependencies: dl_dep)
+    config_h.set('HAVE_DLADDR', 1)
   endif
 
 # fpurge
