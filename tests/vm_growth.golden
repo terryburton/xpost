@@ -183,6 +183,7 @@ loop_exit_test.ps                          fits
 mask_cache_range_test.ps                   once   unexplained
 name_lookup_cost_test.ps                   fits
 namespace_test.ps                          zero
+noface_refusal_test.ps                     once   quits at its skip guard on a build with a face library
 nographics_test.ps                         once   unexplained
 numstring_decode_test.ps                   once   unexplained
 op_bind_test.ps                            once   unexplained
