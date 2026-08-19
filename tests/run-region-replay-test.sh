@@ -45,6 +45,14 @@ xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
 
+# a face answers for the text this run shows: a build without a face
+# library cannot ask this wrapper's question, and says so rather than
+# failing it
+if faceless_build "$xpost"; then
+    echo "SKIPPED: this run shows text through a face, and this build carries no face library"
+    exit 77
+fi
+
 # The runs below are started in the directory the pages are written to,
 # so what they were handed has to name the same thing from there.
 xpost=$(path_anchor "$xpost")

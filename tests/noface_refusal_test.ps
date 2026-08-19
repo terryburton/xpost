@@ -1,0 +1,63 @@
+%!testlib
+% The answers a build without a face library owes, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Such a build (-Dfreetype=disabled; it seeds NOFACES into systemdict)
+% is a font system with no faces, not a font system with a hole in it:
+% every font operator exists, a name that needs a face is refused with
+% invalidfont at findfont, a font program that needs a face is refused
+% with invalidfont at definefont, and a procedural (Type 3) font --
+% which owes nothing to a face -- still defines, still answers findfont
+% from the FontDirectory, and still shows through its build procedure
+% with the metrics that procedure declares. In a build carrying a face
+% library the refusals below do not apply, and the suite skips.
+systemdict /NOFACES known not { (SKIPPED: this build carries a face library; the refusal contract belongs to the build without one) = flush quit } if
+
+% the operators all exist: the machinery answers, it does not vanish
+{
+    /findfont load /definefont load /undefinefont load
+    /scalefont load /makefont load /selectfont load /setfont load
+    /show load /ashow load /widthshow load /awidthshow load /kshow load
+    /xshow load /yshow load /xyshow load /glyphshow load
+    /stringwidth load /charpath load
+    FontDirectory
+} (the font operators and the FontDirectory exist) works
+
+% a name that needs a face is refused at findfont, however it is spelled
+{ /Times-Roman findfont } /invalidfont (findfont of a face-backed name) raises
+{ (Helvetica) findfont } /invalidfont (findfont of a face-backed string) raises
+{ /Courier-Bold findfont } /invalidfont (findfont of a styled face name) raises
+
+% a font program that needs a face is refused at definefont: a Type 42
+% dictionary with no working face under /Private assembles its sfnts
+% and asks for a face over them, and there is none to build
+{
+    /T42Refused <<
+        /FontType 42
+        /FontMatrix [1 0 0 1 0 0]
+        /Encoding StandardEncoding
+        /sfnts [ <00010000> ]
+    >> definefont
+} /invalidfont (definefont of a Type 42 font program) raises
+
+% a procedural font owes nothing to a face: it defines, it is found in
+% the FontDirectory, and its build procedure both marks and advances
+/T3Box <<
+    /FontType 3
+    /FontMatrix [0.001 0 0 0.001 0 0]
+    /FontBBox [0 0 600 700]
+    /Encoding [ 256 { /box } repeat ]
+    /BuildChar { pop pop 600 0 0 0 500 700 setcachedevice
+                 0 0 500 700 rectfill }
+>> definefont pop
+{ /T3Box findfont 10 scalefont setfont } (findfont of a defined procedural font) works
+10 20 moveto
+{ (ab) show } (show through a build procedure) works
+currentpoint
+20.0 sub abs 0.0001 lt (show holds the baseline) assert
+22.0 sub abs 0.0001 lt (the advances the procedure declared moved the pen) assert
+(abc) stringwidth
+0.0 sub abs 0.0001 lt (stringwidth reports no vertical advance) assert
+18.0 sub abs 0.0001 lt (stringwidth reports the advance the procedure declares) assert
+
+verdict

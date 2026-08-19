@@ -1,4 +1,7 @@
 %!
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % Access-attribute enforcement in the device blitters (PLRM 3.3.2).
 %
 % A raster device's page buffer rows live in an array the device

@@ -12,6 +12,14 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+
+# a face answers for the text this run shows: a build without a face
+# library cannot ask this wrapper's question, and says so rather than
+# failing it
+if faceless_build "$xpost"; then
+    echo "SKIPPED: this run shows text through a face, and this build carries no face library"
+    exit 77
+fi
 expect='%%BoundingBox: 10 10 50 60'
 out=$("$xpost" -q -d bbox -o /dev/null "$script" </dev/null 2>&1)
 status=$?

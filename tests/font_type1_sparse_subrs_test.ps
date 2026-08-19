@@ -1,4 +1,7 @@
 %!PS
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % Regression: a Type 1 font whose /Subrs array is over-allocated -- more slots
 % declared than filled, leaving null entries -- must still load through
 % definefont. dvips-embedded Computer Modern fonts (CMR10: 38 declared, 15

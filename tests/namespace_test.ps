@@ -125,8 +125,8 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
 
 % names present only when an optional library or the platform provides them
 /optional <<
-  (WIN32) true  (loadjpegdevice) true  (loadpngalphadevice) true  (loadpngdevice) true
-  (loadwin32device) true  (loadxcbdevice) true  (resetfile) true
+  (NOFACES) true  (WIN32) true  (loadjpegdevice) true  (loadpngalphadevice) true
+  (loadpngdevice) true  (loadwin32device) true  (loadxcbdevice) true  (resetfile) true
 >> def
 
 % no name may leak: every systemdict name key is golden or optional

@@ -1,4 +1,7 @@
 %!
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % A font's face is FreeType state held outside virtual memory, and the
 % text operators reach it through what the font dictionary holds under
 % /Private. A font dictionary is an ordinary dictionary -- a program

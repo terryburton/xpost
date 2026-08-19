@@ -1,4 +1,7 @@
 %!testlib
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % exit must terminate every PLRM looping context -- cshow, filenameforall,
 % for (integer and real), forall over array/dict/string, kshow, loop,
 % pathforall, repeat and resourceforall, the whole list of PLRM 8.2 -- and

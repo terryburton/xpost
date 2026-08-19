@@ -227,6 +227,7 @@ tests/font_leak_test.ps \
 tests/font_private_test.ps \
 tests/font_type1_noaccess_test.ps \
 tests/font_type1_sparse_subrs_test.ps \
+tests/noface_refusal_test.ps \
 tests/forall_large_test.ps \
 tests/free_list_admission_test.c \
 tests/free_list_recovery_test.c \

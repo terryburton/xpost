@@ -1,4 +1,7 @@
 % An operator implemented in C reaches another operator by holding that
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % operator, not by pushing its name.
 %
 % A name pushed on the execution stack is resolved against the dictionary

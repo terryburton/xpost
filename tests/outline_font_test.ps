@@ -1,4 +1,7 @@
 % What the text operators mark when the font is an outline font.
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % Run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
 % assertion holds.
 %

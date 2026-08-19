@@ -1,4 +1,7 @@
 % A font's serial is never handed out twice.
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 %
 % definefont gives each font a serial, and that serial keys the coverage
 % masks its glyphs are cached as. The masks are not virtual memory --

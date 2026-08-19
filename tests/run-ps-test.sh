@@ -64,4 +64,8 @@ if [ "$status" -ne 0 ]; then
     echo "FAILURES: the interpreter exited with status $status"
     exit 1
 fi
+# a suite that cannot ask its question in this build -- one whose text
+# a face answers, under a build carrying no face library -- says so and
+# is a skip, not a pass and not a failure
+verdict_skipped "$out" "the suite"
 verdict_ok "$out" "the suite"

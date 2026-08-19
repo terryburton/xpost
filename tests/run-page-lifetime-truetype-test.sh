@@ -53,6 +53,13 @@ fi
 
 skip() { echo "page-lifetime-truetype: $*"; exit 77; }
 
+# a build without a face library resolves no face at all: the format
+# axis this wrapper pins cannot be asked of it, whatever the host's
+# fonts say
+faceless_build "$xpost" \
+    && skip "the build carries no face library, so no face format" \
+            "can be pinned; the format axis cannot be asked of it"
+
 command -v fc-list >/dev/null 2>&1 \
     || skip "fc-list is not available, so no TrueType face can be found" \
             "to pin; the format axis cannot be asked on this host"

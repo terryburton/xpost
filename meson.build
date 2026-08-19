@@ -2218,6 +2218,18 @@ test('font-private',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A build without a face library still carries the whole font machinery,
+# answering as a font system with no faces: a name or a font program
+# that needs a face is refused with invalidfont, and a procedural
+# (Type 3) font still defines and shows through its build procedure.
+# The suite skips, saying so, in a build whose faces make the refusals
+# inapplicable.
+test('noface-refusal',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/noface_refusal_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Nothing retires a font, so a face is given back by the release the
 # collector runs over the block a font dictionary's handle named. A face
 # is shared where a device's raster is not -- the name cache keeps the

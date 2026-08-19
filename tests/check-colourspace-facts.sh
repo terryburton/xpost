@@ -43,6 +43,14 @@ xpost=${2:?usage: check-colourspace-facts.sh <srcroot> <xpost>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 guard_require_interpreter "$xpost"
+
+# the facts below are asked of text a face answers for: a build without
+# a face library cannot answer them, and says so rather than failing
+. "$(dirname "$0")/verdict.sh"
+if faceless_build "$xpost"; then
+    echo "SKIPPED: these facts are asked of text a face answers for, and this build carries no face library"
+    exit 77
+fi
 guard_srcdata "$src"
 
 guard_workdir

@@ -1,4 +1,7 @@
 %!PS
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % Type 1 emission across many buffer doublings. definefont writes the
 % interpreted font dictionary back out as a font program -- a cleartext
 % header and an eexec section carrying the Private dictionary and every

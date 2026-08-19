@@ -1,4 +1,7 @@
 % Render-class coverage, run through `xpost -d null` by run-ps-test.sh: prints
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % SUCCESS iff every construct runs without error. Covers Type 3 and composite
 % (Type 0) fonts, the shading types, tiling and shading patterns, and screen
 % and halftone setup.

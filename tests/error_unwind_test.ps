@@ -1,4 +1,7 @@
 % An operator leaves nothing behind when it refuses, and its caller has
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % its operands back.
 %
 % PLRM 3.11.1 gives the interpreter three steps at an error, the first

@@ -206,6 +206,7 @@ font test glyph-page
 font test op-fontcache
 font test page-lifetime-truetype
 font test op-glyphcontext
+font test noface-refusal
 font test outline-font
 font test record-glyph
 font test check-glyph-render-route

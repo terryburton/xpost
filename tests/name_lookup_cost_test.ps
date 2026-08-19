@@ -1,4 +1,7 @@
 % What resolving a name costs the work that resolves one, run through
+% a face answers for this suite's text: a build without a face library
+% cannot ask its questions, and says so rather than failing them
+systemdict /NOFACES known { (SKIPPED: this suite shows text through a face, and this build carries no face library) = flush quit } if
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
 % A name is interned in a ternary search tree, and offering a string to

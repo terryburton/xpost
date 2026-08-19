@@ -172,6 +172,40 @@ _verdict_complained() {
 #   $3  what to call the run in a complaint (optional)
 # Prints what was wrong and returns non-zero unless the run left a zero
 # status and printed no failure.
+# Whether the program under test was built without a face library. Such
+# a build seeds NOFACES into systemdict, and the probe asks the
+# interpreter itself: a wrapper watching findfont refuse cannot tell
+# that build apart from a host with no fonts installed, and the two
+# deserve different answers -- the first is a configuration this suite
+# may be meaningless in, the second is a host the run-time skip already
+# names.
+faceless_build() {    # $1 the program under test
+    _fb_ps=${TMPDIR:-/tmp}/xpost-faceprobe.$$.ps
+    printf 'systemdict /NOFACES known { (NOFACES) = } if\n' > "$_fb_ps" \
+        || return 1
+    _fb_out=$("$1" -q --no-sandbox -d null "$_fb_ps" </dev/null 2>/dev/null)
+    rm -f "$_fb_ps"
+    [ "${_fb_out:-}" = NOFACES ]
+}
+
+# A run that cannot ask its question in this build says so itself, on a
+# line beginning SKIPPED: that names the reason. The wrapper turns that
+# into the harness's skip status -- loudly, with the reason on screen --
+# rather than into a pass or a failure. A run that complained and then
+# skipped is a failure: the complaint is the verdict, and a skip after
+# it would bury a red run. Exits rather than returns on both of those,
+# so no wrapper can fall past a skip into a byte comparison of output
+# the run never produced; a run that did not skip returns 1 and the
+# wrapper judges it as ever.
+verdict_skipped() {    # $1 output; $2 what to call the run
+    printf '%s\n' "$1" | grep -q '^SKIPPED:' || return 1
+    if _verdict_complained "$1" "${2:-the run}"; then
+        exit 1
+    fi
+    printf '%s\n' "$1" | grep '^SKIPPED:'
+    exit 77
+}
+
 verdict_run() {
     _verdict_st=$1
     _verdict_out=$2
