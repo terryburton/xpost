@@ -1,0 +1,55 @@
+# The references global virtual memory holds into local virtual memory,
+# and why each exists. See tests/check-global-local-anchors.sh for the
+# rule and for how each row is held to the code.
+#
+# PLRM 3.7.2: a composite object in global VM may not reference local
+# VM. The store-time barrier (xpost_dict_put, xpost_array_put) refuses
+# such a store with an invalidaccess error. The PLRM itself carves out
+# one exception: systemdict, a global dictionary, names several
+# per-context local dictionaries so a program reaches each by name
+# (PLRM 3.7.7). The interpreter opens the barrier
+# (ctx->ignoreinvalidaccess) for exactly the routes below, and every
+# one of them stores into systemdict alone.
+#
+# The collector depends on this enumeration. A collection of local vm
+# alone marks the local roots and then anchors whatever systemdict
+# holds in local vm (_xpost_garbage_mark_systemdict_exceptions in
+# xpost_garbage.c) instead of walking the frozen global graph, whose
+# objects a local sweep never touches. The anchor is derived from
+# systemdict's slots, not from the names below, so a reference admitted
+# through a sanctioned route is anchored without being enrolled here.
+# What the rows hold to the code, in both directions, is the set of
+# routes that may open the barrier and the set of names those routes
+# store: a new route, or a new name stored by one, fails the check
+# until it is entered here with its reason.
+#
+# route rows: where the barrier opens. Every ignoreinvalidaccess
+# opening in src/lib must be inside a function named here, and every
+# dictionary store such a function makes must target systemdict.
+#
+# where it is                            kind    what it stores
+xpost_interpreter.c:copyudtosd           window  the local dictionaries systemdict names, put once at boot
+xpost_op_save.c:_rebind_fontdirectory    window  FontDirectory retargeted between the local and the global font directory as the allocation mode changes
+# table rows: storage in the global memory file that is not an object,
+# holding references no container walk can reach. The collector walks
+# each as a root in every collection, whichever bank is asked for, the
+# walk stopping at what lies in a bank not in play. The wrapped
+# accessors of per-context local state (.gscratch, graphicsdict,
+# DEVICE) keep their procedures in local vm, so the operator table is a
+# global-side holder of local references exactly as systemdict is.
+#
+# where it is                            kind    what it holds
+xpost_operator.h:Xpost_Operator.proc     table   the procedure a wrapped operator runs, living in whichever bank built it
+#
+# name rows: the systemdict entries whose values are local. Each must
+# survive a collection of local vm alone, reachable through systemdict
+# and nothing else -- the boot file drops the userdict copies of these
+# names, so systemdict is the only named route to them.
+#
+# name            kind    why it is local
+userdict          name    the per-context current dictionary (PLRM 3.7.7); also rooted by the dictionary stack, which never pops below it
+errordict         name    error handlers a program replaces are job state, isolated by save and restore
+$error            name    the record of the last error, written by the error machinery as the job runs
+FontDirectory     name    fonts defined in local vm are job state; the name follows the allocation mode to the global directory and back
+statusdict        name    device and product status a program may change, so a job's changes are isolated by save and restore
+serverdict        name    exitserver machinery a job enters and leaves; its state is the job's

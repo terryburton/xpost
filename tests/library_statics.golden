@@ -63,6 +63,10 @@ src/lib/xpost_handle.c          _slots                     outlives entries-rele
 # line above the sort and cleared on the line below it, so it names
 # nothing at any moment a lifetime could end at.
 src/lib/xpost_dev_generic.c     localctx                   outlives set-and-cleared-around-one-sort
+# The bank the collection in progress is of, set at every collection's
+# entry before any step of the walk reads it; between collections
+# nothing reads it, so a stale file it names is never followed.
+src/lib/xpost_garbage.c         _xpost_garbage_collect_bank outlives set-at-each-collections-entry-before-any-read
 # The collector diagnostic's seen-maps, allocated and freed within the
 # verification pass that uses them.
 src/lib/xpost_garbage_diag.c    _vseen_lo                  outlives freed-within-the-pass

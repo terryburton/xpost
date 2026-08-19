@@ -84,14 +84,16 @@ int vmreclaim (Xpost_Context *ctx, Xpost_Object I)
             xpost_garbage_auto_banks_set(ctx, XPOST_GARBAGE_SWEEP_BOTH);
             break;
 
-        /* An immediate collection marks both banks whichever it
-           reclaims: an object in one may be named from the other, so a
-           walk that stopped at the boundary would take a named object
-           for garbage. Which bank is then reclaimed is what the operand
-           says. */
+        /* An immediate collection of both banks marks across them: an
+           object in one may be named from the other. A collection of
+           local vm alone marks only the local roots and the sanctioned
+           references the global systemdict holds (PLRM 3.7.2) -- no
+           other global storage may name a local object, so the frozen
+           global graph is not walked to protect a bank the sweep never
+           touches. */
         case 1: /* perform immediate collection in local vm */
             if (ctx->garbage_collect_function(ctx->lo,
-                                              XPOST_GARBAGE_SWEEP_LOCAL, 1) == -1)
+                                              XPOST_GARBAGE_SWEEP_LOCAL, 0) == -1)
                 return VMerror;
             /* Closing the arena up cannot happen here: it moves the bytes
                under every pointer derived from an entity's address, and

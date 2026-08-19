@@ -108,6 +108,14 @@ static unsigned int _xpost_garbage_work_n;
 static int _xpost_garbage_work_waiting;
 static int _xpost_garbage_work_ready;
 
+/* the bank the current collection is of, set at each collection's
+   entry. A walk asked for one bank stops at any reference that leaves
+   this file: local may name global freely, so a local walk that crossed
+   would traverse the whole global graph to protect a bank it does not
+   sweep. The references the other way are anchored separately (see
+   _xpost_garbage_mark_systemdict_exceptions). */
+static Xpost_Memory_File *_xpost_garbage_collect_bank;
+
 /* clear the waiting flag over a table, leaving the marks as they are */
 static
 void _xpost_garbage_unwait(Xpost_Memory_File *mem)
@@ -314,9 +322,11 @@ int _xpost_garbage_reach_array(Xpost_Context *ctx,
 
 /* mark the entity an object names, and queue it if it has contents of
    its own to walk.
-   if markall is true, this is a collection of global vm,
-   so we must mark objects
-   even if it means switching memory files
+   if markall is true, the collection covers both banks and the walk
+   crosses between them; otherwise the walk stays in the bank being
+   collected and stops at any reference that leaves it -- what lies
+   beyond is not swept, and the sanctioned references back into the
+   collected bank are anchored separately
  */
 static
 int _xpost_garbage_mark_reach(Xpost_Context *ctx,
@@ -335,6 +345,11 @@ int _xpost_garbage_mark_reach(Xpost_Context *ctx,
     {
         unsigned int fent = (unsigned int)o.mark_.padw;
         Xpost_Memory_File *fm = xpost_context_select_memory(ctx, o);
+
+        /* a file in a bank the collection does not cover is not swept,
+           and what it holds lives with it */
+        if (!markall && fm != _xpost_garbage_collect_bank)
+            return 1;
         /* a filter reads through the stream beneath it, which has an
            entity of its own that no object names -- the string forms of
            filter build one and hand it over. Follow the chain down from
@@ -400,10 +415,8 @@ int _xpost_garbage_mark_reach(Xpost_Context *ctx,
 
             objmem = xpost_context_select_memory(ctx, o);
             if (!objmem) return 0;
-            if (objmem != mem) {
-                if (!markall)
-                    break;
-            }
+            if (!markall && objmem != _xpost_garbage_collect_bank)
+                break;
             if (ent < objmem->start)
             {
                 XPOST_LOG_ERR("attempt to mark %s object %d",
@@ -431,11 +444,9 @@ int _xpost_garbage_mark_reach(Xpost_Context *ctx,
 
         case dicttype:
             objmem = xpost_context_select_memory(ctx, o);
-            if (objmem != mem)
-            {
-                if (!markall)
-                    break;
-            }
+            if (!objmem) return 0;
+            if (!markall && objmem != _xpost_garbage_collect_bank)
+                break;
             if (ent < objmem->start)
             {
                 XPOST_LOG_ERR("attempt to mark %s object %d",
@@ -464,11 +475,9 @@ int _xpost_garbage_mark_reach(Xpost_Context *ctx,
             }
 
             objmem = xpost_context_select_memory(ctx, o);
-            if (objmem != mem)
-            {
-                if (!markall)
-                    break;
-            }
+            if (!objmem) return 0;
+            if (!markall && objmem != _xpost_garbage_collect_bank)
+                break;
 
             if (ent < objmem->start)
             {
@@ -1036,17 +1045,33 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
     n = DICTABN(dp->sz);
     for (j = 0; j < n; j++)
     {
-        Xpost_Object v = tp[j].value;
+        Xpost_Object pair[2];
+        unsigned int i;
+
         if (xpost_object_get_type(tp[j].key) == nulltype)
             continue;
-        if (!xpost_object_is_composite(v))
-            continue;
-        /* only the local-VM values are the sanctioned exceptions; a global
-           value is reached through the global roots, not swept here */
-        if (xpost_context_select_memory(ctx, v) != mem)
-            continue;
-        if (!_xpost_garbage_mark_object(ctx, mem, v, markall))
-            return 0;
+        pair[0] = tp[j].key;
+        pair[1] = tp[j].value;
+        for (i = 0; i < 2; i++)
+        {
+            Xpost_Object v = pair[i];
+
+            /* every reference systemdict holds into the bank being
+               swept, whichever slot carries it and whatever entity kind
+               it names: the anchor is derived from the dictionary, not
+               from a list of names, so a reference admitted through the
+               sanctioned window is anchored without being enrolled */
+            if (!xpost_object_is_composite(v)
+                && xpost_object_get_type(v) != filetype)
+                continue;
+            /* only the values in the swept bank are the sanctioned
+               exceptions; a global value is reached through the global
+               roots, not swept here */
+            if (xpost_context_select_memory(ctx, v) != mem)
+                continue;
+            if (!_xpost_garbage_mark_object(ctx, mem, v, markall))
+                return 0;
+        }
     }
     return 1;
 }
@@ -1142,15 +1167,20 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
     _xpost_garbage_work_n = 0;
     _xpost_garbage_work_waiting = 0;
     _xpost_garbage_work_ready = 0;
+    _xpost_garbage_collect_bank = mem;
 
-    /* Marking is whole-heap and sweeping is per-bank. An object in one
-       bank may be named from the other -- local may name global freely,
-       and the six dictionaries systemdict holds are the sanctioned
-       exception the other way (PLRM 3.7.2) -- so a walk that stopped at
-       a bank boundary would take a named object for garbage. Asked for
-       both banks, the walk crosses; asked for one, it stays. Which bank
-       is then swept is a separate decision, and a bank may only be swept
-       by a collection that marked it. */
+    /* Marking covers the banks the sweep will read, no more. Asked for
+       both banks, the walk crosses between them: an object in one may
+       be named from the other. Asked for one, it stays in that bank and
+       stops at any reference that leaves it, because what lies beyond
+       is not swept and local may name global freely -- crossing would
+       walk the whole global graph to protect storage the sweep never
+       touches. The references the other way are enumerable: a global
+       container may hold no reference into local memory (PLRM 3.7.2)
+       except the local dictionaries systemdict names, and those are
+       marked as anchors below whichever way the walk is asked for.
+       Which bank is then swept is a separate decision, and a bank may
+       only be swept by a collection that marked it. */
     if (isglobal)
     {
         other = ctx->lo;
@@ -1248,8 +1278,12 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 
             /* the procedures the operator table holds. An operator
                that runs a procedure keeps it there, and the table is
-               not an object, so nothing the walk reaches names it. */
-            if (markall && ctx->gl && ctx->state != 0)
+               not an object, so nothing the walk reaches names it.
+               The procedures live in either bank -- the accessors of
+               per-context local state are wrapped over local arrays --
+               so the table is walked whichever bank is collected, the
+               walk stopping at the procedures of a bank not in play. */
+            if (ctx->gl && ctx->state != 0)
             {
                 unsigned int nops = xpost_operator_count();
                 unsigned int oi;

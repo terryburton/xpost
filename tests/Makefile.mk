@@ -74,6 +74,8 @@ tests/check-filter-base.sh \
 tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
 tests/check-gate-map.sh \
+tests/check-global-local-anchors.sh \
+tests/global_local_anchors.register \
 tests/check-glyph-render-route.sh \
 tests/check-name-interning.sh \
 tests/name_interning.register \

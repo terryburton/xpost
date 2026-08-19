@@ -3409,6 +3409,20 @@ test('statementedit',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# The references global virtual memory may hold into local virtual memory
+# are enumerable, and enumerated: the register's window rows are derived from
+# the assignments that open the store-time barrier, its name rows from what
+# those windows store, and each named dictionary must survive a collection of
+# local vm alone -- which marks the local roots and the register's anchors and
+# walks nothing else outside the bank. An unregistered store is refused where
+# it is made.
+test('check-global-local-anchors',
+  find_program('tests/check-global-local-anchors.sh'),
+  args: [ meson.current_source_dir(), xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
