@@ -333,8 +333,13 @@ int Rexp(Xpost_Context *ctx,
 {
     double r;
 
-    if (base.real_.val < 0)
-        expn.real_.val = (real)trunc(expn.real_.val);
+    /* PLRM 8.2: with a fractional exponent the result is meaningful only
+       for a nonnegative base, so a negative base and a non-integer
+       exponent is undefinedresult. A negative base with an integer
+       exponent is well defined and kept. */
+    if (base.real_.val < 0 &&
+        expn.real_.val != (real)trunc(expn.real_.val))
+        return undefinedresult;
     r = pow(base.real_.val, expn.real_.val);
     if (!isfinite(r))
         return undefinedresult;
@@ -355,6 +360,10 @@ static
 int Rln(Xpost_Context *ctx,
         Xpost_Object x)
 {
+    /* PLRM 8.2: the logarithm's domain is the positive reals; a
+       non-positive operand is out of range */
+    if (x.real_.val <= 0)
+        return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)log(x.real_.val)));
     return 0;
 }
@@ -365,6 +374,8 @@ static
 int Rlog(Xpost_Context *ctx,
          Xpost_Object x)
 {
+    if (x.real_.val <= 0)
+        return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)log10(x.real_.val)));
     return 0;
 }

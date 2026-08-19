@@ -160,4 +160,22 @@ minint srand rrand minint eq (the narrowest seed comes back whole) assert
 held srand rand next1 eq (a restored state resumes the sequence) assert
 rand next2 eq (and carries on through it) assert
 
+
+% ln and log are defined on the positive reals; a non-positive operand is
+% rangecheck (PLRM 8.2), not a silent infinity or not-a-number
+{ 0 ln } /rangecheck (ln of zero is rangecheck) raises
+{ -1 ln } /rangecheck (ln of a negative is rangecheck) raises
+{ 0 log } /rangecheck (log of zero is rangecheck) raises
+{ -10 log } /rangecheck (log of a negative is rangecheck) raises
+1 ln 0 eq (ln of one is zero) assert
+100 log 2 eq (log of a hundred is two) assert
+
+% exp with a fractional exponent is meaningful only for a nonnegative
+% base (PLRM 8.2): a negative base and a non-integer exponent is
+% undefinedresult, while a negative base and an integer exponent is not
+{ -8 0.5 exp } /undefinedresult (a negative base to a fractional power is undefinedresult) raises
+-2 3 exp -8 eq (a negative base to an integer power is defined) assert
+2 -1 exp 0.5 eq (a positive base to a negative power is defined) assert
+9 0.5 exp 3 eq (a nonnegative base to a fractional power is defined) assert
+
 verdict
