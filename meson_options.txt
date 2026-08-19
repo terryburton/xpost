@@ -1,4 +1,10 @@
 
+option('freetype',
+  type: 'feature',
+  value: 'enabled',
+  description: 'render face-backed text through the freetype library; disabled builds a font system with no faces, whose findfont answers invalidfont while procedural (Type 3) fonts still render'
+)
+
 option('doc',
   type: 'boolean',
   value: true,

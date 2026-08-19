@@ -333,12 +333,16 @@ if fontconfig_dep.found()
   config_h.set('HAVE_FONTCONFIG', 1)
 endif
 
-# Required, not optional. The interpreter renders every glyph through
-# this: a build without it loaded no font and drew no glyph, which is a
-# PostScript interpreter that cannot show text. That configuration was
-# never finished -- it did not compile -- and nothing built it, so
-# offering it as a choice described something that did not exist.
-freetype_dep = dependency('freetype2', required: true)
+# The face library, and a deliberate choice rather than an auto-detect.
+# The interpreter renders every face-backed glyph through it, so the
+# default requires it: a host merely missing the package must not
+# silently produce an interpreter that cannot show face-backed text.
+# -Dfreetype=disabled selects that smaller interpreter on purpose: its
+# font operators exist and answer as a font system with no faces would
+# -- findfont and the font-program loaders refuse with invalidfont --
+# while procedural (Type 3) fonts still render through their build
+# procedures.
+freetype_dep = dependency('freetype2', required: get_option('freetype'))
 if freetype_dep.found()
   config_h.set('HAVE_FREETYPE2', 1)
 endif
@@ -5803,6 +5807,7 @@ endif
 summary({'OS': host_os,
          'memory backing': backing_desc,
          'fontconfig': fontconfig_dep.found().to_string('yes', 'no'),
+         'freetype': freetype_dep.found().to_string('yes', 'no'),
          'jpeg device': jpeg_dep.found().to_string('yes', 'no'),
          'png device': libpng_dep.found().to_string('yes', 'no'),
          'documentation': (get_option('doc') and doxygen.found()).to_string('yes', 'no'),
