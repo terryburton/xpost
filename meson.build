@@ -5170,6 +5170,22 @@ test('check-glyph-render-route',
   suite: cost_fast,
   timeout: 120)
 
+# Where a literal spelling may reach the name arena from. Interning a
+# spelling the arena does not hold is a global allocation that lands
+# wherever the first ask runs, so a literal on a path only jobs re-enter
+# is an allocation some job's own running may be first to make -- inside
+# a measured stretch, on the one platform whose configuration reaches
+# the site first, and flat everywhere else. The rule's one enforcement
+# point is the installer's table (_op_font_names): machinery spellings
+# resolve as operators install, and a job-reachable site that interns a
+# literal instead answers for itself in tests/name_interning.register,
+# held to the derivation in both directions.
+test('check-name-interning',
+  find_program('tests/check-name-interning.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things

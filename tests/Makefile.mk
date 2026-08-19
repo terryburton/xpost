@@ -74,6 +74,8 @@ tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
 tests/check-gate-map.sh \
 tests/check-glyph-render-route.sh \
+tests/check-name-interning.sh \
+tests/name_interning.register \
 tests/check-guard-paths.sh \
 tests/check-host-settings.sh \
 tests/check-must-check.sh \
