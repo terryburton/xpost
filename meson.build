@@ -3750,6 +3750,15 @@ test('check-exported-symbols',
   suite: cost_fast,
   args: [ libxpost_lib.full_path(), files('tests/exported_symbols.golden') ])
 
+# Every reach from compiled code into userdict is registered with the
+# reason it is the program's business. userdict is the program's
+# workspace, not a configuration channel and not a place to define
+# machinery, and the fixed-slot fetch is the one way C reaches it.
+test('check-userdict-reach',
+  find_program('tests/check-userdict-reach.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # Document Structuring Convention parsing: a header list continued over %%+
 # lines is accumulated into the header record, and the parallel font array is
 # indexed by that recorded count.

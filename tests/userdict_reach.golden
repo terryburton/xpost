@@ -1,0 +1,23 @@
+# Every reach from compiled code into userdict, by enclosing function.
+# Checked by tests/check-userdict-reach.sh: the set is compared exactly,
+# so a new reach and a vanished one both fail until this file says so.
+#
+# userdict is the program's workspace. A driver or a piece of machinery
+# that reads configuration out of it has made an ambient name in the
+# program's namespace into a control channel, which is the defect class
+# the device knobs were converted away from; and one that defines into
+# it has put machinery where a program can shadow it. A line here is a
+# deliberate decision that the reach is the program's own business:
+#
+#   xpost_create          copies the boot definitions userdict was built
+#                         with into systemdict when the language is
+#                         built from source, and hands the same handle
+#                         to the recording of host settings; it runs
+#                         before any program.
+#   xpost_add_definitions is the documented channel by which an embedder
+#                         or -D defines names for the program to read.
+#                         Programs read them; the interpreter's own
+#                         machinery does not.
+#
+xpost_interpreter.c xpost_add_definitions
+xpost_interpreter.c xpost_create

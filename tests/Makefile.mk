@@ -69,6 +69,7 @@ tests/check-encoder-units.sh \
 tests/check-env-traps.sh \
 tests/check-error-names.sh \
 tests/check-exported-symbols.sh \
+tests/check-userdict-reach.sh \
 tests/check-filter-base.sh \
 tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
@@ -188,6 +189,7 @@ tests/error_dict_test.ps \
 tests/error_unwind_test.ps \
 tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
+tests/userdict_reach.golden \
 tests/file_handle_test.c \
 tests/file_lifetime_test.ps \
 tests/file_refusal_test.ps \
