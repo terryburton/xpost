@@ -98,6 +98,42 @@
         pop
     }
 
+    % A whole path, taken exactly. The fill machinery offers the current
+    % path to a device declaring FillPath whenever the clip is trivial
+    % (paint.ps .devtakespath), and this device wants it because the box
+    % a fill reaches is the box of its flattened outline's own vertices,
+    % the same under either insideness rule -- the outermost boundary
+    % borders the interior under both. Reading the vertices here keeps
+    % the answer independent of the device resolution: the polygon route
+    % resolves an even-odd interior into pixel-band rectangles first,
+    % whose rows sit on the device grid, so the box it accumulates grows
+    % with the coarseness of the grid. A fill under a non-trivial clip
+    % still travels the polygon route, whose span intersection is exact
+    % for the pixels painted. The colour gates the mark as everywhere on
+    % this device: an unmarking white leaves the box alone.
+    /FillPath { % mark c1..cn IMAGE  .  mark
+        {
+            counttomark 1 sub { pop } repeat
+            .opaque {
+                flattenpath
+                count /n0 exch def
+                { .fillpolyargs } stopped {
+                    count n0 sub { pop } repeat
+                    % a path of more points than one polygon array
+                    % describes: read the vertices off the path itself,
+                    % a point at a time. An area-less subpath's points
+                    % are counted this way where the polygon form drops
+                    % them, so the box is never too small
+                    { transform .maxmin } dup {} {} pathforall
+                }{
+                    //.xpostsys /.polybounds get exec {
+                        .maxmin .maxmin
+                    } if
+                } ifelse
+            } if
+        } //.xpostsys /.indict get exec
+    }
+
     /FillRect { % val x y w h IMAGE  .  -
         { {h w y x val}{exch def}forall
             val .opaque {

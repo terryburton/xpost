@@ -49,8 +49,40 @@ test "$(printf '%s\n' "$out" | grep -c '%%BoundingBox: 10 10 50 50')" = 2 || exi
 # so what is required here holds for any of them: the box is not empty,
 # it starts no further left than the pen, the ascender of the capital
 # rises above the baseline and the descender of the g falls below it.
+# An even-odd frame at fractional coordinates: the box must be the
+# path's own vertices, identical at 72 and 144 dpi. The frame's interior
+# resolves to pixel-band rectangles on the polygon route, whose rows sit
+# on the device grid, so a box read off the bands grows with the grid's
+# coarseness; the bbox device takes the whole path instead (FillPath)
+# and this holds it to that. Quarter-point coordinates are exact in
+# binary at both resolutions, so the required strings are exact.
+eo=${TMPDIR:-/tmp}/bbox-eo-$$.ps
+trap 'rm -f "$tmp" "$eo"' EXIT INT TERM
+cat > "$eo" <<'PSEOF'
+<< /OutputDevice /bbox /PageSize [200 200] /HWResolution [72 72] >> setpagedevice
+0 setgray
+newpath 10.25 10.75 moveto 89.25 10.75 lineto 89.25 60.75 lineto 10.25 60.75 lineto closepath
+        20.25 20.75 moveto 20.25 50.75 lineto 79.25 50.75 lineto 79.25 20.75 lineto closepath
+eofill
+showpage
+<< /HWResolution [144 144] >> setpagedevice
+0 setgray
+newpath 10.25 10.75 moveto 89.25 10.75 lineto 89.25 60.75 lineto 10.25 60.75 lineto closepath
+        20.25 20.75 moveto 20.25 50.75 lineto 79.25 50.75 lineto 79.25 20.75 lineto closepath
+eofill
+showpage
+quit
+PSEOF
+out=$("$xpost" -q -d null -o /dev/null "$eo" </dev/null 2>&1)
+status=$?
+printf '%s\n' "$out"
+verdict_run "$status" "$out" "the even-odd exactness job" || exit 1
+test "$(printf '%s\n' "$out" | grep -c '%%HiResBoundingBox: 10.25 10.75 89.25 60.75')" = 2 \
+    || { echo "FAIL: the even-odd box is not the path's own, at both resolutions"; exit 1; }
+echo "even-odd exact bounding box OK"
+
 txt=${TMPDIR:-/tmp}/bbox-text-$$.ps
-trap 'rm -f "$tmp" "$txt"' EXIT INT TERM
+trap 'rm -f "$tmp" "$eo" "$txt"' EXIT INT TERM
 cat > "$txt" <<'PSEOF'
 /Helvetica findfont 24 scalefont setfont
 20 40 moveto (Ag) show

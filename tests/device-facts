@@ -588,7 +588,14 @@ method Erase bbox pngalpha
     methods that discard their operands. Giving it one would be a method
     whose body did what the absence of the method already does.
 method .escname dscwrite pdfwrite
-method FillPath dscwrite pdfwrite svgwrite
+method FillPath bbox dscwrite pdfwrite svgwrite
+    Takes the whole current path from the fill, curves preserved, in
+    place of the flattened polygon (paint.ps .devtakespath). The three
+    vector writers keep the path's own form in their output; the extent
+    tracker reads the flattened vertices exactly, so the box it reports
+    does not grow with the device grid the polygon route resolves an
+    even-odd interior against. Raster devices scan-convert polygons and
+    have no use for the path itself.
 method FillPoly every
 method FillRect every
 method Flush bgr raster record
