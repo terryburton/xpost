@@ -2464,6 +2464,17 @@ test('png-filter-vocabulary',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The -p device-parameter switch is the request channel's command-line
+# spelling: the same bytes as the same word asked for by the program,
+# with a program's own request still overriding, and everything outside
+# the drivers' stated rosters refused loudly before anything is
+# rendered.
+test('cli-param',
+  find_program('tests/run-cli-param-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Save/restore VM: drive the entity count past 65536 and require dicts and
 # arrays to revert exactly -- guards the saverec entity-width truncation.
 test('save-restore',

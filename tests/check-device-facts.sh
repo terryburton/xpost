@@ -490,6 +490,70 @@ while read -r t; do
     fi
 done < "$work/keys.tune"
 
+# ---- and the roster each driver states, held to its reads
+#
+# A driver states its knobs in an Xpost_Dev_Option table beside the
+# reads (the -p switch refuses everything outside the stated rosters,
+# and the class takes an embedder's defaults up from them), so a knob
+# read but not stated is one the command line refuses while the device
+# obeys it, and one stated but not read is a control that selects
+# nothing. Both directions are held here, per driver body, by the same
+# comment-stripped scan the reads come from.
+while read -r d; do
+    f=$(driver_of "$d")
+    [ -n "$f" ] || continue
+    b=$(basename "$f")
+    grep -q "Xpost_Dev_Option" "$f" || continue
+    echo "$b" >> "$work/tune.rosterfiles.raw"
+    awk '
+        FNR == 1 { inblock = 0; intab = 0 }
+        {
+            line = $0; sub(/\r$/, "", line)
+            out = ""; i = 1; n = length(line)
+            while (i <= n) {
+                c = substr(line, i, 1); t = substr(line, i, 2)
+                if (inblock) {
+                    if (t == "*/") { inblock = 0; i += 2 } else i++
+                    continue
+                }
+                if (t == "/*") { inblock = 1; i += 2; continue }
+                if (t == "//") break
+                out = out c; i++
+            }
+            if (out ~ /Xpost_Dev_Option options\[\]/) intab = 1
+            if (intab && out ~ /^ *};/) intab = 0
+            if (intab && match(out, /\{ *"[A-Za-z0-9_]+"/)) {
+                key = substr(out, RSTART, RLENGTH)
+                sub(/^\{ *"/, "", key); sub(/"$/, "", key)
+                print key
+            }
+        }' "$f" | sed "s/^/$b /" >> "$work/tune.stated"
+done < "$work/made"
+[ -f "$work/tune.stated" ] || : > "$work/tune.stated"
+[ -f "$work/tune.rosterfiles.raw" ] || : > "$work/tune.rosterfiles.raw"
+sort -u "$work/tune.stated" -o "$work/tune.stated"
+sort -u "$work/tune.rosterfiles.raw" > "$work/tune.rosterfiles"
+
+# the reads, keyed the same way: by the driver file that makes them
+: > "$work/tune.readsbyfile"
+while read -r pair; do
+    o=${pair% *}; d=${pair#* }
+    f=$(driver_of "$d"); [ -n "$f" ] || continue
+    echo "$(basename "$f") $o" >> "$work/tune.readsbyfile"
+done < "$work/tune.derived"
+sort -u "$work/tune.readsbyfile" -o "$work/tune.readsbyfile"
+
+guard_held=0
+guard_hold "$work/tune.readsbyfile" "$work/tune.stated" \
+    "read by a driver and absent from the roster it states beside the
+      read. The -p switch refuses what the roster does not name, so
+      this knob is one the command line refuses while the device obeys
+      it. State it:" \
+    "stated in a driver's roster and read by no driver body. The knob
+      is gone or renamed; a control that selects nothing reads exactly
+      like one that selects something."
+[ "$guard_held" -eq 0 ] || fail=1
+
 # ---- the slots of the page codec
 #
 # Carrying a codec is one bit, and the register held only that bit. A

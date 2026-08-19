@@ -47,6 +47,11 @@
 
 #include "xpost.h"
 #include "xpost_log.h"
+#include "xpost_memory.h"
+#include "xpost_object.h"
+#include "xpost_context.h"
+#include "xpost_name.h" /* a word travels to the classes as a name */
+#include "xpost_dev_generic.h" /* the device option roster the -p switch is held to */
 /* xpost_isatty: the same question the interpreter asks of standard
    input when it decides whether this run has a user at the other end
    of it, so that the program and the interpreter answer it alike */
@@ -211,6 +216,121 @@ _xpost_permit_file_dir(const char *path, int forwrite)
         xpost_path_permit_read(buf);
 }
 
+/* The row of the device-option roster a -p key names, or NULL. The
+   roster is what the compiled writers read off their device
+   dictionaries, each driver stating its own (xpost_dev_option_roster),
+   so a knob a driver grows joins this switch without a list here. */
+static const Xpost_Dev_Option *
+_xpost_main_param_find(const char *key, size_t klen)
+{
+    const Xpost_Dev_Option *roster;
+    int i, n;
+
+    roster = xpost_dev_option_roster(&n);
+    for (i = 0; i < n; i++)
+        if (strlen(roster[i].key) == klen &&
+            memcmp(roster[i].key, key, klen) == 0)
+            return &roster[i];
+    return NULL;
+}
+
+/* One -p operand, held to the roster before anything is made or
+   rendered: a key no device of this build reads is refused naming the
+   keys that exist, and a value is held to its row's vocabulary or
+   range, so a misspelling cannot fall back to a default silently --
+   the defect class the device modes and the filter vocabulary were
+   closed against. Answers 1, or 0 having said why. */
+static int
+_xpost_main_param_check(const char *filename, const char *kv)
+{
+    const Xpost_Dev_Option *opt;
+    const Xpost_Dev_Option *roster;
+    const char *eq = strchr(kv, '=');
+    const char *val;
+    int i, n;
+
+    if (!eq || eq == kv || !eq[1])
+    {
+        fprintf(stderr, "%s: a device parameter is key=value, not \"%s\"\n",
+                filename, kv);
+        return 0;
+    }
+    val = eq + 1;
+    opt = _xpost_main_param_find(kv, (size_t)(eq - kv));
+    if (!opt)
+    {
+        fprintf(stderr, "%s: -p takes no key \"%.*s\"; the keys this build"
+                " takes are:", filename, (int)(eq - kv), kv);
+        roster = xpost_dev_option_roster(&n);
+        for (i = 0; i < n; i++)
+            fprintf(stderr, "%s %s", i ? "," : "", roster[i].key);
+        if (n == 0)
+            fprintf(stderr, " none");
+        fprintf(stderr, "\n");
+        return 0;
+    }
+    if (opt->words)
+    {
+        for (i = 0; opt->words[i]; i++)
+            if (strcmp(opt->words[i], val) == 0)
+                return 1;
+        fprintf(stderr, "%s: %s takes no word \"%s\"; the words it takes"
+                " are:", filename, opt->key, val);
+        for (i = 0; opt->words[i]; i++)
+            fprintf(stderr, "%s %s", i ? "," : "", opt->words[i]);
+        fprintf(stderr, "\n");
+        return 0;
+    }
+    else
+    {
+        char *end;
+        long v;
+
+        errno = 0;
+        v = strtol(val, &end, 10);
+        if (errno || *end || end == val || v < opt->min || v > opt->max)
+        {
+            fprintf(stderr, "%s: %s takes no value \"%s\"; the value is an"
+                    " integer from %d to %d\n", filename, opt->key, val,
+                    opt->min, opt->max);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Record the checked -p operands as the run's defaults, through the
+   channel an embedder's options go through: onto the device classes,
+   where every instance copied from one carries them and a program's
+   own page-device request still overrides. A word travels as a name,
+   which lives in global memory like the setting it becomes. */
+static int
+_xpost_main_params_apply(Xpost_Context *ctx, char **params, int count)
+{
+    int i;
+
+    for (i = 0; i < count; i++)
+    {
+        const char *eq = strchr(params[i], '=');
+        const Xpost_Dev_Option *opt;
+        Xpost_Object v;
+
+        if (!eq)
+            return 0;
+        opt = _xpost_main_param_find(params[i], (size_t)(eq - params[i]));
+        if (!opt)
+            return 0;
+        if (opt->words)
+            v = xpost_object_cvlit(xpost_name_cons(ctx, eq + 1));
+        else
+            v = xpost_int_cons((integer)strtol(eq + 1, NULL, 10));
+        if (xpost_dev_option_default(ctx, opt->key, v,
+                                     opt->classname, opt->altclassname))
+            return 0;
+    }
+    return 1;
+}
+
 static void
 _xpost_main_usage(FILE *out, const char *filename)
 {
@@ -222,6 +342,10 @@ _xpost_main_usage(FILE *out, const char *filename)
     fprintf(out, "  -o, --output=[FILE]                output file; the run ends with the program\n");
     fprintf(out, "  -d, --device=[STRING]              device name\n");
     fprintf(out, "  -Dname=token, --define name=token  add definition to userdict\n");
+    fprintf(out, "  -p key=value, --device-param key=value\n");
+    fprintf(out, "                                     a codec tuning key's default for this run;\n");
+    fprintf(out, "                                     repeatable, and a program's own\n");
+    fprintf(out, "                                     setpagedevice request still overrides\n");
     fprintf(out, "  -I[DIR], --include [DIR]           add a resource search directory\n");
     fprintf(out, "  --no-graphics                      lock down and run without loading graphics\n");
     fprintf(out, "  --no-sandbox                       allow the program unrestricted file access\n");
@@ -235,6 +359,19 @@ _xpost_main_usage(FILE *out, const char *filename)
     fprintf(out, "  -V, --version                      show program version\n");
     fprintf(out, "  -h, --help                         show this message\n");
     fprintf(out, "\n");
+    {
+        const Xpost_Dev_Option *roster;
+        int n, j;
+
+        roster = xpost_dev_option_roster(&n);
+        if (n > 0)
+        {
+            fprintf(out, "  Device tuning keys this build takes:");
+            for (j = 0; j < n; j++)
+                fprintf(out, "%s %s", j ? "," : "", roster[j].key);
+            fprintf(out, "\n\n");
+        }
+    }
     fprintf(out, "  Supported devices:\n");
     i = 0;
     while (_xpost_main_devices[i])
@@ -437,6 +574,9 @@ int main(int argc, char *argv[])
     const char *define = NULL;
     char **defs = NULL;
     int num_defs = 0;
+    char **params = NULL;
+    const char *param;
+    int num_params = 0;
     char **incs = NULL;
     int num_incs = 0;
     int no_graphics = 0;
@@ -556,6 +696,37 @@ int main(int argc, char *argv[])
 
                 }
                 if (!_xpost_main_list_add(&defs, &num_defs, define))
+                {
+                    XPOST_LOG_ERR("out of memory");
+                    goto quit_xpost;
+                }
+            }
+            else if ((!strncmp(argv[i], "-p", 2)) ||
+                     (!strcmp(argv[i], "--device-param")))
+            {
+                if (argv[i][1] == 'p' && argv[i][2] != '\0')
+                {
+                    param = argv[i] + 2;
+                }
+                else
+                {
+                    if ((i + 1) < argc)
+                    {
+                        ++i;
+                        param = argv[i];
+                    }
+                    else
+                    {
+                        XPOST_LOG_ERR("missing option value");
+                        _xpost_main_usage(stderr, filename);
+                        goto quit_xpost;
+                    }
+                }
+                /* held to the roster here, before anything is made:
+                   an ending taken now has rendered nothing */
+                if (!_xpost_main_param_check(filename, param))
+                    goto quit_xpost;
+                if (!_xpost_main_list_add(&params, &num_params, param))
                 {
                     XPOST_LOG_ERR("out of memory");
                     goto quit_xpost;
@@ -788,6 +959,20 @@ int main(int argc, char *argv[])
         num_defs = 0;
     }
 
+    /* the run's device defaults, recorded before the program runs so
+       the first device made carries them; each was already held to the
+       roster where it was read */
+    if (params)
+    {
+        if (!_xpost_main_params_apply(ctx, params, num_params))
+        {
+            fprintf(stderr, "%s: cannot record the -p device parameters\n",
+                    filename);
+            goto quit_xpost;
+        }
+        _xpost_main_list_free(&params, &num_params);
+    }
+
     /* seed the resource search path from -I directories */
     if (num_incs > 0)
     {
@@ -877,6 +1062,7 @@ int main(int argc, char *argv[])
   quit_asked:
     _xpost_main_list_free(&defs, &num_defs);
     _xpost_main_list_free(&incs, &num_incs);
+    _xpost_main_list_free(&params, &num_params);
     xpost_quit();
 
     return EXIT_SUCCESS;
@@ -890,6 +1076,7 @@ int main(int argc, char *argv[])
        it. */
     _xpost_main_list_free(&defs, &num_defs);
     _xpost_main_list_free(&incs, &num_incs);
+    _xpost_main_list_free(&params, &num_params);
     xpost_quit();
 
     return EXIT_FAILURE;

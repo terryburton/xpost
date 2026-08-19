@@ -1176,17 +1176,24 @@ int _loaddevicecont_common(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    /* the defaults the embedder asked of this driver before its classes
-       were built (xpost_dev_png_options_set), taken up so that every
-       instance copied from this class carries them; a page-device
-       request naming the same key still overrides, at the copy the
-       instance is made by */
-    ret = xpost_dev_class_option_default(ctx, classdic, "png_compression_level");
-    if (ret)
-        return ret;
-    ret = xpost_dev_class_option_default(ctx, classdic, "png_interlaced");
-    if (ret)
-        return ret;
+    /* the defaults asked of this driver before its classes were built
+       -- by an embedder (xpost_dev_png_options_set) or the command
+       line's -p switch -- taken up for every knob this driver states,
+       so that every instance copied from this class carries them; a
+       page-device request naming the same key still overrides, at the
+       copy the instance is made by */
+    {
+        const Xpost_Dev_Option *opts;
+        int i, n;
+
+        opts = xpost_dev_png_option_roster(&n);
+        for (i = 0; i < n; i++)
+        {
+            ret = xpost_dev_class_option_default(ctx, classdic, opts[i].key);
+            if (ret)
+                return ret;
+        }
+    }
 
     op = xpost_operator_cons(ctx, "pngCreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
@@ -1301,19 +1308,46 @@ xpost_dev_png_options_set(Xpost_Context *ctx,
        onto them where they already are (xpost_dev_option_default);
        a program's own page-device request still overrides them */
     if (xpost_dev_option_default(ctx, "png_compression_level",
-                                 compression_level,
+                                 xpost_int_cons(compression_level),
                                  ".xpost_PNGDEVICE",
                                  ".xpost_PNGALPHADEVICE")
      || xpost_dev_option_default(ctx, "png_interlaced",
-                                 interlaced ? 1 : 0,
+                                 xpost_int_cons(interlaced ? 1 : 0),
                                  ".xpost_PNGDEVICE",
                                  ".xpost_PNGALPHADEVICE"))
         XPOST_LOG_ERR("the PNG device options could not be recorded");
 }
 
+/* The knobs this driver reads off its device dictionary, stated beside
+   the reads that give them meaning and held to those reads by
+   tests/check-device-facts.sh. Both of this body's classes carry every
+   one of them. */
+const Xpost_Dev_Option *xpost_dev_png_option_roster(int *count)
+{
+    static const char *const filterwords[] =
+        { "adaptive", "none-sub-up", "none", NULL };
+    static const Xpost_Dev_Option options[] =
+    {
+        { "png_compression_level", ".xpost_PNGDEVICE",
+          ".xpost_PNGALPHADEVICE", 0, 9, NULL },
+        { "png_interlaced", ".xpost_PNGDEVICE",
+          ".xpost_PNGALPHADEVICE", 0, 1, NULL },
+        { "png_filter", ".xpost_PNGDEVICE",
+          ".xpost_PNGALPHADEVICE", 0, 0, filterwords }
+    };
+
+    *count = (int)(sizeof(options) / sizeof(options[0]));
+    return options;
+}
+
 #else /* ! HAVE_LIBPNG */
 
 #include "xpost.h"
+#include "xpost_log.h"
+#include "xpost_memory.h"
+#include "xpost_object.h"
+#include "xpost_context.h"
+#include "xpost_dev_generic.h" /* the option roster type */
 
 XPAPI void
 xpost_dev_png_options_set(Xpost_Context *ctx,
@@ -1323,6 +1357,13 @@ xpost_dev_png_options_set(Xpost_Context *ctx,
     (void)ctx;
     (void)compression_level;
     (void)interlaced;
+}
+
+/* a build without the library has no PNG devices and no knobs */
+const Xpost_Dev_Option *xpost_dev_png_option_roster(int *count)
+{
+    *count = 0;
+    return NULL;
 }
 
 #endif

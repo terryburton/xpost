@@ -997,14 +997,24 @@ int loadjpegdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    /* the default the embedder asked of this driver before its class
-       was built (xpost_dev_jpeg_options_set), taken up so that every
-       instance copied from this class carries it; a page-device
-       request naming the same key still overrides, at the copy the
-       instance is made by */
-    ret = xpost_dev_class_option_default(ctx, classdic, "jpeg_quality");
-    if (ret)
-        return ret;
+    /* the defaults asked of this driver before its class was built --
+       by an embedder (xpost_dev_jpeg_options_set) or the command
+       line's -p switch -- taken up for every knob this driver states,
+       so that every instance copied from this class carries them; a
+       page-device request naming the same key still overrides, at the
+       copy the instance is made by */
+    {
+        const Xpost_Dev_Option *opts;
+        int i, n;
+
+        opts = xpost_dev_jpeg_option_roster(&n);
+        for (i = 0; i < n; i++)
+        {
+            ret = xpost_dev_class_option_default(ctx, classdic, opts[i].key);
+            if (ret)
+                return ret;
+        }
+    }
 
     op = xpost_operator_cons(ctx, "jpegCreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
@@ -1087,20 +1097,47 @@ xpost_dev_jpeg_options_set(Xpost_Context *ctx, int quality)
        class to take up as it is installed, and written onto it where
        it already is (xpost_dev_option_default); a program's own
        page-device request still overrides it */
-    if (xpost_dev_option_default(ctx, "jpeg_quality", quality,
+    if (xpost_dev_option_default(ctx, "jpeg_quality",
+                                 xpost_int_cons(quality),
                                  ".xpost_JPEGDEVICE", NULL))
         XPOST_LOG_ERR("the JPEG device option could not be recorded");
+}
+
+/* The knob this driver reads off its device dictionary, stated beside
+   the read that gives it meaning and held to it by
+   tests/check-device-facts.sh. */
+const Xpost_Dev_Option *xpost_dev_jpeg_option_roster(int *count)
+{
+    static const Xpost_Dev_Option options[] =
+    {
+        { "jpeg_quality", ".xpost_JPEGDEVICE", NULL, 0, 100, NULL }
+    };
+
+    *count = (int)(sizeof(options) / sizeof(options[0]));
+    return options;
 }
 
 #else /* ! HAVE_LIBJPEG */
 
 #include "xpost.h"
+#include "xpost_log.h"
+#include "xpost_memory.h"
+#include "xpost_object.h"
+#include "xpost_context.h"
+#include "xpost_dev_generic.h" /* the option roster type */
 
 XPAPI void
 xpost_dev_jpeg_options_set(Xpost_Context *ctx, int quality)
 {
     (void)ctx;
     (void)quality;
+}
+
+/* a build without the library has no JPEG device and no knob */
+const Xpost_Dev_Option *xpost_dev_jpeg_option_roster(int *count)
+{
+    *count = 0;
+    return NULL;
 }
 
 #endif

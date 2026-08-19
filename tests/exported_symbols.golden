@@ -106,8 +106,10 @@ xpost_dev_dict_number
 xpost_dev_fillpoly_compiled
 xpost_dev_fillpoly_run
 xpost_dev_ht_cell
+xpost_dev_jpeg_option_roster
 xpost_dev_jpeg_options_set
 xpost_dev_option_default
+xpost_dev_option_roster
 xpost_dev_page_destroy_call
 xpost_dev_page_emit
 xpost_dev_page_emit_call
@@ -115,6 +117,7 @@ xpost_dev_page_moveband_call
 xpost_dev_page_retire
 xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num
+xpost_dev_png_option_roster
 xpost_dev_png_options_set
 xpost_dev_record_takemask
 xpost_device_ground_channels

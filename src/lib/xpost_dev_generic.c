@@ -2696,12 +2696,11 @@ int xpost_dev_page_emit(Xpost_Context *ctx, Xpost_Object devdic,
    instance is copied from it (data/device.ps). */
 int xpost_dev_option_default(Xpost_Context *ctx,
                              const char *key,
-                             int value,
+                             Xpost_Object v,
                              const char *classname,
                              const char *altclassname)
 {
     Xpost_Object h;
-    Xpost_Object v = xpost_int_cons(value);
     const char *names[2];
     int i;
     int ret;
@@ -2742,16 +2741,47 @@ int xpost_dev_option_default(Xpost_Context *ctx,
 /* The other half of xpost_dev_option_default: as a driver's class is
    installed, take up the default the embedder recorded, so that every
    instance copied from the class carries it. A setting nobody made, or
-   one that is not a number, leaves the class saying what it said. */
+   one of a kind no knob is -- the knobs are numbers and words -- leaves
+   the class saying what it said. */
 int xpost_dev_class_option_default(Xpost_Context *ctx,
                                    Xpost_Object classdic,
                                    const char *key)
 {
     Xpost_Object v = xpost_context_host_setting(ctx, key);
 
-    if (xpost_object_get_type(v) != integertype)
+    if (xpost_object_get_type(v) != integertype
+     && xpost_object_get_type(v) != nametype)
         return 0;
     return xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, key), v);
+}
+
+/* The tuning knobs of every compiled writer this build carries, in one
+   roster: each driver states its own beside the reads that give the
+   knob meaning (and is held to those reads by tests/check-device-facts.sh),
+   and this gathers what the build compiled in, so a knob of a driver
+   the build left out is not offered. The command line's -p switch is
+   the caller: it refuses a key not named here, and holds a value to
+   the row's range or vocabulary, before anything is rendered. */
+const Xpost_Dev_Option *xpost_dev_option_roster(int *count)
+{
+    static Xpost_Dev_Option roster[16];
+    static int n = -1;
+
+    if (n < 0)
+    {
+        const Xpost_Dev_Option *part;
+        int i, pn;
+
+        n = 0;
+        part = xpost_dev_png_option_roster(&pn);
+        for (i = 0; i < pn; i++)
+            roster[n++] = part[i];
+        part = xpost_dev_jpeg_option_roster(&pn);
+        for (i = 0; i < pn; i++)
+            roster[n++] = part[i];
+    }
+    *count = n;
+    return roster;
 }
 
 int xpost_dev_create_begin(Xpost_Context *ctx,

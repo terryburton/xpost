@@ -183,10 +183,14 @@ switching OutputDevice starts from the new device's defaults:
   /jpeg_quality           the jpeg codec's quality scale, 0 to 100;
                           unset is 90
 
-An embedding program may record defaults for these on the device
-classes through xpost_dev_png_options_set() and
-xpost_dev_jpeg_options_set(); a program's own request still overrides
-them.
+A default for any of them can be set for the whole run from the
+command line with `-p key=value` (repeatable), which records it on the
+device class exactly as an embedding program does through
+xpost_dev_png_options_set() and xpost_dev_jpeg_options_set(); a
+program's own request still overrides either. The switch refuses a
+key this build's devices do not read, naming the keys that exist, and
+a value outside its key's range or vocabulary, in the key's own
+terms; `xpost --help` lists the keys the build takes.
 
 A colon after the device name introduces a mode. On raster it is the
 byte order a lent framebuffer is in -- `raster:rgb`, `raster:argb`,

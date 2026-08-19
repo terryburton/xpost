@@ -427,6 +427,7 @@ host test check-exported-symbols
 host test check-vm-host-state
 host test clean-startup
 host test cli-options
+host test cli-param
 host test clock
 host test host-settings
 host test run-status

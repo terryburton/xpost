@@ -195,6 +195,31 @@ int xpost_dev_create_begin(Xpost_Context *ctx,
                            unsigned int cont_opcode);
 
 /**
+ * @brief One tuning knob of a compiled writer, as its driver states it.
+ *
+ * The key is the name the driver reads off its device dictionary, and
+ * the row says what a value for it may be: a vocabulary of words, or an
+ * integer within the range. The classes are where a default for it is
+ * recorded. Each driver states its own knobs beside the reads that give
+ * them meaning, and tests/check-device-facts.sh holds the statement to
+ * the reads; xpost_dev_option_roster() gathers what this build compiled
+ * in.
+ */
+typedef struct
+{
+    const char *key;
+    const char *classname;
+    const char *altclassname;   /**< second class of the same body, or NULL */
+    int min;
+    int max;
+    const char *const *words;   /**< NULL-terminated vocabulary, or NULL */
+} Xpost_Dev_Option;
+
+const Xpost_Dev_Option *xpost_dev_png_option_roster(int *count);
+const Xpost_Dev_Option *xpost_dev_jpeg_option_roster(int *count);
+const Xpost_Dev_Option *xpost_dev_option_roster(int *count);
+
+/**
  * @brief Record a default an embedder asks of a compiled writer.
  *
  * The value is recorded among the host's settings under @p key, and
@@ -205,7 +230,7 @@ int xpost_dev_create_begin(Xpost_Context *ctx,
  *
  * @param[in] ctx The context.
  * @param[in] key The key the driver reads off its device dictionary.
- * @param[in] value The value.
+ * @param[in] v The value: an integer, or a word as a name object.
  * @param[in] classname The class's name in the private dictionary.
  * @param[in] altclassname A second class the same driver body makes,
  *            or NULL.
@@ -213,7 +238,7 @@ int xpost_dev_create_begin(Xpost_Context *ctx,
  */
 int xpost_dev_option_default(Xpost_Context *ctx,
                              const char *key,
-                             int value,
+                             Xpost_Object v,
                              const char *classname,
                              const char *altclassname);
 

@@ -91,6 +91,8 @@ count    xpost_dev_driver.h                 rows
 count    xpost_dev_driver.h                 step
 count    xpost_dev_driver.h                 top
 count    xpost_dev_driver.h                 whole:1
+count    xpost_dev_generic.h                max
+count    xpost_dev_generic.h                min
 count    xpost_dict.h                       hash
 count    xpost_dict.h                       nused
 count    xpost_dict.h                       pad
