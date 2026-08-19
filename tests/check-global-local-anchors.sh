@@ -33,6 +33,9 @@ xpost=$2
 . "$(dirname "$0")/verdict.sh"
 . "$(dirname "$0")/guard-paths.sh"
 
+guard_require_srcroot "$src"
+guard_require_file "$xpost" "the interpreter"
+
 verdict_workdir
 
 # read the sources and the register through a mirror, so a wrong source
