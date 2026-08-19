@@ -204,6 +204,7 @@ font test font-*
 font test font-serial
 font test glyph-page
 font test op-fontcache
+font test page-lifetime-truetype
 font test op-glyphcontext
 font test outline-font
 font test record-glyph

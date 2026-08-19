@@ -18,3 +18,5 @@ run-raster-formats-test.sh  the header is its subject rather than something in i
 run-pdf-consumer-test.sh  it compares pages from two different producers, whose headers agree on nothing but length, so it takes the raster as the last width times height bytes -- arithmetic that holds for either -- rather than parsing a grammar only one of them is bound by
 
 run-region-replay-test.sh  it compares regions between two renders of the same page, so it wants ranges of bytes rather than the values of pixels, and it finds the raster the same way -- the last width times height bytes -- because the two renders it compares need not have written the same header
+
+run-page-lifetime-truetype-test.sh  what it reads with od is not a page at all: four bytes of a candidate font file's magic, to tell a plain TrueType program from a collection or a wrapper before pinning the run's faces to it; no rendered byte is judged here, the memory readings are

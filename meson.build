@@ -4186,6 +4186,22 @@ test('page-lifetime',
   suite: cost_fast,
   timeout: 120)
 
+# ... and the same steady state with the face's format pinned. Which
+# format a face arrives in decides real branches of the font machinery
+# -- charstrings read and cached against a Type 1 or CFF file, a program
+# published as sfnts for a TrueType one -- and the hosts where all
+# pre-push gates run resolve every standard name to CFF, so a cost
+# conditional on the TrueType branches shows nowhere before a push. This
+# run pins one plain TrueType file from the host as the only face there
+# is, asserts the pin took, and holds the job to the same flat reading.
+# A host carrying no such file skips, saying so.
+test('page-lifetime-truetype',
+  find_program('tests/run-page-lifetime-truetype-test.sh'),
+  args: [ xpost_exe, files('tests/page_lifetime_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # ... and all of it reached from a device selection rather than from a
 # test driving the machinery by hand. A record is played into the device
 # the run selected (-d pgm:band), so this renders one page
@@ -5153,6 +5169,7 @@ test('check-glyph-render-route',
   args: [ meson.current_source_dir() ],
   suite: cost_fast,
   timeout: 120)
+
 
 # A halftone dictionary may carry a transfer function that overrides the
 # one the graphics state holds (PLRM Table 7.4). Three separable things

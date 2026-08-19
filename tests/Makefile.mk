@@ -434,6 +434,7 @@ tests/run-band-route-test.sh \
 tests/run-band-select-test.sh \
 tests/run-band-budget-test.sh \
 tests/run-page-lifetime-test.sh \
+tests/run-page-lifetime-truetype-test.sh \
 tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \
 tests/run-jpeg-refusal-test.sh \
