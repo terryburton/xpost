@@ -190,12 +190,15 @@ end } bind put
         % A class a C driver brings is not in the private dictionary
         % until the driver has been loaded, and pricing a row asks the
         % class. This is the load the maker would do, done first and
-        % once: a driver already there is not loaded again, and a build
-        % without it registers no loader and answers nothing here.
-        rec /.playloaders get tgt 2 copy known
-            { get dup where { pop cvx exec }{ pop } ifelse }
-            { pop pop } ifelse
+        % once: a driver whose class is already there is not loaded
+        % again, and a build without it registers no loader and answers
+        % nothing here.
         /cls targets tgt get def
+        .privatedict cls known not {
+            rec /.playloaders get tgt 2 copy known
+                { get dup where { pop cvx exec }{ pop } ifelse }
+                { pop pop } ifelse
+        } if
         .privatedict cls known {
             << /width pw /height ph
                /.playclass cls

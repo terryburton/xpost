@@ -1923,40 +1923,84 @@ currentglobal true setglobal
     % defaults to the running one, so on such a device every
     % setpagedevice raises rangecheck and the page cannot be resized.
     %
+    % -  .armdevrequest  -
+    % Move the features a page-device request left pending into the
+    % slot the class-to-instance copy takes (.devrequest). Run by every
+    % device maker, after whatever driver loading the maker does: a
+    % driver's class build copies through the same procedure an
+    % instance does, so features armed across a load would be taken
+    % onto the class -- becoming a device's defaults -- and the
+    % instance they were asked for would never see them. A maker asked
+    % for with nothing pending arms nothing.
+    currentglobal true setglobal
+    .xpostsys /.armdevrequest {
+        graphicsdict /.devpending 2 copy known {
+            2 copy get 3 1 roll undef
+            graphicsdict /.devrequest 3 -1 roll put
+        }{ pop pop } ifelse
+    } bind put
+    setglobal
+
     % Every maker lives in privatedict, the ones the boot files define
     % and the ones a C driver registers alike. A driver's is not there
     % until its loader has run -- the driver is brought in on first use
     % rather than at startup -- so those makers look first and load on
     % a miss, the load leaving the maker where the look looked.
+    %
+    % Each entry arms the request: the features a page-device request
+    % left pending are moved into the slot the class-to-instance copy
+    % takes (.armdevrequest), after whatever loading the entry does.
+    % After, because a driver's class build copies through the same
+    % procedure an instance does: a build that ran with the features
+    % armed would take them onto the class -- a device's defaults --
+    % and the instance they were asked for would never see them.
     currentglobal true setglobal
     .xpostsys /.devicemakers <<
-        /pgm { .privatedict /newPGMIMAGEdevice get exec }
-        /pbm { .privatedict /newPBMIMAGEdevice get exec }
-        /ppm { .privatedict /newPPMIMAGEdevice get exec }
-        /tiff { .privatedict /newTIFFIMAGEdevice get exec }
-        /null { .privatedict /newnulldevice get exec }
-        /bbox { .privatedict /newbboxdevice get exec }
-        /pdfwrite { .privatedict /newPDFWRITEdevice get exec }
-        /svgwrite { .privatedict /newSVGWRITEdevice get exec }
-        /dscwrite { .privatedict /newDSCWRITEdevice get exec }
+        /pgm { //.xpostsys /.armdevrequest get exec
+               .privatedict /newPGMIMAGEdevice get exec }
+        /pbm { //.xpostsys /.armdevrequest get exec
+               .privatedict /newPBMIMAGEdevice get exec }
+        /ppm { //.xpostsys /.armdevrequest get exec
+               .privatedict /newPPMIMAGEdevice get exec }
+        /tiff { //.xpostsys /.armdevrequest get exec
+               .privatedict /newTIFFIMAGEdevice get exec }
+        /null { //.xpostsys /.armdevrequest get exec
+               .privatedict /newnulldevice get exec }
+        /bbox { //.xpostsys /.armdevrequest get exec
+               .privatedict /newbboxdevice get exec }
+        /pdfwrite { //.xpostsys /.armdevrequest get exec
+               .privatedict /newPDFWRITEdevice get exec }
+        /svgwrite { //.xpostsys /.armdevrequest get exec
+               .privatedict /newSVGWRITEdevice get exec }
+        /dscwrite { //.xpostsys /.armdevrequest get exec
+               .privatedict /newDSCWRITEdevice get exec }
         /png { .privatedict /newpngdevice 2 copy known not
-               { loadpngdevice } if get exec }
+               { loadpngdevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /pngalpha { .privatedict /newpngalphadevice 2 copy known not
-               { loadpngalphadevice } if get exec }
+               { loadpngalphadevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /jpeg { .privatedict /newjpegdevice 2 copy known not
-               { loadjpegdevice } if get exec }
+               { loadjpegdevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /bgr { .privatedict /newbgrdevice 2 copy known not
-               { loadbgrdevice } if get exec }
+               { loadbgrdevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /raster { .privatedict /newrasterdevice 2 copy known not
-               { loadrasterdevice } if get exec }
+               { loadrasterdevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /record { .privatedict /newrecorddevice 2 copy known not
-               { loadrecorddevice } if get exec }
+               { loadrecorddevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /xcb { .privatedict /newxcbdevice 2 copy known not
-               { loadxcbdevice } if get exec }
+               { loadxcbdevice } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /gdi { .privatedict /newwin32device 2 copy known not
-               { loadwin32device } if get exec }
+               { loadwin32device } if
+               //.xpostsys /.armdevrequest get exec get exec }
         /gl { .privatedict /newwin32device 2 copy known not
-               { loadwin32device } if get exec }
+               { loadwin32device } if
+               //.xpostsys /.armdevrequest get exec get exec }
     >> put
     % A driver the build left out registers no loader, so the maker
     % above would answer undefined. Drop those entries instead, and an
@@ -2065,16 +2109,18 @@ currentglobal true setglobal
         }{ pop pop } ifelse
         % The device features of this request: every accumulated key the
         % page machinery does not read itself. Split out once, because
-        % they go to the device twice -- left here for the
-        % class-to-instance copy the maker below runs, which takes them
-        % and writes them onto the instance as it is born
-        % (.classcopydict, data/device.ps), so that a key a device reads
-        % as it is created is on its dictionary by then; and put onto
-        % the finished device again below, where the completion reads
-        % them. A maker that stops before the copy leaves the entry
-        % standing, which is the .rasterband residue again: every route
-        % that makes a device states this entry before its Create, so a
-        % leaving is overwritten and never inherited.
+        % they go to the device twice -- left pending here, armed by the
+        % maker below after any driver loading it does (.armdevrequest,
+        % which is what keeps a driver's own class build from taking
+        % them), and taken by the class-to-instance copy, which writes
+        % them onto the instance as it is born (.classcopydict,
+        % data/device.ps), so that a key a device reads as it is
+        % created is on its dictionary by then; and put onto the
+        % finished device again below, where the completion reads
+        % them. A maker that stops between the arming and the copy
+        % leaves the armed entry standing, which is the .rasterband
+        % residue again: every route that makes a device arms before
+        % its Create, so a leaving is overwritten and never inherited.
         /feat merged length dict def
         merged { % key value
             1 index /OutputDevice eq
@@ -2101,7 +2147,7 @@ currentglobal true setglobal
             dup merged /OutputFile 3 -1 roll put
             feat /OutputFileName 3 -1 roll put
         }{ pop pop } ifelse
-        graphicsdict /.devrequest feat put
+        graphicsdict /.devpending feat put
         % the new device builds under its own local name -- DEVICE
         % everywhere means the accessor reading the graphics state, and
         % the machinery's frozen references to it must not see the
