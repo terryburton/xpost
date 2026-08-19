@@ -28,6 +28,7 @@ XPOST_CLEANFILES =
 include src/lib/Makefile.mk
 include src/bin/Makefile.mk
 include data/Makefile.mk
+include examples/Makefile.mk
 include doc/Makefile.mk
 include tests/Makefile.mk
 

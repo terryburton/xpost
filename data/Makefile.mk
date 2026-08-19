@@ -33,10 +33,7 @@ data/qsort.ps \
 data/s.pic \
 data/s.ps \
 data/readstring.ps \
-data/test.ps \
-data/testdraw.ps \
-data/sin1x.ps \
-data/dancingmen.ps
+data/test.ps
 
 psfilesdir = $(pkgdatadir)
 
@@ -73,8 +70,5 @@ data/qsort.ps \
 data/s.pic \
 data/s.ps \
 data/readstring.ps \
-data/test.ps \
-data/testdraw.ps \
-data/sin1x.ps \
-data/dancingmen.ps
+data/test.ps
 

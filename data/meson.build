@@ -31,10 +31,7 @@ xpost_data_src = files([
   's.pic',
   's.ps',
   'readstring.ps',
-  'test.ps',
-  'testdraw.ps',
-  'sin1x.ps',
-  'dancingmen.ps'
+  'test.ps'
 ])
 
 install_data(xpost_data_src,

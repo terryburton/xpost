@@ -208,6 +208,16 @@ guard_hold "$work/data-have" "$work/data-meson" \
     "named by data/meson.build and not in the tree:"
 [ "$guard_held" -eq 0 ] || fail=1
 
+# ---- the examples: distributed whole, installed nowhere ----
+#
+# Every file the directory holds is an example program or the data one
+# of them reads, so the comparison takes them all: an example added
+# without a list line would be missing from the tarball that documents
+# it, and tests/run-examples-test.sh runs whatever the directory holds,
+# so a release would advertise a tested example it does not carry.
+( cd "$tree" && find examples -type f -print ) > "$work/examples"
+hold "example" "$tree/examples/Makefile.mk" examples "$work/examples" '.'
+
 # ---- the test suite, guards and registers included ----
 #
 # A corpus is fetched, not distributed: the programs it holds belong to
@@ -280,7 +290,7 @@ fi
 
 # ---- and the lists are actually included by the build ----
 for mk in src/lib/Makefile.mk src/bin/Makefile.mk data/Makefile.mk \
-          tests/Makefile.mk; do
+          examples/Makefile.mk tests/Makefile.mk; do
     if ! grep -q "^include $mk\$" "$tree/Makefile.am"; then
         echo "FAIL: Makefile.am does not include $mk, so nothing in it is"
         echo "      distributed however complete the list is"

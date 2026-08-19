@@ -90,7 +90,7 @@ done
 # tail and a real fetch on it goes unchecked.
 for f in "$src"/data/*.ps; do
     case $(basename "$f") in
-        dancingmen.ps|m.ps|sin1x.ps|s.ps|test.ps) continue ;;
+        m.ps|s.ps|test.ps) continue ;;
     esac
     tr -d "$cr" < "$f" | sed 's|(%[^)]*)|(STR)|g; s|%.*||'
 done > "$work/lines"
@@ -143,7 +143,7 @@ sed 's|^systemdict ||' "$work/all" | awk '{print $NF}' | sort -u > "$work/known"
 : > "$work/baked"
 for f in "$src"/data/*.ps; do
     case $(basename "$f") in
-        dancingmen.ps|m.ps|sin1x.ps|s.ps|test.ps|testdraw.ps|readstring.ps) continue ;;
+        m.ps|s.ps|test.ps|readstring.ps) continue ;;
     esac
     body=$(tr -d "$cr" < "$f" | sed 's|(%[^)]*)|(STR)|g; s|%.*||')
     # names this file defines at top level are on its own dictionary stack

@@ -154,7 +154,7 @@ guard_mirror_tree() {
         esac
     done
     set +f
-    eval "( cd \"\$1\" && find data src tests $gm_prune -type f -print )" \
+    eval "( cd \"\$1\" && find data examples src tests $gm_prune -type f -print )" \
         2>"$work/gm-err" > "$work/gm-list"
     # The directories, and the files a single pass will not reach: an
     # empty one has no line to be read and so is never opened.
@@ -198,7 +198,7 @@ guard_mirror_tree() {
     # about the several hundred beside them, which is the shape the
     # guards themselves are written against.
     gm_in=$(grep -c . "$work/gm-list")
-    gm_out=$( ( cd "$mirror" && find data src tests -type f -print ) \
+    gm_out=$( ( cd "$mirror" && find data examples src tests -type f -print ) \
               2>/dev/null | grep -c . )
     if [ "$gm_in" -eq 0 ] || [ "$gm_out" -ne "$gm_in" ]; then
         echo "FAILURES: $gm_out of $gm_in files reached the mirror of $1;"

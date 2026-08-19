@@ -95,7 +95,6 @@
 dup (initial rng seed: )=only =
 dup /initialsrand exch def
 srand
-currentfile flushfile
 .75 setflat
 
 
@@ -109,7 +108,6 @@ currentfile flushfile
 %0 -60 rlineto
 %fill
 
-doprompt
 
 
 {
@@ -128,7 +126,6 @@ beginpage
 	20 {
         randarc
         randwidth randcolor stroke
-        %doprompt
     } repeat
 endpage
 
@@ -147,7 +144,6 @@ endpage
 (stroked lines)=
 beginpage
     20 { randline randwidth randcolor stroke } repeat
-breakhere
 endpage
 
 

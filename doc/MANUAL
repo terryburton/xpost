@@ -80,7 +80,7 @@ tree is developed against, so meson is the one to reach for.
 `xpost` below is the installed program or the one in the build tree,
 whichever is to hand:
 
-  build/src/bin/xpost -d png -o page.png data/dancingmen.ps
+  build/src/bin/xpost -d png -o page.png examples/dancingmen.ps
 
 `-d` names the device the page is painted into and `-o` names the file
 it is written to. A page is letter unless the program says otherwise or
@@ -113,15 +113,16 @@ The transcripts below are of runs at a terminal where the transcript is
 about a session, and of runs with the standard input redirected
 otherwise.
 
-The examples under data/ draw pages:
+Two of the examples under examples/ draw pages:
 
-  xpost -d png -o men.png   data/dancingmen.ps   figures from a Sherlock
-                                                 Holmes story
-  xpost -d png -o sin1x.png data/sin1x.ps        a function plotted by
-                                                 bezier interpolation
+  xpost -d png -o men.png   examples/dancingmen.ps   figures from a
+                                                     Sherlock Holmes story
+  xpost -d png -o sin1x.png examples/sin1x.ps        a function plotted by
+                                                     bezier interpolation
 
-Both are installed by `ninja -C build install` along with the data files
-the interpreter boots from.
+The examples are part of the source tree and are not installed;
+`ninja -C build install` installs only the data files the interpreter
+boots from.
 
 
 == The devices ==
@@ -410,9 +411,17 @@ invoke `executive`.
 
 == The example programs ==
 
-Under ex/ are programs that use no graphics at all. Several read an
-array of strings named ARGUMENTS, which they expect to be defined
-before they run:
+The example programs live under examples/, one directory for all of
+them. Every .ps file there is a program to run; the `teapot` file is
+mesh data that tea1.ps and teamath.ps read, so run those two from the
+examples directory. The test suite runs every program the directory
+holds (tests/run-examples-test.sh), so each of these runs cleanly
+under the null device.
+
+These use no graphics at all. Several read an array of strings named
+ARGUMENTS, which they expect to be defined before they run; each of
+those carries a %%SampleArguments: comment near its top naming values
+it runs with:
 
   binshape.ps  vertical streams of 0 and 1; ARGUMENTS is the width
   digit.ps     draws its argument in seven-segment digits
@@ -421,15 +430,34 @@ before they run:
   tabref.ps    the reference tablature generator
   hwbin.ps     hello world, written with binary radix numbers
   hwhex.ps     hello world, written as a hexadecimal string
+  mat.ps       matrix and vector math routines
   ubf119.ps    the 119-character universal binary-function table
   ubf70.ps     the 70-character universal binary-function table
 
-The four that take no argument run as they are:
+These draw with the graphics operators:
 
-  xpost ex/hwhex.ps
+  arc.ps        approximate arcs with bezier segments, printing the
+                points
+  arcdist.ps    measure an arc's length with pathforall
+  bitfont.ps    a non-caching Type 3 font using 8-bit images
+  class.ps      a class system with inheritance, built from
+                dictionaries
+  dancingmen.ps figures from a Sherlock Holmes story
+  matrix.ps     matrix and coordinate-system operators in PostScript
+  sin1x.ps      a function plotted by bezier interpolation
+  tea1.ps       a spinning teapot, one page per frame until
+                interrupted
+  teamath.ps    project the teapot mesh through a viewing matrix
+  testdraw.ps   pages of random arcs, pies, lines, curves and boxes
+
+A program whose %%Unbounded: comment says so runs until interrupted.
+
+The programs that take no argument run as they are:
+
+  xpost examples/hwhex.ps
 
 For the rest, define ARGUMENTS and then run the program by name. From
-the ex directory:
+the examples directory:
 
   $ cat >tab.ps <<'EOF'
   /ARGUMENTS [ (A) (Bm) (F#m) (F#m) ] def
