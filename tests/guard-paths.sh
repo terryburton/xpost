@@ -154,7 +154,20 @@ guard_mirror_tree() {
         esac
     done
     set +f
-    eval "( cd \"\$1\" && find data examples src tests $gm_prune -type f -print )" \
+    # Each top-level directory is required by name before the walk, so a
+    # tree missing one is refused with the reason rather than by a find
+    # whose failure, under a caller's errexit, ends the guard mid-word
+    # with nothing said. The walk itself is shielded the same way; a
+    # shortfall it leaves behind is caught by the counts below, which do
+    # say why.
+    for gm_d in data examples src tests; do
+        if [ ! -d "$1/$gm_d" ]; then
+            echo "FAILURES: the tree under $1 has no $gm_d directory, so it"
+            echo "      is not the source tree this guard was pointed at"
+            exit 1
+        fi
+    done
+    eval "( cd \"\$1\" && find data examples src tests $gm_prune -type f -print ) || :" \
         2>"$work/gm-err" > "$work/gm-list"
     # The directories, and the files a single pass will not reach: an
     # empty one has no line to be read and so is never opened.

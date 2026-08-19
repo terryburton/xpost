@@ -90,7 +90,7 @@ decoy_emptyfile="$work/decoy-empty-file"
 # the mirroring reads to know what to leave out.
 decoy_hollow="$work/decoy-hollow"
 mkdir -p "$decoy_hollow"
-( cd "$src" && find data src tests -path 'tests/corpus/*' -prune -o -type f -print ) \
+( cd "$src" && find data examples src tests -path 'tests/corpus/*' -prune -o -type f -print ) \
     > "$work/hollow-list" 2>/dev/null
 echo tests/corpus/.gitignore >> "$work/hollow-list"
 nhollow=$(grep -c . "$work/hollow-list" || true)
