@@ -5130,6 +5130,9 @@ test('check-function-facts',
 test('check-colourspace-facts',
   find_program('tests/check-colourspace-facts.sh'),
   suite: cost_fast,
+  # a guard's probes run about three times slower on the Windows host,
+  # so a limit sized on Linux is not a limit there
+  timeout: 180,
   args: [ meson.current_source_dir(), xpost_exe ])
 
 # PLRM 4.9.1 defines exactly two pattern types, a tiling and a shading.

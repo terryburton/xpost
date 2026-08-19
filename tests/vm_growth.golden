@@ -178,7 +178,7 @@ internal_debug_ops_test.ps                 zero
 interrupt_test.ps                          once   unexplained
 isolation_test.ps                          once   unexplained
 large_object_test.ps                       zero
-local_vm_invariant_test.ps                 costs  unexplained
+local_vm_invariant_test.ps                 zero
 loop_exit_test.ps                          fits
 mask_cache_range_test.ps                   once   unexplained
 name_lookup_cost_test.ps                   fits
