@@ -161,8 +161,8 @@ _xpost_main_banner(void)
     xpost_version_get(&maj, &min, &mic);
     printf("Xpost %d.%d.%d\n", maj, min, mic);
     printf("Copyright (C) 2013, Michael Joshua Ryan. All rights reserved.\n");
-    printf("This software is supplied under the BSD 3 clause and comes with NO WARRANTY:\n");
-    printf("see the file COPYING for details.\n");
+    printf("Licensed under the BSD 3-clause licence, without any warranty;\n");
+    printf("the file COPYING states the terms.\n");
 }
 
 /* Whether this run has somebody to greet.
