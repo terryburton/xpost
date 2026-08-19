@@ -85,3 +85,41 @@ jobs:
       run: meson test -C builddir --print-errorlogs
     - name: meson dist
       run: meson dist -C builddir
+
+  # The faceless configuration: -Dfreetype=disabled builds a font system
+  # with no faces, whose findfont answers invalidfont while procedural
+  # (Type 3) fonts still render. No lane built the optional
+  # configuration the tree used to describe, which is how it rotted
+  # into one that did not compile; this lane exists so that cannot
+  # happen again. It is the smallest job that holds the configuration:
+  # one width, built under -Werror because the way this configuration
+  # failed before was helpers left defined and unused, and the fast
+  # suite, in which the face-backed tests skip loudly and the
+  # noface-refusal suite runs. Freetype, fontconfig and the fonts are
+  # deliberately not installed: the lane holds the build that genuinely
+  # lacks them.
+  nofaces:
+    name: linux - no face library
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt-get -qq update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev meson ninja-build
+    - name: meson
+      run: meson setup -Dfreetype=disabled --werror builddir
+    # The option asks for the faceless build; what was configured is held
+    # to what config.h says, so a lane that quietly found a face library
+    # cannot report green for a configuration it never compiled.
+    - name: the build carries no face library
+      run: |
+        if grep -q '^#define HAVE_FREETYPE2' builddir/config.h; then
+          echo "asked for no face library; config.h defines HAVE_FREETYPE2"
+          exit 1
+        fi
+        echo "no face library: as configured"
+    - name: ninja
+      run: ninja -C builddir
+    - name: meson test
+      run: meson test -C builddir --suite fast --print-errorlogs
