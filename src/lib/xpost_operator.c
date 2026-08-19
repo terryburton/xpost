@@ -1121,6 +1121,39 @@ int xpost_operator_exec(Xpost_Context *ctx,
     op = optab[opcode];
     sp = xpost_vm_ptr(ctx->gl, _optab_adr(ctx->gl, op.sigadr));
 
+    /* An operator stating one signature that takes nothing and is
+       implemented by a C function needs none of the matching below: no
+       operand count, no type pattern, no operands moved to the hold
+       stack. Nearly half the calls a rendering job makes arrive here --
+       the looping operators reschedule their step operators through the
+       execution stack every iteration -- so this case keeps only what
+       the full path gives it: the currentobject record _on_error reads,
+       a hold stack left empty exactly as the argument mover leaves it
+       for a zero-operand call (composite constructors push their
+       collector-defense objects there), and the shared post-call checks.
+       Registration gives every such signature _stack_none as its
+       stack-checking function, which accepts unconditionally, so it is
+       recognised here rather than called. */
+    if ((op.n == 1) && (sp->in == 0) && (sp->fp != NULL) &&
+        ((sp->checkstack == NULL) || (sp->checkstack == _stack_none)))
+    {
+        if ((ctx->currentobject.tag == operatortype) &&
+            (ctx->currentobject.mark_.padw == opcode))
+        {
+            ctx->currentobject.mark_.pad0 = 0;
+            ctx->currentobject.tag |= XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD;
+        }
+        else
+        {
+            ctx->currentobject.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD;
+        }
+        hold = xpost_stack_at(ctx->lo, ctx->hold);
+        hold->prevseg = ctx->hold;
+        hold->top = 0;
+        ret = ((int(*)(Xpost_Context*))sp->fp)(ctx);
+        goto post;
+    }
+
     /* a signature states at most XPOST_OPERATOR_MAX_SIG operands, so ct
        only needs to reach that many; no full segment walk is needed. The
        top segment settles it: that many or more in it, or -- when a full
@@ -1293,6 +1326,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
         default:
             ret = unregistered;
     }
+  post:
     if (ret)
         return ret;
     /* A stream backed by a procedure answers a read with end of data and
