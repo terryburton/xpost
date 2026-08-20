@@ -74,6 +74,14 @@
 # than a different data-directory path length, and +344 lands on run six on
 # one host and run seven on another. The window is what those samples
 # oscillate across, and the minimum is what a retention cannot get under.
+# A conviction the register does not expect is not handed down on three
+# samples either: one workload's swing comes back on runs fifteen and
+# sixteen after settling, so three samples can all land on its costing
+# side, and on one host all three did. Such a workload is asked again
+# over eleven measured runs, six through sixteen, and convicted only if
+# even that window never reads nothing or below. The extra runs are spent
+# only there, so the register's own worklist stays as quick to read as it
+# was.
 # What comes to nothing is held to coming to nothing; what still costs
 # something on every settled run is the worklist. Neither assertion needs a
 # tolerance or an assumption about how wide an object is, which is what
@@ -109,7 +117,9 @@
 #                 class is that it still reaches nothing.
 #
 #   costs <why>   Costs something on every run of the settled window: even
-#                 the smallest of runs six through eight is positive. That
+#                 the smallest measured run is positive -- of three runs
+#                 where the register already carries the workload here, of
+#                 eleven where convicting it would be news. That
 #                 may be a retention, or a fit effect needing more passes
 #                 than the window holds; which it is has not been
 #                 established per workload, and that is what makes this the
@@ -384,6 +394,56 @@ PS
                                            if ($2 + 0 < m) m = $2 + 0
                                            if ($3 + 0 < m) m = $3 + 0
                                            print m }')
+    # A refund is not owed on a schedule. One workload here reads +4,528
+    # and -4,904 on runs two and three, settles to noise, and reads the
+    # same pair again on runs fifteen and sixteen: the swing is the
+    # graphics machinery's saved state landing in released blocks of
+    # another size on one run and in fresh space the next, and which runs
+    # it lands on moves with the host. Three samples can all catch the
+    # costing side of it, and on one host all three did, for a workload
+    # the register holds to nothing. So a positive minimum is not yet a
+    # conviction where the register does not already expect one: the
+    # workload is asked once more, over eleven measured runs, six through
+    # sixteen, and convicted only if even that window never reads nothing
+    # or below. This read of the register is routing, like the one above,
+    # and one-way in the same sense: the extra patience can only find a
+    # refund, which a retention cannot produce, so nothing held is
+    # acquitted by it. Workloads the register already carries as costs or
+    # once get no extra runs -- their conviction is expected, and the
+    # worklist does not have to be slower to stay a worklist.
+    #
+    # The readings are taken inside one loop whose body is parsed before
+    # its first pass runs, so the loop's own storage is allocated before
+    # the baseline is read; the first pass takes the baseline and runs
+    # nothing. The reporting loop after it allocates its print scratch
+    # only once no reading remains to charge it to.
+    if [ "$least" -gt 0 ] && [ "$regclass" != costs ] && [ "$regclass" != once ]
+    then
+        cat > "$work/case/patience.ps" <<PS
+/xg.used { vmstatus pop exch pop } bind def
+/xg.tgt (prep.ps) def
+/xg.one { mark { xg.tgt run } stopped pop cleartomark 1 vmreclaim } bind def
+/xg.r 12 array def
+/xg.i 0 def
+xg.one xg.one xg.one xg.one xg.one
+0 1 11 { /xg.i exch def xg.i 0 gt { xg.one } if xg.r xg.i xg.used put } for
+(XGLONG) print
+1 1 11 { /xg.i exch def ( ) print
+         xg.r xg.i get xg.r xg.i 1 sub get sub 20 string cvs print } for
+(\n) print
+flush
+PS
+        lout=$(cd "$work/case" && xg_limit 900 \
+                   "$xpost" -q --no-sandbox -d null patience.ps </dev/null 2>/dev/null)
+        lwin=$(printf '%s\n' "$lout" | LC_ALL=C \
+                   sed -n 's/^XGLONG \([0-9 -][0-9 -]*\)$/\1/p' | tail -1)
+        if [ -n "$lwin" ]; then
+            least=$(printf '%s\n' "$lwin" | awk '{ m = $1 + 0
+                                                    for (i = 2; i <= NF; i++)
+                                                        if ($i + 0 < m) m = $i + 0
+                                                    print m }')
+        fi
+    fi
     if [ "$least" -le 0 ]; then
         if [ "$cost" -le 0 ]; then
             printf '%s zero\n' "$b" >> "$work/measured"
@@ -438,7 +498,7 @@ while read -r name class extra; do
         costs)
             printf '%s  used to reach nothing and now holds %s bytes on every\n' \
                 "$name" "$extra" >> "$work/problems"
-            printf '        run of the settled window (runs six through eight), so\n' \
+            printf '        run of the settled window, eleven measured runs of it, so\n' \
                 >> "$work/problems"
             printf '        something it does is held rather than given back\n' \
                 >> "$work/problems" ;;

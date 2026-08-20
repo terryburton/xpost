@@ -48,7 +48,9 @@
 #                 The assertion is that they still reach nothing.
 #
 #   costs <why>   Costs something on every run of the settled window: even
-#                 the smallest of the three measured runs is positive. That
+#                 the smallest measured run is positive -- of three runs
+#                 where this register already carries the workload here, of
+#                 eleven where convicting it would be news. That
 #                 may be a retention, or the fit effect needing more passes
 #                 than the window holds; which it is has not been
 #                 established per workload. These are the worklist.
