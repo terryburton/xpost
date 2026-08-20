@@ -828,7 +828,14 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
             }
             if (rtype == arraytype)
             {
-                unsigned int sz = s->data[i].saverec_.pad;
+                /* Descend the whole entity, not the length of the object
+                   the save record was made for. A record made for a
+                   getinterval view of a shared array holds the view's
+                   length in saverec_.pad, fewer elements than the entity
+                   holds; marking only that many leaves the tail of a
+                   shared array untraced, so a child reached only through
+                   the tail is swept while the array is still live. The
+                   entity's own used-extent is what the root walk marks. */
                 ret = xpost_memory_table_get_addr(mem, rsrc, &ad);
                 if (!ret)
                 {
@@ -836,7 +843,9 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                   rsrc);
                     return 0;
                 }
-                if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, markall))
+                if (!_xpost_garbage_mark_array(ctx, mem, ad,
+                        mem->table.tab[rsrc].used / sizeof(Xpost_Object),
+                        markall))
                     return 0;
                 ret = xpost_memory_table_get_addr(mem, rcpy, &ad);
                 if (!ret)
@@ -845,7 +854,9 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                   rcpy);
                     return 0;
                 }
-                if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, markall))
+                if (!_xpost_garbage_mark_array(ctx, mem, ad,
+                        mem->table.tab[rcpy].used / sizeof(Xpost_Object),
+                        markall))
                     return 0;
             }
         }

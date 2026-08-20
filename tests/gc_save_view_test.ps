@@ -1,0 +1,38 @@
+% The collector must trace a shared array's whole extent from a save
+% record, not the length of the object the record was made for, run
+% through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff it holds.
+%
+% A getinterval view is a shorter object over a longer array entity.
+% Writing through the view under a save copies the entity (copy-on-write)
+% and records the write, and the save record carries the view's length.
+% The collector marks the shared entity from that record; if it descended
+% only the view's length it would leave the entity's tail untraced, and a
+% child reachable only through the tail would be swept while the array is
+% still live and still rooted -- a collector freeing a reachable object.
+%
+% Build an eight-element array of distinct children, a one-element view of
+% it, drop every other root, write through the view under a save, force a
+% collection, and require every child -- including the seven the view does
+% not cover -- to still be readable. The verdict is left on the operand
+% stack so it survives the restore, and judged after restoring.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+
+/parent 8 array def
+0 1 7 { parent exch 2 array put } for    % parent[i] = a distinct two-element child
+/view parent 0 1 getinterval def         % a one-element view of the eight
+0 1 300 { pop 1 array pop } for           % unrelated garbage for the collector to want
+
+save
+    view 0 42 put            % copy-on-write; the record is made for the view (length 1)
+    1 vmreclaim              % collect while parent is still live and rooted
+    % reading a child whose storage was swept raises rangecheck; a run
+    % that reads every tail child without error is one where none was
+    { 1 1 7 { parent exch get 0 get pop } for } stopped not
+exch restore
+    (a shared array's tail children survive a collection after a view write under save) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse

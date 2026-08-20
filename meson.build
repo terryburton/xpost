@@ -1856,6 +1856,17 @@ test('gc-stack-segments',
   suite: cost_fast,
   timeout: 300)
 
+# The collector must trace a shared array's whole extent from a save
+# record, not the length of the object the record was made for: a
+# getinterval view written under a save records the view's length, and
+# marking only that many elements sweeps the array's tail children while
+# the array is still live.
+test('gc-save-view',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gc_save_view_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast)
+
 # A collection nothing asked for, provoked by the entity table rather
 # than by the bytes behind it. A finely divided clipping region costs
 # tens of thousands of entity slots and the next clip leaves every one

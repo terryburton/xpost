@@ -245,6 +245,7 @@ tests/gc_deep_chain_test.ps \
 tests/gc_diagnostics_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \
+tests/gc_save_view_test.ps \
 tests/gc_stack_segments_test.ps \
 tests/gc_mark_failure_test.c \
 tests/job_control_test.c \
