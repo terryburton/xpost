@@ -130,6 +130,15 @@ struct Xpost_File
     int owned;
     unsigned int ent;
     Xpost_File_Wraps wraps;
+    /* A job-server channel frames its jobs with a Control-D (0x04): reading
+       one ends the job and the stream reads on for the next (PLRM 3.7.7).
+       This is device-dependent channel framing, not a PostScript token, so
+       it is honoured only on a stream the embedder marks as such a channel;
+       a file a program opens, a filter, and every nested read leave it 0 and
+       so pass a 0x04 through as an ordinary byte. */
+    int job_stream;
+    int eot; /* a 0x04 was read from a job_stream: this job ended at the
+                delimiter and the stream has more after it */
 };
 
 /* What a file's handle is recorded and asked for as: the base every
@@ -227,7 +236,24 @@ and http://stackoverflow.com/questions/25506324/how-to-do-pollstdin-or-selectstd
 static inline
 int xpost_file_getc(Xpost_File *in)
 {
-    return in->methods->readch(in);
+    int c;
+    /* Control-D on a job-server channel is that channel's end-of-file
+       (PLRM 3.7.7): the job ends here and the stream is read on for the
+       next. Once one is read the stream stays at end-of-file for the rest
+       of the job -- the scanner reads past a lone end-of-file while it
+       skips space, so a one-shot end here would be swallowed and the next
+       job read into this one. The run's boundary clears eot to read the
+       next job. Marked only on the outermost server stream, so a program's
+       own files and nested reads pass the byte through untouched. */
+    if (in->job_stream && in->eot)
+        return EOF;
+    c = in->methods->readch(in);
+    if (in->job_stream && c == 0x04)
+    {
+        in->eot = 1;
+        return EOF;
+    }
+    return c;
 }
 
 static inline

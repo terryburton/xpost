@@ -504,6 +504,23 @@ XPAPI void xpost_stderr_handler_set(Xpost_Context *ctx,
 XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable);
 
 /**
+ * @brief Treat a run's input stream as a Control-D-framed job-server channel.
+ *
+ * Off by default. When on -- together with per-job isolation, which it needs
+ * -- an embedder-supplied input stream (xpost_run() with XPOST_INPUT_STRING
+ * or XPOST_INPUT_FILEPTR) may carry more than one job, framed by the
+ * Control-D (0x04) end-of-file the serial job-server protocol uses (PLRM
+ * 3.7.7). Each Control-D ends the job being read and the next begins,
+ * reverting to the baseline in between, all within the one xpost_run() call:
+ * the reader is held outside the virtual memory the boundary reverts, so a
+ * job boundary can be taken in mid-run. A named file (XPOST_INPUT_FILENAME)
+ * is one job whatever it holds, and a Control-D in a file a program opens or
+ * in a nested read is an ordinary byte -- the protocol frames the outermost
+ * channel, and is not part of the language.
+ */
+XPAPI void xpost_jobserver_set(Xpost_Context *ctx, int enable);
+
+/**
  * @brief Set the current state as the baseline every later job reverts to.
  *
  * The job boundary reverts to a fixed baseline captured once, ordinarily

@@ -4008,6 +4008,40 @@ static void _close_run_input(Xpost_Context *ctx)
     }
 }
 
+/* This job ended at a job-server delimiter (Control-D) and its stream has
+   another job after it. Report so, clearing the mark so the next job's own
+   delimiter is read fresh. The stream position is the C stream's, which the
+   baseline revert does not touch, so the next job reads on from where this
+   one stopped -- the reader lives outside the virtual memory the boundary
+   reverts, which is what lets a job boundary be taken in mid-run. */
+static int _job_stream_continues(Xpost_Context *ctx)
+{
+    Xpost_File *f;
+
+    if (xpost_object_get_type(ctx->run_input_file) != filetype)
+        return 0;
+    f = xpost_file_get_file_pointer(ctx->lo, ctx->run_input_file);
+    if (!f || !f->job_stream || !f->eot)
+        return 0;
+    f->eot = 0;
+    return 1;
+}
+
+/* Prime the context to run one job of a stream from an empty exec stack: a
+   quit sentinel at the base the job winds back to, the stream file on the
+   operand stack, and the start procedure that runs it on the exec stack.
+   Used for the first job of a stream and again for each job after a boundary,
+   so every job of a stream begins the way a lone run does, with its own
+   start procedure and so its own error context. */
+static void _prime_job_stream(Xpost_Context *ctx)
+{
+    ctx->es_run_base = xpost_stack_count(ctx->lo, ctx->es);
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
+    xpost_stack_push(ctx->lo, ctx->os, ctx->run_input_file);
+    push_start_proc(ctx,
+            ctx->skip_graphics ? "startfilenographics" : "startfile");
+}
+
 XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
     const char *ps_str = NULL;
@@ -4119,6 +4153,17 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
             ctx->run_input_file.tag |=
                 XPOST_OBJECT_TAG_ACCESS_FILE_READ
                 << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+            /* an embedder that isolates its jobs may hand over a stream that
+               carries more than one, framed by Control-D; mark it so the job
+               boundary is taken at each delimiter (PLRM 3.7.7 server loop)
+               rather than only when the whole stream ends */
+            if (ctx->jobserver && ctx->job_snapshots)
+            {
+                Xpost_File *jf =
+                    xpost_file_get_file_pointer(ctx->lo, ctx->run_input_file);
+                if (jf)
+                    jf->job_stream = 1;
+            }
         }
         xpost_stack_push(ctx->lo, ctx->os, ctx->run_input_file);
         push_start_proc(ctx, ctx->skip_graphics ? "startfilenographics" : "startfile");
@@ -4162,6 +4207,41 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
         }
     }
 
+    /* A job stream's first job is a real job, not a prelude, so the state it
+       reverts to is the one before it: the baseline is captured here, with
+       the language and device loaded and the stacks empty (PLRM 3.7.7 step
+       3), rather than at the first job's boundary, which would fold that
+       first job's own work into it. Each job of the stream -- the first and
+       every one after a boundary -- is then primed the way a lone run is, so
+       each begins with its own start procedure and error context. Captured
+       once: the first job reaches here with no baseline, and a job that
+       alters the baseline through exitserver only replaces it. */
+    {
+        Xpost_File *jf =
+            xpost_object_get_type(ctx->run_input_file) == filetype
+            ? xpost_file_get_file_pointer(ctx->lo, ctx->run_input_file)
+            : NULL;
+        if (jf && jf->job_stream && ctx->job_snapshots
+            && (!ctx->job_baseline_lo || !ctx->job_baseline_lo->valid))
+        {
+            if (!ctx->sysdict_load_done || !ctx->device_made)
+            {
+                xpost_interpreter_load_language(ctx);
+                _make_start_device(ctx);
+            }
+            /* drop the priming this run laid down, capture the empty
+               baseline (initial VM, empty stacks -- PLRM 3.7.7 step 3), and
+               prime the first job onto it afresh */
+            while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
+                (void) xpost_stack_pop(ctx->lo, ctx->es);
+            xpost_stack_clear(ctx->lo, ctx->os);
+            xpost_stack_clear(ctx->lo, ctx->hold);
+            if (!_job_capture_baseline(ctx))
+                XPOST_LOG_ERR("cannot capture the job-stream baseline");
+            _prime_job_stream(ctx);
+        }
+    }
+
     /* Run! */
 run:
     ctx->quit = 0;
@@ -4179,6 +4259,31 @@ run:
         XPOST_LOG_ERR("the context did not validate; the run is abandoned");
         _close_run_input(ctx);
         return XPOST_RUN_FAILED;
+    }
+
+    /* The job ended -- its input reached a Control-D, or the true end of the
+       stream, or the job errored (a yield is not an end; it is handled
+       below). If it ended at a Control-D and the stream carries another job,
+       revert to the baseline and run that job from the same stream. The
+       stream and, when there is one, the device are the server's rather than
+       the job's, so they are not given up here the way the last job gives
+       them up: the file stays open (its exec left it so) and is run again. */
+    if (ret != XPOST_MAINLOOP_YIELDED && _job_stream_continues(ctx))
+    {
+        /* Revert to the baseline captured before the stream's first job: it
+           restores the job priming -- the stream file on the operand stack,
+           the start procedure on the exec stack -- with the initial VM, so
+           the next job runs from it with nothing re-pushed here. A job that
+           ran exitserver folds into the baseline instead, so its definitions
+           reach the jobs after it. */
+        _job_boundary(ctx);
+        ctx->onerr_run = 0;
+        ctx->run_error_name[0] = '\0';
+        ctx->run_error_info[0] = '\0';
+        ctx->run_uncaught = 0;
+        ctx->job_encapsulated = 1;
+        _prime_job_stream(ctx);
+        goto run;
     }
 
     if (_showpage_semantic(ctx) == XPOST_SHOWPAGE_RETURN)
@@ -4292,6 +4397,14 @@ XPAPI void xpost_batch_set(Xpost_Context *ctx, int enable)
 XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable)
 {
     ctx->job_snapshots = enable;
+}
+
+/* treat a run's embedder-supplied input stream as a Control-D-framed
+   job-server channel (PLRM 3.7.7); needs per-job isolation, which frames the
+   jobs the delimiter separates */
+XPAPI void xpost_jobserver_set(Xpost_Context *ctx, int enable)
+{
+    ctx->jobserver = enable;
 }
 
 /* fold the current state into the baseline every later job reverts to */

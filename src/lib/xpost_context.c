@@ -369,6 +369,7 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->job_baseline_ds = 0;
     ctx->job_boundary_failed = 0;
     ctx->job_encapsulated = 1;
+    ctx->jobserver = 0;
     ctx->startjob_password[0] = '\0';
     ctx->xpost_interpreter_cid_init = xpost_interpreter_cid_init;
     ctx->xpost_interpreter_alloc_local_memory = xpost_interpreter_alloc_local_memory;

@@ -347,6 +347,7 @@ vm test vm-reclaim-compaction
 vm test job-snapshot-balance
 vm test job-isolation
 vm test job-control
+vm test job-stream
 vm test large-object
 vm test memory-bounds
 vm test memory-grow

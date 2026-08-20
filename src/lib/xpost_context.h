@@ -484,6 +484,13 @@ struct _Xpost_Context {
         every run. */
     int job_encapsulated;
 
+    /** Treat a run's embedder-supplied input stream as a Control-D-framed
+        job-server channel (PLRM 3.7.7): a Control-D read from it ends the
+        job being read and the next begins, all within one xpost_run. Off by
+        default; set by xpost_jobserver_set(). Needs job_snapshots, which
+        encapsulates the jobs the delimiter separates. */
+    int jobserver;
+
     /** The StartJobPassword (PLRM C.3.1). Empty (the factory default and
         the initial value here) disables the check, so a trusted prolog can
         use exitserver out of the box; a host serving untrusted jobs sets it

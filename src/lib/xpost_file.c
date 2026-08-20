@@ -1111,6 +1111,8 @@ _plain_file_init(Xpost_File *f, Xpost_File_Methods *methods)
     f->owned = 0;
     f->ent = 0;
     f->wraps = XPOST_FILE_WRAPS_NOTHING;
+    f->job_stream = 0;
+    f->eot = 0;
 }
 
 static Xpost_File *
@@ -5368,6 +5370,8 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
     ff->owned = 0;
     ff->ent = 0;
     ff->wraps = wraps;
+    ff->job_stream = 0;
+    ff->eot = 0;
     f.tag = filetype;
     if (!xpost_memory_table_alloc(mem, XPOST_HANDLE_ENTITY_SIZE, filetype,
                                   &ent))
@@ -6253,6 +6257,14 @@ int xpost_file_object_close_at_eod(Xpost_Memory_File *mem,
                                    Xpost_Object f)
 {
     Xpost_File *fp = xpost_file_get_file_pointer(mem, f);
+
+    /* A job-server stream that ended at a Control-D has not ended: it framed
+       one job and reads on for the next (PLRM 3.7.7). It is not closed here
+       -- the run's boundary closes it when the whole stream reaches its true
+       end, where eot is clear because the end was real end-of-file and not a
+       delimiter. */
+    if (fp && fp->job_stream && fp->eot)
+        return 0;
 
     if (fp && (fp->methods == &rsd_methods))
         return xpost_file_close(fp) ? ioerror : 0;

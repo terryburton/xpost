@@ -271,6 +271,7 @@ xpost_interrupt
 xpost_isatty
 xpost_job_baseline_set
 xpost_job_snapshots_set
+xpost_jobserver_set
 xpost_lib_dir_get
 xpost_lockdown
 xpost_log_init

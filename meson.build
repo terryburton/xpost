@@ -1596,6 +1596,22 @@ test('job-control',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# In-stream job separation: a single input stream carrying several jobs
+# separated by the end-of-transmission control (^D) is run as that many
+# encapsulated jobs. Isolation across the delimiter, exitserver persistence
+# across it, and a job's error not stopping the stream.
+job_stream_exe = executable('job_stream_test',
+  'tests/job_stream_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('job-stream',
+  job_stream_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: the central loop's three answers -- done, yielded,
 # and a context that would not validate -- travel as one integer, so a
 # caller telling a yield from a refusal depends on no two of them being
