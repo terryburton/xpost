@@ -973,7 +973,7 @@ xpost_font_face_scale(void *face, real scale)
         FT_Size_RequestRec req;
         real base = scale;
 
-        if (base < 8.0)
+        if (!(base >= 8.0))     /* the negated test also catches a NaN scale */
             base = 8.0;
         else if (base > 2048.0)
             base = 2048.0;
@@ -1038,10 +1038,16 @@ xpost_font_face_transform(void *face, float *mat)
 {
 #ifdef HAVE_FREETYPE2
     FT_Matrix matrix;
-    matrix.xx = (FT_Fixed)(mat[0] * 0x10000L);
-    matrix.xy = (FT_Fixed)(mat[1] * 0x10000L);
-    matrix.yx = (FT_Fixed)(mat[2] * 0x10000L);
-    matrix.yy = (FT_Fixed)(mat[3] * 0x10000L);
+    /* A NaN or out-of-range element would make the cast to the 16.16
+       fixed-point FT_Fixed undefined; hold each to the range that fits and
+       send a non-finite one to zero -- a NaN passes neither comparison. */
+#define XPOST_FT_FIX(v) \
+    ((FT_Fixed)(((v) >= -32000.0f && (v) <= 32000.0f ? (v) : 0.0f) * 0x10000L))
+    matrix.xx = XPOST_FT_FIX(mat[0]);
+    matrix.xy = XPOST_FT_FIX(mat[1]);
+    matrix.yx = XPOST_FT_FIX(mat[2]);
+    matrix.yy = XPOST_FT_FIX(mat[3]);
+#undef XPOST_FT_FIX
     FT_Set_Transform((FT_Face)face, &matrix, 0);
     {
         long m[4];
