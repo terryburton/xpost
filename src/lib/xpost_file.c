@@ -3028,7 +3028,7 @@ Xpost_Object xpost_file_cons_filter_predictor(Xpost_Memory_File *mem,
 
     if (!source)
         return invalid;
-    if (colors < 1 || columns < 1)
+    if (colors < 1 || columns < 1 || columns > (1 << 20))
         return invalid;
     if (bpc != 1 && bpc != 2 && bpc != 4 && bpc != 8 && bpc != 16)
         return invalid;

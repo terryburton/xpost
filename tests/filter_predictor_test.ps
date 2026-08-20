@@ -56,5 +56,6 @@ want eq (rows may each use their own filter) assert
 { src << /Predictor 2 /BitsPerComponent 4 >> /FlateDecode filter } /rangecheck (a sample narrower than a byte) raises
 { src << /Predictor 2 /Colors 9 >> /FlateDecode filter } /rangecheck (more colours than a pixel carries) raises
 { src << /Predictor 2 /Columns 0 >> /FlateDecode filter } /rangecheck (a row of no columns) raises
+{ src << /Predictor 2 /Columns 2000000000 >> /FlateDecode filter } /rangecheck (a row of more columns than the stage sizes) raises
 
 verdict

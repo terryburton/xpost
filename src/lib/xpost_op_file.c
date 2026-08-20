@@ -378,7 +378,7 @@ int _layer_predictor(Xpost_Context *ctx, Xpost_Object dict, Xpost_Object *f)
     colors = _dict_int(ctx, dict, "Colors", 1);
     bpc = _dict_int(ctx, dict, "BitsPerComponent", 8);
     columns = _dict_int(ctx, dict, "Columns", 1);
-    if (colors < 1 || colors > 4 || columns < 1)
+    if (colors < 1 || colors > 4 || columns < 1 || columns > (1 << 20))
         return rangecheck;
     if (bpc != 1 && bpc != 2 && bpc != 4 && bpc != 8 && bpc != 16)
         return rangecheck;
