@@ -35,13 +35,9 @@
 #include <stdlib.h> /* abs */
 #include <stddef.h>
 
-#include <assert.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <xcb/xcb.h>
-#include <xcb/xcb_image.h>
-#include <xcb/xcb_aux.h>
 
 #include "xpost.h"
 #include "xpost_log.h"

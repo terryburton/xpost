@@ -35,7 +35,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
 #ifdef HAVE_XCB
 # include <xcb/xcb.h>
@@ -43,8 +42,6 @@
 # include <xcb/xcb_event.h>
 #endif
 
-#include "xpost.h"
-#include "xpost_dsc.h"
 #include "xpost_view.h"
 
 struct _Xpost_View_Window

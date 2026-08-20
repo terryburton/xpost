@@ -57,7 +57,6 @@
    of it, so that the program and the interpreter answer it alike */
 #include "xpost_compat.h"
 
-#include "xpost_main.h"
 
 
 #define XPOST_MAIN_IF_OPT(so, lo, opt)  \

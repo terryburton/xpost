@@ -32,7 +32,6 @@
 # include <config.h>
 #endif
 
-#include <stdlib.h> /* NULL */
 
 #include "xpost.h"
 #include "xpost_log.h"

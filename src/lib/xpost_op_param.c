@@ -34,11 +34,8 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include <stdlib.h> /* NULL strtod */
-#include <string.h>
 
 #include "xpost.h"
-#include "xpost_log.h"
 #include "xpost_memory.h"
 /* what paces a collection that runs of its own accord, which the
    VMThreshold user parameter below names */

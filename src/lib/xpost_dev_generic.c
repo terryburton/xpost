@@ -36,9 +36,7 @@
 #include <limits.h>
 #include <stdint.h> /* SIZE_MAX: the width a buffer position is counted in */
 #include <stdlib.h> /* abs */
-#include <stddef.h>
 
-#include <assert.h>
 #include <math.h>
 #include <string.h>
 

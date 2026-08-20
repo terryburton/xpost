@@ -36,7 +36,6 @@
 
 #include <assert.h>
 #include <stdio.h> /* printf */
-#include <stdlib.h> /* NULL */
 
 #include "xpost.h"
 #include "xpost_log.h"

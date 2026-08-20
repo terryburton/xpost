@@ -44,13 +44,9 @@
 #endif
 
 #include <stdlib.h>
-#include <stddef.h>
 
 #include <stdio.h>
 #include <string.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <limits.h>
 
 #ifdef HAVE_TERMIOS_H
 # include <termios.h>
@@ -78,11 +74,8 @@
 # include <unistd.h> /* isatty */
 #endif
 
-#include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_compat.h"
-#include "xpost.h"
-#include "xpost_log.h"
 
 /*
    Enable keyboard echo on terminal (console) input

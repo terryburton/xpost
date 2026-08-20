@@ -33,9 +33,6 @@
 #endif
 
 #include <assert.h>
-#include <stdlib.h> /* NULL */
-#include <string.h> /* memcpy */
-#include <math.h> /* ldexp */
 
 #include "xpost.h"
 #include "xpost_memory.h"

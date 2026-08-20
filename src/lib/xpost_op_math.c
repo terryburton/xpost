@@ -36,8 +36,6 @@
 #include <assert.h>
 #include <limits.h>
 #include <math.h>
-#include <stdio.h> /* printf */
-#include <stdlib.h> /* NULL */
 
 //#define PI (4.0 * atan(1.0))
 /* the full-precision conversion: a truncated literal (0.0174533) skewed atan,
