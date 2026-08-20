@@ -289,6 +289,7 @@ graphics test pattern-space
 graphics test render-differ
 graphics test save-restore-ctm
 graphics test save-restore-matrix
+graphics test setdash-finite
 graphics test show-*
 graphics test stencil-mask-size
 graphics test thin-stroke

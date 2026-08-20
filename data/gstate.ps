@@ -1743,14 +1743,26 @@ put
 } //.xpostsys /.defop get exec
 
 % array offset  setdash  -
-% a non-empty dash array must hold no negative element and not be all zero
+% A non-empty dash array must hold no negative element and not be all
+% zero. Its elements must also be finite and their sum -- the dash period
+% -- must stay within range, and so must the offset: an infinite or NaN
+% period makes the dash phase NaN, and the phase-reduction loop stroke
+% walks then compares and subtracts NaN forever, allocating nothing so no
+% VMerror ever breaks it -- an uninterruptible loop from an ordinary
+% program. The magnitude bound is tested with lt and gt because those are
+% the comparisons a NaN answers false to; le, ge and eq answer a NaN
+% true, and would let it through. A value out of the range earns
+% limitcheck; a negative element or an all-zero array keeps rangecheck.
 /setdash [ /arraytype /numbertype ] {
     1 index dup length 0 gt {
-        false exch
+        0.0 exch
         { dup 0 lt { pop pop /setdash cvx /rangecheck signalerror } if
-          0 gt { pop true } if } forall
-        not { /setdash cvx /rangecheck signalerror } if
+          add } forall
+        dup 1e37 lt not { pop /setdash cvx /limitcheck signalerror } if
+        0.0 gt not { /setdash cvx /rangecheck signalerror } if
     } { pop } ifelse
+    dup dup 1e37 lt exch 1e37 neg gt and not
+        { /setdash cvx /limitcheck signalerror } if
     graphicsdict /currgstate get exch cvr /dashoffset exch put
     graphicsdict /currgstate get exch /dasharray exch put
 } //.xpostsys /.defop get exec

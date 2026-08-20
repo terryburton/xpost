@@ -4792,6 +4792,17 @@ test('thin-stroke',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast)
 
+# A dash length or offset that is not finite makes the dash phase NaN and
+# wedges stroke in a loop that allocates nothing and so cannot be broken
+# by a VMerror. setdash must refuse it -- and refuse a finite dash whose
+# elements sum past the representable range -- rather than store it for
+# stroke to trip over.
+test('setdash-finite',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/setdash_finite_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast)
+
 # What device completion installs on a fresh device, and what it must leave
 # alone. The compiled rectangle fills write the raster the base classes keep as
 # an array of row strings, and the compiled polygon fill paints in two colour

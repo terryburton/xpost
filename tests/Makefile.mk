@@ -504,6 +504,7 @@ tests/save_restore_test.ps \
 tests/scanner_eof_test.ps \
 tests/sealed_dict_restore_test.c \
 tests/semantics_test.ps \
+tests/setdash_finite_test.ps \
 tests/setpagedevice_failure_test.ps \
 tests/shadowed_operators.golden \
 tests/show_clip_routes.golden \

@@ -1,0 +1,67 @@
+% setdash refuses a dash whose period or offset is not a finite number
+% in range, run through `xpost -d null` by run-ps-test.sh: prints SUCCESS
+% iff every assertion holds.
+%
+% A dash length or offset of infinity or NaN makes the dash phase NaN,
+% and the phase-reduction loop that stroke walks compares and subtracts
+% NaN forever: it allocates nothing, so no VMerror ever breaks it, and
+% it is not interruptible -- an uninterruptible denial of service from
+% ordinary, unprivileged PostScript. The refusal is limitcheck, the
+% error a value outside the representable range earns, raised at setdash
+% so stroke is never reached. A negative element and an all-zero array
+% keep the rangecheck they already had.
+%
+% The narrow build stores reals as 32-bit floats, so a literal like 1e39
+% is already the infinity that triggers this; the values below are built
+% by arithmetic so they read the same on the wide build, whose reals are
+% doubles.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+/result { % {proc} . any
+    count 1 sub /r.depth exch def
+    stopped { $error /errorname get }{ count r.depth eq { null } if } ifelse
+    /r.val exch def
+    count r.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+    r.val
+} def
+
+/inf 1e300 1e300 mul def        % +infinity on either build
+/nan inf dup sub def            % NaN
+
+% --- non-finite inputs are refused with limitcheck, not accepted, not hung
+{ [ inf ] 0 setdash } result /limitcheck eq
+    (an infinite dash element is refused) assert
+{ [ nan ] 0 setdash } result /limitcheck eq
+    (a NaN dash element is refused) assert
+{ [ 3 2 ] inf setdash } result /limitcheck eq
+    (an infinite dash offset is refused) assert
+{ [ 3 2 ] nan setdash } result /limitcheck eq
+    (a NaN dash offset is refused) assert
+% every element finite, but their sum -- the dash period -- is not
+{ [ 9e36 9e36 ] 0 setdash } result /limitcheck eq
+    (a dash period that overflows to infinity is refused) assert
+
+% --- the point of it: a non-finite dash never reaches stroke to wedge it
+{ [ inf ] 0 setdash 0 0 moveto 5 5 lineto stroke } result /limitcheck eq
+    (stroke is not reached by an infinite dash) assert
+
+% --- ordinary and large-but-finite dashes are still accepted
+{ [ 3 2 1 ] 0.5 setdash } result null eq
+    (an ordinary dash pattern is accepted) assert
+{ [ 10000 5000 ] 100 setdash } result null eq
+    (a large finite dash pattern is accepted) assert
+{ [ ] 0 setdash } result null eq
+    (the empty dash -- a solid line -- is accepted) assert
+{ [ 3 2 ] -4 setdash } result null eq
+    (a negative offset is accepted) assert
+
+% --- the refusals setdash already made are unchanged
+{ [ -1 2 ] 0 setdash } result /rangecheck eq
+    (a negative dash element is still rangecheck) assert
+{ [ 0 0 ] 0 setdash } result /rangecheck eq
+    (an all-zero dash array is still rangecheck) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
