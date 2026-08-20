@@ -2656,7 +2656,7 @@ test('op-hexstring',
 # slot is an error rather than an index into an unrelated slot.
 test('op-context',
   find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/op_context_test.ps') ],
+  args: [ xpost_exe, files('tests/op_context_test.ps'), '', '--enable-dps' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast,
   timeout: 60)
@@ -3052,6 +3052,16 @@ test('printobject-overflow',
 # refused, and a valid value must still encode and round-trip.
 test('lzwencode-early',
   find_program('tests/run-lzwencode-early-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The Display PostScript context operators are installed only on an explicit
+# --enable-dps opt-in; without it the names are undefined, and with it they
+# validate the context identifier (self-join and any invalid identifier are
+# invalidcontext). This exercises the runtime switch in both positions.
+test('dps',
+  find_program('tests/run-dps-test.sh'),
   args: [ xpost_exe ],
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })

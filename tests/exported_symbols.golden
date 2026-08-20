@@ -153,6 +153,7 @@ xpost_diskfile_readable
 xpost_diskfile_remove
 xpost_diskfile_rename
 xpost_diskfile_stat
+xpost_dps_set
 xpost_dsc_file_base_get
 xpost_dsc_file_del
 xpost_dsc_file_length_get

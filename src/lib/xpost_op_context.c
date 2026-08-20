@@ -52,6 +52,14 @@
 #include "xpost_op_context.h"
 
 
+/* The Display PostScript multiple-execution-context operators. They are
+   always compiled, but installed only when a program has asked for them at
+   run time -- xpost_dps_set, reached from the xpost binary's --enable-dps.
+   A default run installs none of them, so naming one gets undefined. The
+   scheduler that would drive them (xpost_interpreter.c _switch_context) is a
+   stub even when they are installed -- see the note there for what
+   activating it needs. */
+
 /* -  currentcontext  context
    return current context identifier */
 static
@@ -136,6 +144,30 @@ int _i_am_free_ (Xpost_Context *ctx)
     return contextswitch;
 }
 
+/* The context a valid identifier names, or NULL. A context identifier is
+   an integer that means the same in every context (PLRM 2nd ed 7.1) and is
+   valid only while the table slot it selects still holds the context that
+   claimed it. interpreter_cid_get_context maps the identifier to a slot by
+   (cid-1) % MAXCONTEXT and never fails, so a stale identifier -- one whose
+   context has ended and whose slot a later fork reused -- would otherwise
+   name that later context. Holding the slot's own id against the identifier
+   rejects that: a reused slot carries a newer id, a freed one is C_FREE, and
+   a fabricated or out-of-range identifier fails the same test. cid 0 is the
+   no-context sentinel a full table returns and names no context. Callers
+   answer NULL with invalidcontext, as PLRM requires of join and detach given
+   an identifier that is not a valid context. */
+static
+Xpost_Context *_context_checked(Xpost_Context *ctx, unsigned int cid)
+{
+    Xpost_Context *c;
+    if (cid == 0)
+        return NULL;
+    c = ctx->gl->interpreter_cid_get_context(cid);
+    if (!c || c->id != cid || c->state == C_FREE)
+        return NULL;
+    return c;
+}
+
 /*
    context  join  mark obj1..objN
    await context termination and return its results
@@ -144,11 +176,23 @@ int _i_am_free_ (Xpost_Context *ctx)
 enum { _JOIN_WAIT_MAX = 64 };
 static unsigned int _join_wait_cid;
 static unsigned int _join_wait_spins;
+/* the opcode of the join operator, captured when it is installed so the wait
+   path below can reschedule join by opcode -- not by a name lookup a program
+   could divert by redefining /join, and not through a standing reference the
+   interpreter would have to capture whether or not the operators are
+   installed. Held as an int, not an object, so it names nothing in VM for
+   the collector to trace across a context's life. */
+static int _join_opcode = -1;
 
 static
 int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
 {
-    Xpost_Context *child = ctx->gl->interpreter_cid_get_context(context.mark_.padw);
+    Xpost_Context *child = _context_checked(ctx, context.mark_.padw);
+    /* an invalid identifier, or the current context joining itself, is
+       invalidcontext (PLRM 2nd ed 7.1: join of an identifier that is not a
+       valid context, or that identifies the current context) */
+    if (!child || context.mark_.padw == ctx->id)
+        return invalidcontext;
     if (child->state == C_ZOMB) {
         int i,n;
         xpost_stack_push(ctx->lo, ctx->os, mark);
@@ -189,7 +233,7 @@ int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
 
     /* continue */
     xpost_stack_push(ctx->lo, ctx->os, context);
-    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, join));
+    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(_join_opcode));
     ctx->state = C_WAIT;
     return contextswitch;
 }
@@ -213,7 +257,11 @@ int xpost_op_yield (Xpost_Context *ctx)
 static
 int xpost_op_detach (Xpost_Context *ctx, Xpost_Object context)
 {
-    Xpost_Context *child = ctx->gl->interpreter_cid_get_context(context.mark_.padw);
+    Xpost_Context *child = _context_checked(ctx, context.mark_.padw);
+    /* an invalid identifier is invalidcontext (PLRM 2nd ed 7.1); detach of
+       the current context is permitted, so no self check */
+    if (!child)
+        return invalidcontext;
 
     /* the marker sits at the bottom of the child's exec stack, where
        its own start-up put it; a child whose stack is empty has already
@@ -242,11 +290,30 @@ int xpost_op_detach (Xpost_Context *ctx, Xpost_Object context)
    resume contexts waiting for condition
 */
 
+/* Whether a run has asked for the context operators to be installed. Off by
+   default: fork/join/yield/detach/currentcontext are not standard base
+   PostScript -- they are Display PostScript (PLRM 2nd ed 7.1) -- and the
+   scheduler that gives them meaning is not yet driven, so a program reaches
+   them only after an explicit opt-in. Set before xpost_create and read below
+   while the operators are installed, as the render-parameter globals in
+   xpost_interpreter.c are. */
+static int _dps_ops_enabled = 0;
+
+void
+xpost_dps_set(int enable)
+{
+    _dps_ops_enabled = enable;
+}
+
 int xpost_oper_init_context_ops (Xpost_Context *ctx,
                                  Xpost_Object sd)
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
+
+    /* installed only on opt-in; a default run leaves the names undefined */
+    if (!_dps_ops_enabled)
+        return 0;
 
     assert(ctx->gl->base);
     op = xpost_operator_cons(ctx, "currentcontext", (Xpost_Op_Func)xpost_op_currentcontext, 0);
@@ -259,6 +326,7 @@ int xpost_oper_init_context_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "join", (Xpost_Op_Func)xpost_op_join, 1, contexttype);
     INSTALL;
+    _join_opcode = op.mark_.padw;   /* opcode, for the wait-reschedule inside join */
     op = xpost_operator_cons(ctx, "yield", (Xpost_Op_Func)xpost_op_yield, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "detach", (Xpost_Op_Func)xpost_op_detach, 1, contexttype);

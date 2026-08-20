@@ -415,6 +415,22 @@ XPAPI int xpost_record_spill_set(const char *state);
 XPAPI int xpost_band_bytes_set(long bytes);
 
 /**
+ * @brief Install the Display PostScript multiple-execution-context operators.
+ *
+ * @param enable Nonzero to install them, zero (the default) to leave them out.
+ *
+ * fork, join, yield, detach and currentcontext are Display PostScript
+ * operators (PLRM 2nd ed 7.1), not standard base PostScript, and the
+ * cooperative scheduler that gives them meaning is not yet driven. They are
+ * installed only when a run asks for them; a default run leaves the names
+ * undefined, so a program reaching for one gets undefined.
+ *
+ * Asked before xpost_create, which reads it. The xpost binary exposes it as
+ * --enable-dps.
+ */
+XPAPI void xpost_dps_set(int enable);
+
+/**
  * @brief The devices whose page may arrive a band at a time.
  *
  * Selecting one of these selects banding, and a colon after its name may

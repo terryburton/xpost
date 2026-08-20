@@ -122,7 +122,6 @@ enum { C_FREE, C_IDLE, C_RUN, C_WAIT, C_IOBLOCK, C_ZOMB };
     _(copy,                "copy") \
     _(stop,                "stop") \
     _(quit,                "quit") \
-    _(join,                "join") \
     _(matrix,              "matrix") \
     _(defaultmatrix,       "defaultmatrix") \
     _(setmatrix,           "setmatrix") \

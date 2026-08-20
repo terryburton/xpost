@@ -348,6 +348,7 @@ _xpost_main_usage(FILE *out, const char *filename)
     fprintf(out, "  -I[DIR], --include [DIR]           add a resource search directory\n");
     fprintf(out, "  --no-graphics                      lock down and run without loading graphics\n");
     fprintf(out, "  --no-sandbox                       allow the program unrestricted file access\n");
+    fprintf(out, "  --enable-dps                       install the Display PostScript context operators\n");
     fprintf(out, "  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
     fprintf(out, "  -s, --spill=auto|never|always      where a retained page's marks are held\n");
     fprintf(out, "  -b, --band-bytes=BYTES             what one band of a page may cost\n");
@@ -758,6 +759,10 @@ int main(int argc, char *argv[])
             else if (!strcmp(argv[i], "--no-sandbox"))
             {
                 no_sandbox = 1;
+            }
+            else if (!strcmp(argv[i], "--enable-dps"))
+            {
+                xpost_dps_set(1);
             }
             /* Quiet is where the messages start, so it is also what the
                run is left at when nothing says otherwise -- and the two

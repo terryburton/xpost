@@ -1972,7 +1972,26 @@ Xpost_Context *_switch_context(Xpost_Context *ctx)
        Scheduling across the context table -- taking the next entry in
        C_RUN, wrapping at the end, and moving the entries passed over
        out of C_WAIT and C_IOBLOCK so that a wait condition is retried
-       -- is what this would do if more than one context ever ran. */
+       -- is what this would do if more than one context ever ran.
+
+       Before that body is written, four things must hold, or a reused
+       table slot turns a stale context identifier into a pointer at an
+       unrelated live context:
+         - the invalidcontext validation the operators now perform
+           (xpost_op_context.c _context_checked), so a stale or forged
+           identifier is refused rather than followed;
+         - a generation or identity check kept as slots are reused, so the
+           identifier a join holds still names the context it named;
+         - pruning of freed cids from the context list the collector walks
+           (xpost_context.c append_ctxlist has no matching removal), so a
+           reused slot does not leave the collector marking a dead context
+           and missing a live one;
+         - the PLRM save-across-context rules (fork and join with an
+           unmatched save pending are invalidcontext), so a context is not
+           scheduled into a half-finished save.
+       Until then this returns the running context unchanged, which keeps
+       fork/join/yield/detach bounded no-ops: a forked child never runs, so
+       join never completes and reports instead. */
     return ctx;
 }
 

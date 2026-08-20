@@ -335,6 +335,7 @@ vm test check-interrupt-fused
 vm test composite-limit
 vm test context-*
 vm test dict-capacity*
+vm test dps
 vm test entity-limit
 vm test filenameforall-large
 vm test forall-large

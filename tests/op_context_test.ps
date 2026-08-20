@@ -1,12 +1,13 @@
 %!testlib
 % Execution-context operators, run through
-% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+% `xpost -q --no-sandbox --enable-dps -d null` by run-ps-test.sh.
 %
-% fork, join, detach, yield and currentcontext are registered operators
-% that no test exercised and that never executed under coverage. They
-% are not operators of the PostScript language: the PLRM 3rd edition
-% defines no multiple-execution-context facility, so their behaviour is
-% this interpreter's own and is pinned here rather than cited.
+% fork, join, detach, yield and currentcontext are Display PostScript
+% operators (PLRM 2nd ed 7.1), not standard base PostScript -- the 3rd
+% edition moved them to the Display PostScript System manuals and defines
+% no multiple-execution-context facility itself. xpost installs them only
+% on the --enable-dps opt-in, so this suite is run with that flag; their
+% behaviour where it reaches past the cited edition is pinned here.
 %
 % _switch_context returns the calling context unchanged, so a forked
 % context is never scheduled. join on a context that has not already

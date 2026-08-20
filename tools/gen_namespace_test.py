@@ -55,6 +55,13 @@ OPTIONAL = {
     "loadwin32device",     # _WIN32 (present)
     "WIN32",               # _WIN32 (present)
     "resetfile",           # !_WIN32 (absent on Windows)
+    # Display PostScript multiple-execution-context operators, installed only
+    # on the --enable-dps runtime opt-in (xpost_dps_set); absent by default.
+    "currentcontext",      # --enable-dps
+    "fork",                # --enable-dps
+    "join",                # --enable-dps
+    "yield",               # --enable-dps
+    "detach",              # --enable-dps
 }
 
 def live_keys():
@@ -97,6 +104,11 @@ def gen(keys):
          "% dictionary. The optional names (device loaders behind an optional library or",
          "% the win32 device) are allowed but not required, keeping the test portable.",
          "% Prints SUCCESS iff so. Regenerate deliberately after an intended change.",
+         "%",
+         "% COLLECTION: this reads systemdict membership, not a memory bound. The",
+         "% words vmstatus and globalvmstatus appear below only as golden key names,",
+         "% so the result is the same at any collection frequency; the line also keeps",
+         "% check-memory-declarations satisfied, which matches those words.",
          "",
          "% Do every definition inside a scratch dict so the test's own bookkeeping",
          "% never lands in userdict -- which is one of the things it is checking.",

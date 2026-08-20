@@ -30,6 +30,12 @@ set -u
 xpost=$1
 script=$2
 define=${3:-}
+# Optional extra interpreter flags a suite needs, empty for almost all of
+# them. op_context_test.ps asks for --enable-dps here because the Display
+# PostScript context operators it exercises are installed only on that
+# opt-in; passing it as an argument keeps the shared runner unchanged for
+# every suite that does not.
+extra=${4:-}
 . "$(dirname "$0")/verdict.sh"
 # these conformance tests exercise the interpreter's own file operations, so
 # run with the CLI file-access sandbox lifted
@@ -54,9 +60,9 @@ run=$testlib_run
 # here asserts that a program's own dictionary starts empty, and a
 # definition made for one of them would be the thing that filled it.
 if [ -n "$define" ]; then
-    out=$("$xpost" -q --no-sandbox -d null "-D$define" "$run" </dev/null 2>&1)
+    out=$("$xpost" -q --no-sandbox $extra -d null "-D$define" "$run" </dev/null 2>&1)
 else
-    out=$("$xpost" -q --no-sandbox -d null "$run" </dev/null 2>&1)
+    out=$("$xpost" -q --no-sandbox $extra -d null "$run" </dev/null 2>&1)
 fi
 status=$?
 printf '%s\n' "$out"
