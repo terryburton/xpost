@@ -130,7 +130,7 @@ own    numstring_decode_test.ps               1
 own    op_compare_test.ps                     1
 own    op_context_test.ps                     3
 own    op_control_test.ps                     5
-own    op_cvi_test.ps                         4
+own    op_cvi_test.ps                         5
 own    op_cvrs_test.ps                        1
 own    op_cvn_test.ps                         1
 own    op_dictstack_test.ps                   1
