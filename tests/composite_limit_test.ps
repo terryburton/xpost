@@ -236,6 +236,7 @@ wide {
     % A size the field still counts but whose storage, rounded up to whole
     % objects, would run past what the length can hold: refused, not rounded
     % down to a tiny allocation the zero fill then writes the full size into.
+    { 268500992 array } result /VMerror eq (an array whose storage byte size overflows the width is refused) assert
     { 4294967295 string } result /VMerror eq (a string whose rounded storage overflows is refused) assert
     { 4294967280 string } result /VMerror eq (across the rest of that rounding window) assert
 } if

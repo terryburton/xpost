@@ -76,6 +76,15 @@ Xpost_Object xpost_array_cons_memory(Xpost_Memory_File *mem,
     }
     else
     {
+        /* the storage is sz objects; a count whose byte size does not fit
+           the width the allocator is asked in would wrap to a smaller
+           allocation the fill loop then writes past. Refuse it here, as the
+           dictionary and string constructors do. */
+        if ((unsigned long long)sz * sizeof(Xpost_Object) > 0xFFFFFFFFULL)
+        {
+            XPOST_LOG_ERR("array of %u exceeds the storage the allocator counts", sz);
+            return null;
+        }
         if (!xpost_memory_table_alloc(mem,
                                       (unsigned int)(sz * sizeof(Xpost_Object)),
                                       arraytype,
