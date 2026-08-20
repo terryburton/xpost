@@ -454,6 +454,9 @@ typedef struct Xpost_Memory_Image
     unsigned int free_substack;
     unsigned int free_scan;
     unsigned int gc_ent_budget;
+    int garbage_collect_auto;   /**< the VMReclaim setting at capture */
+    int threshold;              /**< VMThreshold pacing at capture */
+    int threshold_bytes;
     unsigned int file_births[256];
     unsigned int file_birth_max;
 } Xpost_Memory_Image;

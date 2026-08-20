@@ -902,6 +902,9 @@ int xpost_memory_image_capture(Xpost_Memory_File *mem, Xpost_Memory_Image *img)
     img->free_substack = mem->free_substack;
     img->free_scan = mem->free_scan;
     img->gc_ent_budget = mem->gc_ent_budget;
+    img->garbage_collect_auto = mem->garbage_collect_auto;
+    img->threshold = mem->threshold;
+    img->threshold_bytes = mem->threshold_bytes;
     img->file_birth_max = mem->file_birth_max;
     memcpy(img->file_births, mem->file_births, sizeof img->file_births);
 
@@ -912,6 +915,7 @@ int xpost_memory_image_capture(Xpost_Memory_File *mem, Xpost_Memory_Image *img)
 void xpost_memory_image_restore(Xpost_Memory_File *mem, const Xpost_Memory_Image *img)
 {
     size_t esz = sizeof *mem->table.tab;
+    unsigned int ent;
 
     if (!img || !img->valid)
         return;
@@ -927,12 +931,35 @@ void xpost_memory_image_restore(Xpost_Memory_File *mem, const Xpost_Memory_Image
     mem->free_substack = img->free_substack;
     mem->free_scan = img->free_scan;
     mem->gc_ent_budget = img->gc_ent_budget;
+    mem->garbage_collect_auto = img->garbage_collect_auto;
+    mem->threshold = img->threshold;
+    mem->threshold_bytes = img->threshold_bytes;
     mem->file_birth_max = img->file_birth_max;
     memcpy(mem->file_births, img->file_births, sizeof mem->file_births);
 
-    /* a collection request raised while the job ran refers to a table that
-       no longer exists; clear it so the next allocation decides afresh */
+    /* The chain of zero-size rows that describe nothing is derived, not
+       carried in the image -- a stored head could disagree with the rows
+       the allocator acts on -- so it is rebuilt by scanning the restored
+       table, the way the whole-VM image loader does (xpost_vm_image.c). A
+       job that compacted the arena (an immediate vmreclaim) chains rows
+       here; leaving the head across the revert hands the next job an entity
+       number the revert just un-counted, which is a cross-job failure and a
+       table write outside the live band. */
+    mem->table.freerow = 0;
+    for (ent = mem->table.nextent; ent-- > mem->start; )
+        if (mem->table.tab[ent].sz == 0)
+        {
+            mem->table.tab[ent].nextfree = mem->table.freerow;
+            mem->table.freerow = ent;
+        }
+
+    /* Requests and a cache the revert leaves stale: a collection or a
+       compaction the reverted-away job asked for, and the path-walk cache,
+       which is keyed by an entity number the revert may now give different
+       contents. Clear all three so the next job decides afresh. */
     mem->garbage_collect_pending = 0;
+    mem->compact_pending = 0;
+    mem->path_walk.ent = 0;
 }
 
 

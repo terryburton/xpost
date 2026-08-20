@@ -82,6 +82,42 @@ static void stream(Xpost_Showpage_Semantics semantics, const char *what)
     xpost_destroy(ctx);
 }
 
+/* A job that compacts virtual memory (an immediate vmreclaim) must not
+ * poison the allocator the next job in the stream inherits. Compaction
+ * chains the rows it frees onto a derived free-row head; the job boundary
+ * reverts the entity table beneath that head, so a boundary that did not
+ * rebuild it would hand the next job an entity number outside the live
+ * table -- a cross-job failure and a table write out of bounds. */
+static void stream_reclaim(Xpost_Showpage_Semantics semantics, const char *what)
+{
+    Xpost_Context *ctx;
+    static const char prog[] =
+        "1 1 500 { pop 128 string pop } for 2 vmreclaim\004"
+        "1 1 50 { pop 8 array pop } for (reclaim-ok)print flush";
+
+    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL, semantics,
+                       XPOST_OUTPUT_MESSAGE_QUIET, XPOST_USE_SIZE, 100, 100);
+    if (!ctx)
+    {
+        report_failure("%s: xpost_create", what);
+        return;
+    }
+    xpost_job_snapshots_set(ctx, 1);
+    xpost_jobserver_set(ctx, 1);
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+
+    outlen = 0;
+    (void) xpost_run(ctx, XPOST_INPUT_STRING, prog, sizeof prog - 1);
+    outbuf[outlen < sizeof outbuf ? outlen : sizeof outbuf - 1] = '\0';
+
+    if (!strstr(outbuf, "reclaim-ok"))
+        report_failure("%s: a job compacting VM poisoned the next job's allocator",
+                       what);
+
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
+}
+
 int main(void)
 {
     if (!xpost_init())
@@ -92,6 +128,8 @@ int main(void)
 
     stream(XPOST_SHOWPAGE_NOPAUSE, "nopause");
     stream(XPOST_SHOWPAGE_RETURN, "returning");
+    stream_reclaim(XPOST_SHOWPAGE_NOPAUSE, "reclaim-nopause");
+    stream_reclaim(XPOST_SHOWPAGE_RETURN, "reclaim-returning");
 
     xpost_quit();
     return verdict();
