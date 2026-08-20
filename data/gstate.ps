@@ -1252,9 +1252,16 @@ setglobal
             % drain whatever the array did not need: sethalftone consumes
             % the file. readstring leaves the piece it read whether or not
             % it filled the string, so the last piece is dropped on the way
-            % out as well as on the way round
-            { dup 4096 string readstring not { pop exit } if pop } loop
-            pop
+            % out as well as on the way round -- but not without bound. A
+            % source that ends where the cell's samples do drains to
+            % nothing; one that goes on decoding far more than any cell can
+            % hold is a decompression bomb, not thresholds, so the drain
+            % stops at a cap the largest cell is already well inside rather
+            % than following the source to the end of an arbitrary stream.
+            0
+            { 1 index 4096 string readstring not { pop exit } if pop
+              1 add dup 16 gt { exit } if } loop
+            pop pop
         }{ pop } ifelse
     }{ pop pop } ifelse
     end

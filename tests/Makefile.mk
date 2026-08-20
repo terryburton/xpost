@@ -532,6 +532,7 @@ tests/subinterval_retention_test.ps \
 tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
 tests/run-glyph-page-test.sh \
+tests/run-halftone-drain-test.sh \
 tests/run-job-page-test.sh \
 tests/run-page-extent-test.sh \
 tests/run-startup-page-test.sh \

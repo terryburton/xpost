@@ -2502,6 +2502,15 @@ test('halftone-cell',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# sethalftone drains its Thresholds source after reading the cell's samples;
+# the drain is capped, so a one-sample cell fed a source that decodes to
+# gigabytes stops near the cap rather than reading to the source's end.
+test('halftone-drain',
+  find_program('tests/run-halftone-drain-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A captured glyph mask is copied into the cache at the dimensions its
 # dictionary states, so dimensions the coverage bytes do not hold are a
 # rangecheck rather than a copy past them.
