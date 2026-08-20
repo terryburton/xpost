@@ -354,6 +354,111 @@ int Agcheck(Xpost_Context *ctx,
     return 0;
 }
 
+/* PLRM C.3.1: the password matches when the StartJobPassword is empty (the
+   factory default, so a trusted prolog works out of the box) or equals the
+   presented one, byte for byte, case-sensitively. An integer password is
+   compared as its decimal string, as if by cvs. */
+static
+int _startjob_password_ok(Xpost_Context *ctx, Xpost_Object P)
+{
+    const char *pw = ctx->startjob_password;
+    size_t pwlen = strlen(pw);
+
+    if (pwlen == 0)
+        return 1;
+    switch (xpost_object_get_type(P))
+    {
+        case stringtype:
+        {
+            char *s = xpost_string_get_pointer(ctx, P);
+            return (size_t)P.comp_.sz == pwlen && memcmp(s, pw, pwlen) == 0;
+        }
+        case integertype:
+        {
+            char buf[32];
+            int n = snprintf(buf, sizeof buf, "%d", (int)P.int_.val);
+            return n > 0 && (size_t)n == pwlen && memcmp(buf, pw, pwlen) == 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+/* bool1 password  startjob  bool2
+   (PLRM 3.7.7) Conditionally end the current job and start a new one. It
+   succeeds only when the password is correct and the current save nesting
+   is no deeper than the level the job started at -- which, with the job
+   boundary being a revert to a fixed VM image rather than a save level, is
+   the local save stack standing empty. Bracketing startjob in a program's
+   own save/restore therefore neutralises it, as the spec requires.
+
+   On success it resets the operand and dictionary stacks (the latter to the
+   depth the baseline was captured at, which drops a serverdict an exitserver
+   left there) and sets whether the run persists: bool1 true leaves the run
+   UNENCAPSULATED, so its boundary folds its state into the baseline and its
+   definitions outlive it; bool1 false returns the run to ENCAPSULATED,
+   folding first the work an earlier unencapsulated stretch did so the
+   encapsulated job reverts to that rather than losing it. It pushes true.
+
+   The revert or fold itself is not done here: it is the run's own boundary,
+   in C after the run, so this cannot double-revert and stays infallible. A
+   job transition thus takes effect at the end of the run, not the instant
+   startjob runs -- see the note in the report on the mid-run limitation.
+   On failure startjob pushes false and does nothing else. */
+static
+int Bstartjob(Xpost_Context *ctx,
+              Xpost_Object B,
+              Xpost_Object P)
+{
+    unsigned int vs = xpost_memory_save_stack_ent(ctx->lo);
+    unsigned int floor;
+
+    if (!_startjob_password_ok(ctx, P)
+        || xpost_stack_count(ctx->lo, vs) != 0)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+
+    /* reset the dictionary stack to the baseline depth (never below the
+       three permanent dictionaries, which this pops past `end`'s guard) */
+    floor = ctx->job_baseline_ds < 3 ? 3u : ctx->job_baseline_ds;
+    while ((unsigned int)xpost_stack_count(ctx->lo, ctx->ds) > floor)
+        (void) xpost_stack_pop(ctx->lo, ctx->ds);
+
+    xpost_stack_clear(ctx->lo, ctx->os);
+    xpost_stack_clear(ctx->lo, ctx->hold);
+    /* true leaves the run unencapsulated (its boundary folds its state into
+       the baseline, so its definitions persist); false returns it to
+       encapsulated (its boundary reverts). The revert or fold is the run's
+       own boundary, at its end -- not here: folding mid-run would capture
+       the execution stack in mid-flight, and a later revert to that image
+       would resume a stale continuation. One consequence is a documented
+       deviation: a `true ... startjob` prolog followed by a `false ...
+       startjob` in the SAME run does not persist the prolog, because the
+       run ends encapsulated and reverts as a whole. Loading a prolog that
+       must persist is done the way the worker does it -- with the run left
+       unencapsulated to its end, or through xpost_job_baseline_set. */
+    ctx->job_encapsulated = B.int_.val ? 0 : 1;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    return 0;
+}
+
+#if 0
+/* -  vmstatus  level used max
+   return size information for (local) vm */
+static
+int Zvmstatus(Xpost_Context *ctx)
+{
+    unsigned int vs;
+
+    vs = xpost_memory_save_stack_ent(ctx->lo);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xpost_stack_count(ctx->lo, vs)));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->lo->used));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->lo->max));
+    return 0;
+}
+#endif
 
 int xpost_oper_init_save_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
@@ -373,6 +478,12 @@ int xpost_oper_init_save_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "gcheck", (Xpost_Op_Func)Agcheck, 1, anytype);
     INSTALL;
+    op = xpost_operator_cons(ctx, "startjob", (Xpost_Op_Func)Bstartjob, 2, booleantype, anytype);
+    INSTALL;
+#if 0
+    op = xpost_operator_cons(ctx, "vmstatus", (Xpost_Op_Func)Zvmstatus, 0);
+    INSTALL;
+#endif
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark); */

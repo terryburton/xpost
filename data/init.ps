@@ -259,25 +259,27 @@ setglobal
     /setpagedevice cvx 2 array astore cvx def
 } forall
 
-% the job server's dictionary. exitserver ends the encapsulated job,
-% announces that permanent state may change, and execution continues
-% with the definitions made so far outliving the job -- the idiom
-% every driver prolog uses. xpost runs jobs unencapsulated, so
-% announcing and unwinding the begun dictionary is the whole of it.
-% serverdict is likewise a local dictionary named in systemdict.
+% the job server's dictionary. exitserver ends the encapsulated job and
+% starts an unencapsulated one, so the definitions made after it outlive
+% the job -- the idiom every driver prolog uses. It is `true password
+% startjob`, which the interpreter answers by folding the run's state into
+% the baseline at its end (see xpost_run); on a wrong password it raises
+% invalidaccess. A successful exitserver announces that permanent state may
+% change and, because startjob has reset the dictionary stack to the job's
+% base depth, no longer stands with serverdict begun. serverdict is a local
+% dictionary named in systemdict.
 currentglobal false setglobal
 userdict /serverdict 2 dict put
 serverdict /exitserver {
-    pop
+    true exch startjob not
+    { /exitserver errordict /invalidaccess get exec }
+    if
     (%%[ exitserver: permanent state may be changed ]%%\n) print flush
-    currentdict serverdict eq { end } if
 } put
 setglobal
 
-% bool password  startjob  bool
-% job boundaries are accepted -- definitions persist either way,
-% as xpost runs jobs unencapsulated
-/startjob [ /booleantype /anytype ] { pop pop true } //.xpostsys /.defop get exec
+% startjob is a C operator (xpost_op_save.c): it is registered into
+% systemdict before this file runs, so nothing is defined for it here.
 
 % the interpreter answers for the whole language
 /languagelevel 3 def

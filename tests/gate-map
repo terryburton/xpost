@@ -345,6 +345,8 @@ vm test table-row-reuse
 vm test vm-compaction
 vm test vm-reclaim-compaction
 vm test job-snapshot-balance
+vm test job-isolation
+vm test job-control
 vm test large-object
 vm test memory-bounds
 vm test memory-grow

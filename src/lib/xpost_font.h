@@ -322,6 +322,9 @@ void xpost_font_cache_status(long *bsize, long *bmax, long *msize,
                              long *blimit);
 void xpost_font_cache_setlimit(long blimit);
 void xpost_font_cache_setparams(long bmax, long lower, long upper);
+/* Drop the procedure/Type-3 masks (keyed by k1==NULL, on a virtual-memory
+   serial the job boundary reverts) so none carries across a job. */
+void xpost_font_mask_cache_flush(void);
 /* A cache of coverage masks, keyed by a caller's identity (k1, k2) and
    the transform they were rendered under. It is not font machinery: a
    glyph is one kind of mask and its face and character code are one way

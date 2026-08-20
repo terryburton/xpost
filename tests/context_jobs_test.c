@@ -11,13 +11,18 @@
  * at.
  *
  * The two settings promise different things and both promises are held
- * here. With snapshots on, a job is bracketed by a save level taken
- * over each memory file before it and rewound after it, so what one job
- * wrote is not what the next one starts from: every job sees a fresh
- * namespace. With them off there is no bracket, so a job starts from
- * what the last one left: the definitions carry over. An embedder picks
- * one or the other, and each is worth nothing unless the jobs after the
- * first behave as it says.
+ * here. With snapshots on, the job boundary reverts the whole context to
+ * a fixed baseline -- the state the first run (here a warm-up) left, the
+ * loaded language and graphics -- so what one job wrote is not what the
+ * next one starts from: every job sees a fresh namespace. With them off
+ * there is no boundary, so a job starts from what the last one left: the
+ * definitions carry over. An embedder picks one or the other, and each is
+ * worth nothing unless the jobs after the first behave as it says.
+ *
+ * The baseline is established by the first run, so a warm-up runs before
+ * the jobs measured here: it loads the language and graphics the jobs
+ * revert to, and every job after it -- under every page semantics,
+ * including the returning one -- reverts to it.
  *
  * Three things are required of both settings, because they are not
  * promises of either but of the context: every job runs to completion,
@@ -34,14 +39,9 @@
  * different paths out of a run, and once more under the returning
  * semantics with a page boundary in the job -- the shape where a job is
  * not one call but a first call that yields and a later one that
- * finishes it.
- *
- * KNOWN DEVIATION (reported, not asserted): a context under
- * XPOST_SHOWPAGE_RETURN takes no bracket, so snapshots on and snapshots
- * off are the same context there and neither isolates a job from the
- * one before it. The isolation this test requires of the other
- * semantics is therefore only reported under that one, so that the gap
- * is on the record without the test blessing it.
+ * finishes it. The boundary reverts to the baseline when the job
+ * completes, not when a call returns, so the returning shape is
+ * isolated to the same degree as the others.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -144,6 +144,12 @@ static void jobs_in_one_context(const char *what,
     xpost_job_snapshots_set(ctx, snapshots);
     xpost_stdout_handler_set(ctx, out_sink, NULL);
 
+    /* the first run establishes the baseline the jobs revert to: warm the
+       language and graphics here, so the measured jobs are all reverted to
+       it rather than the first of them establishing it and escaping the
+       measurement. It defines no name the probe looks for. */
+    (void)run_job(ctx, "0 0 moveto 5 5 lineto stroke");
+
     gdepth = global_save_depth(ctx);
     ldepth = local_save_depth(ctx);
 
@@ -179,17 +185,14 @@ static void jobs_in_one_context(const char *what,
                            local_save_depth(ctx), ldepth);
     }
 
-    /* What each setting is chosen for. With the bracket, no job after
-       the first inherits the one before it; without it, every job after
-       the first does. Counted over the whole run rather than asserted
-       per job, so the report says how far the setting held rather than
-       only that it broke. */
-    if (semantics == XPOST_SHOWPAGE_RETURN)
-        printf("NOTE: %s, %s: %d of %d jobs inherited the job before them "
-               "(KNOWN DEVIATION: the returning semantics take no bracket, "
-               "so neither setting isolates a job there)\n",
-               what, setting_name(snapshots), carried, JOBS - 1);
-    else if (snapshots)
+    /* What each setting is chosen for. With the boundary, no job inherits
+       the one before it -- under every page semantics, the returning one
+       included, since the boundary reverts to the baseline when the job
+       completes rather than when a call returns. Without it, every job
+       after the first inherits the last. Counted over the whole run rather
+       than asserted per job, so the report says how far the setting held
+       rather than only that it broke. */
+    if (snapshots)
         check(carried == 0,
               "with snapshots on, no job inherits the namespace of the one "
               "before it");

@@ -361,6 +361,15 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->vmthreshold = XPOST_GARBAGE_COLLECTION_THRESHOLD;
     ctx->globs = NULL;
     ctx->globs_size = 0;
+    ctx->job_baseline_lo = NULL;
+    ctx->job_baseline_gl = NULL;
+    ctx->job_rand_next = 0;
+    ctx->job_vmmode = LOCAL;
+    ctx->job_packing = 0;
+    ctx->job_baseline_ds = 0;
+    ctx->job_boundary_failed = 0;
+    ctx->job_encapsulated = 1;
+    ctx->startjob_password[0] = '\0';
     ctx->xpost_interpreter_cid_init = xpost_interpreter_cid_init;
     ctx->xpost_interpreter_alloc_local_memory = xpost_interpreter_alloc_local_memory;
     ctx->xpost_interpreter_alloc_global_memory = xpost_interpreter_alloc_global_memory;
@@ -478,6 +487,19 @@ void xpost_context_exit(Xpost_Context *ctx)
     ctx->namecache_gen = NULL;
     ctx->namecache_val = NULL;
     ctx->namecache_size = 0;
+
+    if (ctx->job_baseline_lo)
+    {
+        xpost_memory_image_free(ctx->job_baseline_lo);
+        free(ctx->job_baseline_lo);
+        ctx->job_baseline_lo = NULL;
+    }
+    if (ctx->job_baseline_gl)
+    {
+        xpost_memory_image_free(ctx->job_baseline_gl);
+        free(ctx->job_baseline_gl);
+        ctx->job_baseline_gl = NULL;
+    }
 
     xpost_memory_file_exit(ctx->gl);
     xpost_memory_file_exit(ctx->lo);

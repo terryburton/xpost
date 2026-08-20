@@ -411,6 +411,30 @@ xpost_mask_cache_clear(void)
     gcache_clear();
 }
 
+/* Drop every procedure/Type-3 glyph mask -- the entries keyed by k1==NULL,
+   whose k2 carries a glyph selector built from a font serial that is minted
+   in virtual memory (data/font.ps). The job boundary reverts that serial
+   counter to its baseline, so a serial one job spent can be minted again by
+   the next; a mask left cached under it would then answer the later job a
+   glyph the earlier job rendered. Flushing them at the boundary keeps the
+   cache from carrying a glyph across jobs. FreeType-face glyphs (k1 == the
+   face pointer, which the face's own release already drops, and which does
+   not revert) are left cached. */
+void
+xpost_font_mask_cache_flush(void)
+{
+    Xpost_Glyph_Entry *e = gcache_head;
+
+    while (e)
+    {
+        Xpost_Glyph_Entry *next = e->lnext;
+
+        if (e->k1 == NULL)
+            gcache_drop(e);
+        e = next;
+    }
+}
+
 #ifdef HAVE_FREETYPE2
 /* A face built over a font program in memory reads the program where it
    lies, keeping the pointer it was given rather than a copy of the bytes,

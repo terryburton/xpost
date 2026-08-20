@@ -851,6 +851,93 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
 }
 
 
+/* The whole-VM image: capture is a copy of the value store and the entity
+   table plus the file's free-list and file-birth bookkeeping; restore puts
+   all of it back and moves the cursors to where they stood, which reverts
+   every object at once (strings and stack bytes with the rest, since the
+   store is where they live) and drops everything born since the capture by
+   cursor rather than by freeing. This is the revert the job-encapsulation
+   boundary performs (PLRM 3.7.7): total over the bank and, being a copy
+   back into storage the file already owns, allocating nothing and unable
+   to fail. */
+
+void xpost_memory_image_free(Xpost_Memory_Image *img)
+{
+    if (!img)
+        return;
+    free(img->store);
+    free(img->tab);
+    img->store = NULL;
+    img->tab = NULL;
+    img->valid = 0;
+}
+
+int xpost_memory_image_capture(Xpost_Memory_File *mem, Xpost_Memory_Image *img)
+{
+    size_t esz = sizeof *mem->table.tab;
+    size_t tabbytes;
+
+    xpost_memory_image_free(img);
+
+    img->used = mem->high_water;
+    img->nextent = mem->table.nextent;
+    tabbytes = (size_t)img->nextent * esz;
+
+    img->store = malloc(img->used ? img->used : 1);
+    if (!img->store)
+    {
+        XPOST_LOG_ERR("%d cannot allocate VM image store", VMerror);
+        return 0;
+    }
+    img->tab = malloc(tabbytes ? tabbytes : 1);
+    if (!img->tab)
+    {
+        XPOST_LOG_ERR("%d cannot allocate VM image table", VMerror);
+        free(img->store);
+        img->store = NULL;
+        return 0;
+    }
+    memcpy(img->store, mem->base, img->used);
+    memcpy(img->tab, mem->table.tab, tabbytes);
+
+    img->start = mem->start;
+    img->free_substack = mem->free_substack;
+    img->free_scan = mem->free_scan;
+    img->gc_ent_budget = mem->gc_ent_budget;
+    img->file_birth_max = mem->file_birth_max;
+    memcpy(img->file_births, mem->file_births, sizeof img->file_births);
+
+    img->valid = 1;
+    return 1;
+}
+
+void xpost_memory_image_restore(Xpost_Memory_File *mem, const Xpost_Memory_Image *img)
+{
+    size_t esz = sizeof *mem->table.tab;
+
+    if (!img || !img->valid)
+        return;
+
+    /* the file only ever grows, so its store and table are at least as
+       large as the image; the copies land in place with no allocation */
+    memcpy(mem->base, img->store, img->used);
+    memcpy(mem->table.tab, img->tab, (size_t)img->nextent * esz);
+
+    mem->high_water = img->used;
+    mem->table.nextent = img->nextent;
+    mem->start = img->start;
+    mem->free_substack = img->free_substack;
+    mem->free_scan = img->free_scan;
+    mem->gc_ent_budget = img->gc_ent_budget;
+    mem->file_birth_max = img->file_birth_max;
+    memcpy(mem->file_births, img->file_births, sizeof mem->file_births);
+
+    /* a collection request raised while the job ran refers to a table that
+       no longer exists; clear it so the next allocation decides afresh */
+    mem->garbage_collect_pending = 0;
+}
+
+
 /*
    allocate data linearly from the memory file
    */

@@ -1,43 +1,23 @@
-/* What a job does with the global save level it could not take.
+/* The job boundary is leak-free: serving job after job on one context
+ * returns both memory banks to the baseline, rather than accumulating.
  *
- * A context set to snapshot its jobs takes a save level over each memory
- * file at the start of a run and rewinds to it at the end, so that what
- * one job did to virtual memory is not what the next job starts from. A
- * save level is the substack its records are pushed onto, and that
- * substack is an allocation: a memory file with no room for it answers
- * the request with a null and pushes nothing.
+ * This is a security property, not only a performance one. The boundary
+ * reverts the whole context to a fixed baseline captured once, when the
+ * first run has loaded the language and graphics. It reverts by putting
+ * the baseline image of each bank back and moving the bank's cursor to
+ * where it stood, which discards everything the job allocated in one
+ * stroke -- no save level is taken per job and no garbage is left pinned.
+ * A boundary that accumulated a level or leaked a job's allocations would
+ * be one an operator serving many requests would have to turn off, and a
+ * boundary that is off is no isolation at all. So the leak-freedom is what
+ * lets isolation be left on, which is what makes it a boundary.
  *
- * The rewind is the half that matters. It pops the save stack and plays
- * the records it finds back over VM. A run that pushed no level and
- * rewinds regardless pops whichever level is there -- one belonging to
- * whatever put it there, not to this job -- and reverts that owner's
- * objects to contents they had before it began, out from under it. The
- * local snapshot is read back before its rewind; the global one is the
- * one this holds to doing the same.
- *
- * Both halves are asserted, and each with the refusal and without it.
- * The refusal has to be shown to be a refusal -- a snapshot that
- * succeeded would make the second half pass while testing nothing -- and
- * the balance has to be shown to hold over a job that took its level
- * normally, since a run that never rewound would also leave the stack
- * where it found it.
- *
- * The refusal is induced by putting the memory file at the far end of
- * the address range its offsets are unsigned ints of, which is where its
- * growth is declined. Nothing is written on that path, so the two fields
- * are the whole of the change and putting them back is the whole of
- * undoing it. It is a refusal that does not move: every allocation in
- * that file is declined for as long as it stands, rather than the next
- * one happening to fit.
- *
- * The bracket is one call's, and a job is not always one call. Under
- * XPOST_SHOWPAGE_RETURN the job hands control back at each showpage and
- * ends on a later call, so no bracket is taken over it: a level pushed
- * by the first call is one no call of that job rewinds, and a context
- * serving job after job would gather one per job. Both halves of that
- * are held here -- the stacks stay where they were, and each job starts
- * from the virtual memory the one before it left, which is where the
- * graphics the first job loaded are.
+ * A job here touches both banks: it allocates in global VM (an array put
+ * in globaldict), writes a pre-existing global slot, and allocates and
+ * mutates in local VM. After the boundary, the value store and the entity
+ * table of each bank must read exactly as they did at the baseline -- the
+ * same used cursor and the same next-entity cursor -- for every one of a
+ * long series of jobs, and the save stacks must stand where they started.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -51,179 +31,104 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_context.h"
-#include "xpost_save.h"
 
 #include "xpost_test.h"
 
-static unsigned int held_used;
-static unsigned int held_max;
+#define JOBS 500
 
-/* Decline every allocation in mem until released. */
-static void refuse_allocation(Xpost_Memory_File *mem)
+static size_t out_len;
+static size_t out_sink(void *user, const char *buf, size_t len)
 {
-    held_used = mem->high_water;
-    held_max = mem->max;
-    mem->high_water = 0xfffffff8u;
-    mem->max = 0xfffffff8u;
+    (void)user; (void)buf;
+    out_len += len;
+    return len;
 }
 
-static void allow_allocation(Xpost_Memory_File *mem)
+static Xpost_Run_Status run_job(Xpost_Context *ctx, const char *prog)
 {
-    mem->high_water = held_used;
-    mem->max = held_max;
+    Xpost_Run_Status st;
+    int resumes = 0;
+
+    out_len = 0;
+    st = xpost_run(ctx, XPOST_INPUT_STRING, prog, 0);
+    while (st == XPOST_RUN_YIELDED && resumes++ < 16)
+        st = xpost_run(ctx, XPOST_INPUT_RESUME, "", 0);
+    return st;
 }
 
-static int global_save_depth(Xpost_Context *ctx)
+static int gsave_depth(Xpost_Context *ctx)
 {
     return xpost_stack_count(ctx->gl, xpost_memory_save_stack_ent(ctx->gl));
 }
-
-static int local_save_depth(Xpost_Context *ctx)
+static int lsave_depth(Xpost_Context *ctx)
 {
     return xpost_stack_count(ctx->lo, xpost_memory_save_stack_ent(ctx->lo));
 }
 
-static char out_buf[64];
-static size_t out_len;
-
-static size_t out_sink(void *user, const char *buf, size_t len)
-{
-    (void)user;
-    if (out_len + len < sizeof out_buf)
-    {
-        memcpy(out_buf + out_len, buf, len);
-        out_len += len;
-    }
-    return len;
-}
-
-/* Jobs on a context whose showpage returns to the caller. */
-static void returning_jobs_leave_the_save_stacks_alone(void)
+static void balance(Xpost_Showpage_Semantics semantics, const char *what)
 {
     Xpost_Context *ctx;
-    int gdepth;
-    int ldepth;
+    unsigned int lo_used, gl_used, lo_ent, gl_ent;
+    int gsav, lsav;
     int i;
+    /* a job that reaches both banks: a fresh global array anchored in
+       globaldict, a write to a pre-existing global slot, and local work */
+    const char *job =
+        "true setglobal globaldict /K [1 2 3 4 5] put "
+        "globaldict /K2 42 put false setglobal "
+        "/L 12 dict def L /a 1 put L /b (str) put 3 4 add pop";
 
-    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
-                       XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
-                       XPOST_USE_SIZE, 100, 100);
+    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL, semantics,
+                       XPOST_OUTPUT_MESSAGE_QUIET, XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        report_failure("xpost_create");
+        report_failure("%s: xpost_create", what);
         return;
     }
+    xpost_job_snapshots_set(ctx, 1);
     xpost_stdout_handler_set(ctx, out_sink, NULL);
 
-    gdepth = global_save_depth(ctx);
-    ldepth = local_save_depth(ctx);
+    /* the first run establishes the baseline; measure against what it left */
+    (void)run_job(ctx, "0 0 moveto 5 5 lineto stroke");
+    lo_used = ctx->lo->high_water;
+    gl_used = ctx->gl->high_water;
+    lo_ent = ctx->lo->table.nextent;
+    gl_ent = ctx->gl->table.nextent;
+    gsav = gsave_depth(ctx);
+    lsav = lsave_depth(ctx);
 
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < JOBS; i++)
     {
-        out_len = 0;
-        (void) xpost_run(ctx, XPOST_INPUT_STRING,
-                         "0 0 moveto 10 10 lineto stroke (drew) print flush", 0);
-        out_buf[out_len] = '\0';
-        /* the graphics this job needs were loaded by the first of them:
-           a job whose virtual memory was rewound out from under it comes
-           back with them gone */
-        check(strcmp(out_buf, "drew") == 0,
-              "every job of a returning context runs against the graphics");
+        if (run_job(ctx, job) != XPOST_RUN_COMPLETE)
+        {
+            report_failure("%s: job %d did not complete", what, i);
+            break;
+        }
+        if (ctx->lo->high_water != lo_used || ctx->lo->table.nextent != lo_ent)
+        {
+            report_failure("%s: local bank grew by job %d "
+                           "(used %u->%u, nextent %u->%u): the boundary leaks",
+                           what, i, lo_used, ctx->lo->high_water,
+                           lo_ent, ctx->lo->table.nextent);
+            break;
+        }
+        if (ctx->gl->high_water != gl_used || ctx->gl->table.nextent != gl_ent)
+        {
+            report_failure("%s: global bank grew by job %d "
+                           "(used %u->%u, nextent %u->%u): the boundary leaks",
+                           what, i, gl_used, ctx->gl->high_water,
+                           gl_ent, ctx->gl->table.nextent);
+            break;
+        }
+        if (gsave_depth(ctx) != gsav || lsave_depth(ctx) != lsav)
+        {
+            report_failure("%s: job %d left a save level (global %d, local %d)",
+                           what, i, gsave_depth(ctx), lsave_depth(ctx));
+            break;
+        }
     }
-
-    if (global_save_depth(ctx) != gdepth)
-        report_failure("jobs that return at showpage left the global save "
-                       "stack at %d, not %d",
-                       global_save_depth(ctx), gdepth);
-    if (local_save_depth(ctx) != ldepth)
-        report_failure("jobs that return at showpage left the local save "
-                       "stack at %d, not %d",
-                       local_save_depth(ctx), ldepth);
 
     xpost_stdout_handler_set(ctx, NULL, NULL);
-    xpost_destroy(ctx);
-}
-
-/* The snapshot's own answer, with the refusal and without it. */
-static void snapshot_reports_refusal(void)
-{
-    Xpost_Context *ctx;
-    Xpost_Object v;
-    int depth;
-
-    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
-                       XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
-                       XPOST_USE_SIZE, 100, 100);
-    if (!ctx)
-    {
-        report_failure("xpost_create");
-        return;
-    }
-
-    depth = global_save_depth(ctx);
-    v = xpost_save_create_snapshot_object(ctx->gl);
-    if (xpost_object_get_type(v) != savetype)
-        report_failure("a snapshot over sound memory was refused");
-    else if (global_save_depth(ctx) != depth + 1)
-        report_failure("a snapshot that was taken did not reach the save stack");
-
-    depth = global_save_depth(ctx);
-    refuse_allocation(ctx->gl);
-    v = xpost_save_create_snapshot_object(ctx->gl);
-    allow_allocation(ctx->gl);
-    if (xpost_object_get_type(v) == savetype)
-        report_failure("a snapshot with no room for its records answered "
-                       "as though it had been taken");
-    if (global_save_depth(ctx) != depth)
-        report_failure("a refused snapshot moved the save stack");
-
-    xpost_destroy(ctx);
-}
-
-/* What the run does with the level, with the refusal and without it.
-   A context per job: the level placed below is one the job must leave
-   alone, and a job that ran before it would have taken and rewound one
-   of its own over the same global VM. */
-static void a_job_rewinds_only_its_own_level(int refused)
-{
-    Xpost_Context *ctx;
-    int depth;
-
-    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
-                       XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
-                       XPOST_USE_SIZE, 100, 100);
-    if (!ctx)
-    {
-        report_failure("xpost_create");
-        return;
-    }
-
-    /* a level over global VM that is not this job's, which is what a job
-       suspended between showpage and its continuation leaves behind */
-    if (xpost_object_get_type(xpost_save_create_snapshot_object(ctx->gl))
-        != savetype)
-    {
-        report_failure("could not place a save level for the job to find");
-        xpost_destroy(ctx);
-        return;
-    }
-    depth = global_save_depth(ctx);
-
-    if (refused)
-        refuse_allocation(ctx->gl);
-    (void) xpost_run(ctx, XPOST_INPUT_STRING, "quit", 0);
-    if (refused)
-        allow_allocation(ctx->gl);
-
-    if (global_save_depth(ctx) != depth)
-        report_failure(refused
-                       ? "a job that could not take a global snapshot rewound "
-                         "a save level it never took: stack at %d, not %d"
-                       : "a job that took a global snapshot did not leave the "
-                         "save stack at %d, but at %d",
-                       refused ? global_save_depth(ctx) : depth,
-                       refused ? depth : global_save_depth(ctx));
-
     xpost_destroy(ctx);
 }
 
@@ -235,12 +140,9 @@ int main(void)
         return verdict();
     }
 
-    snapshot_reports_refusal();
-    a_job_rewinds_only_its_own_level(0);
-    a_job_rewinds_only_its_own_level(1);
-    returning_jobs_leave_the_save_stacks_alone();
+    balance(XPOST_SHOWPAGE_NOPAUSE, "nopause");
+    balance(XPOST_SHOWPAGE_RETURN, "returning");
 
     xpost_quit();
-
     return verdict();
 }

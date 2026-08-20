@@ -487,14 +487,63 @@ XPAPI void xpost_stderr_handler_set(Xpost_Context *ctx,
                                     void *user);
 
 /**
- * @brief Enable or disable per-job VM snapshots for a context.
+ * @brief Enable or disable per-job VM isolation for a context.
  *
- * By default each xpost_run() job takes virtual-memory snapshots that
- * the quit path restores. A persistent context that serves many runs
- * accumulates one save level per run, pinning each run's garbage
- * against collection; disable the snapshots for such use.
+ * On by default and the isolation contract: each xpost_run() job is
+ * encapsulated (PLRM 3.7.7). When a job's execution is over, the context
+ * reverts to a fixed baseline -- both VM banks, and the interpreter state
+ * outside VM -- so nothing one job did reaches a later job. The revert is
+ * a whole-VM image restore: total (strings and stack contents revert with
+ * the objects), infallible (a copy that allocates nothing), and leak-free
+ * (the bank cursors return to the baseline, so serving many jobs does not
+ * accumulate). The baseline is established once, by the first run (which
+ * loads the language and any prelude the run installs). Disable this only
+ * for a context whose jobs are meant to share state (a REPL, or a prelude
+ * loaded across several runs before xpost_job_baseline_set()).
  */
 XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable);
+
+/**
+ * @brief Set the current state as the baseline every later job reverts to.
+ *
+ * The job boundary reverts to a fixed baseline captured once, ordinarily
+ * by the first run. An embedder that installs a server-level prelude over
+ * several runs (with isolation disabled) calls this once the prelude is in
+ * place, so that jobs revert to the post-prelude state rather than the
+ * bare initial one. This is the persistent equivalent of exitserver /
+ * `true password startjob`: it folds the current state into the baseline.
+ * The operand and scratch stacks are cleared so the baseline carries the
+ * empty operand stack a job begins from.
+ */
+XPAPI void xpost_job_baseline_set(Xpost_Context *ctx);
+
+/**
+ * @brief Revert the context to the baseline now, readying a fresh job.
+ *
+ * The host equivalent of a job delimiter (`false password startjob`, or a
+ * job-server channel's end-of-job): it reverts the whole context to the
+ * baseline -- both VM banks, strings, stacks, and the non-VM per-job state
+ * -- without tearing the context down and rebuilding it, and without
+ * accumulating anything. Use it to force the boundary around a piece of
+ * untrusted input that is not itself a complete xpost_run() job. If no
+ * baseline has been established yet, the current state becomes it. Returns
+ * 1 on success, 0 if the revert could not complete (in which case the
+ * context is no longer safe to reuse and must be destroyed).
+ */
+XPAPI int xpost_new_job(Xpost_Context *ctx);
+
+/**
+ * @brief Set the StartJobPassword for startjob and exitserver.
+ *
+ * PLRM C.3.1: the password guards the door a job uses to make its changes
+ * persist (exitserver, `true password startjob`). It is empty by default,
+ * which -- per the spec's factory default -- disables the check, so a
+ * trusted prolog can persist definitions without ceremony. A host serving
+ * untrusted jobs sets it non-empty here to lock the door: a program cannot
+ * change it (setsystemparams is a no-op), so only a caller with this
+ * function can. Passing NULL or "" reopens the door.
+ */
+XPAPI void xpost_startjob_password_set(Xpost_Context *ctx, const char *password);
 
 /**
  * @brief File-access sandbox: permit directory trees, then engage.

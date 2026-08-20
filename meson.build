@@ -1564,6 +1564,38 @@ test('context-jobs',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Job-to-job VM isolation: the adversarial battery. A hostile job1 poisons
+# the interpreter one way; a job2 asserts the interpreter it starts from is
+# pristine. Every poisoning vector, under each page semantics an embedder
+# can pick, including the returning (multi-call) shape a raster worker uses.
+job_isolation_exe = executable('job_isolation_test',
+  'tests/job_isolation_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('job-isolation',
+  job_isolation_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The PostScript job-control operators: exitserver and startjob, driving
+# the job boundary. A definition installed through exitserver outlives a
+# job; the same without it does not; a wrong password denies; save-nesting
+# neutralises startjob.
+job_control_exe = executable('job_control_test',
+  'tests/job_control_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('job-control',
+  job_control_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: the central loop's three answers -- done, yielded,
 # and a context that would not validate -- travel as one integer, so a
 # caller telling a yield from a refusal depends on no two of them being

@@ -439,9 +439,57 @@ struct _Xpost_Context {
 
     int job_snapshots; /**< take VM snapshots around each xpost_run job
                             (restored on the quit path); disable for a
-                            persistent context serving many runs, where
-                            the per-run snapshots would accumulate save
-                            levels and pin every run's garbage */
+                            persistent context serving many runs that
+                            deliberately share state (the definitions of one
+                            job are meant to reach the next). With it on --
+                            the default and the isolation contract -- each
+                            job is encapsulated per PLRM 3.7.7: the boundary
+                            reverts both VM banks and resets the interpreter
+                            state that lives outside VM, so no job can leave
+                            anything a later job sees. */
+
+    /** The job-encapsulation boundary (PLRM 3.7.7). The two images are the
+        fixed post-prelude baseline of both VM banks, captured once when the
+        language (and any server-level prelude) has loaded; the scalars are
+        the baseline of the per-job interpreter state that does not live in
+        virtual memory. Each job reverts to this baseline in C, after the
+        job's execution is over and outside any code the job can reach: the
+        two banks by whole-VM image restore -- total (every byte of both
+        arenas, so strings and stack contents revert with the objects),
+        infallible (a copy back into storage the file already owns), and
+        leak-free (the arena cursors reset to the baseline rather than
+        accumulating a save level per job) -- and the scalars by
+        assignment. A job under XPOST_SHOWPAGE_RETURN spans several xpost_run
+        calls (it yields at each showpage), so the boundary reverts when the
+        job completes, not when a call returns. job_baseline holds the two
+        images; job_boundary_failed says a revert could not run and the
+        context must be destroyed rather than reused. */
+    struct Xpost_Memory_Image *job_baseline_lo;
+    struct Xpost_Memory_Image *job_baseline_gl;
+    dword job_rand_next;
+    unsigned int job_vmmode;
+    int job_packing;
+    unsigned int job_baseline_ds; /**< dict-stack depth at baseline capture,
+                                       the depth startjob resets the stack to */
+    int job_boundary_failed;
+
+    /** Job encapsulation (PLRM 3.7.7 startjob/exitserver). A run is
+        encapsulated by default: at its end the boundary reverts it to the
+        baseline. A run that executes `true password startjob` or exitserver
+        becomes unencapsulated -- at its end the boundary folds its state
+        into the baseline instead, so its definitions persist into the jobs
+        that follow. `false password startjob` returns to encapsulated,
+        folding the unencapsulated work done so far into the baseline first
+        (the prolog/script idiom). Reset to encapsulated at the start of
+        every run. */
+    int job_encapsulated;
+
+    /** The StartJobPassword (PLRM C.3.1). Empty (the factory default and
+        the initial value here) disables the check, so a trusted prolog can
+        use exitserver out of the box; a host serving untrusted jobs sets it
+        non-empty with xpost_startjob_password_set() to lock the door, since
+        a program cannot set it (setsystemparams is a no-op). */
+    char startjob_password[128];
 
     int (*xpost_interpreter_cid_init)(unsigned int *cid);
     Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void);

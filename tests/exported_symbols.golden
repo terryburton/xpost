@@ -230,6 +230,7 @@ xpost_font_face_transform
 xpost_font_face_units
 xpost_font_faces_held
 xpost_font_init
+xpost_font_mask_cache_flush
 xpost_font_quit
 xpost_fpurge
 xpost_free_alloc
@@ -268,6 +269,7 @@ xpost_interpreter_run_nested
 xpost_interpreter_set_initializing
 xpost_interrupt
 xpost_isatty
+xpost_job_baseline_set
 xpost_job_snapshots_set
 xpost_lib_dir_get
 xpost_lockdown
@@ -293,6 +295,9 @@ xpost_memory_file_grow
 xpost_memory_file_init
 xpost_memory_file_release_range
 xpost_memory_get
+xpost_memory_image_capture
+xpost_memory_image_free
+xpost_memory_image_restore
 xpost_memory_init
 xpost_memory_page_size
 xpost_memory_put
@@ -321,6 +326,7 @@ xpost_name_cons_n
 xpost_name_get_string
 xpost_name_init
 xpost_name_lookups
+xpost_new_job
 xpost_object_dump
 xpost_object_get_access
 xpost_object_get_interval
@@ -471,6 +477,7 @@ xpost_stack_push_run
 xpost_stack_topdown_fetch
 xpost_stack_topdown_find_type
 xpost_stack_topdown_replace
+xpost_startjob_password_set
 xpost_stderr_handler_set
 xpost_stdout_handler_set
 xpost_strbuf_appendf

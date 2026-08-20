@@ -425,6 +425,58 @@ typedef struct Xpost_Memory_File
     void (*interpreter_set_initializing)(int);
 } Xpost_Memory_File;
 
+/**
+ * @struct Xpost_Memory_Image
+ * @brief A whole-VM snapshot of a memory file: the value store and the
+ * entity table as they stood at capture, held outside the file so a later
+ * restore can put the file back to exactly that state.
+ *
+ * A memory file's entire content is its value store (the @c base bytes up
+ * to @c used) and its entity table (the first @c nextent records of
+ * @c table.tab); a few file scalars (the free-list and file-birth
+ * bookkeeping) complete it. An image is a copy of all of that. Restoring
+ * an image writes the value store and table back and resets the cursors,
+ * which reverts every object -- strings and stack contents included, since
+ * they are just bytes in the store -- and discards everything allocated
+ * since the capture in one stroke, by moving @c used and @c nextent back
+ * rather than freeing object by object. The restore allocates nothing and
+ * cannot fail: it is the job-encapsulation boundary's revert (PLRM 3.7.7),
+ * which must be total and infallible.
+ */
+typedef struct Xpost_Memory_Image
+{
+    int valid;                /**< an image has been captured into this */
+    unsigned char *store;     /**< copy of base[0 .. used) */
+    unsigned int used;        /**< value-store cursor at capture */
+    unsigned char *tab;       /**< copy of the first nextent table records */
+    unsigned int nextent;     /**< table cursor at capture */
+    unsigned int start;       /**< first collectable entity at capture */
+    unsigned int free_substack;
+    unsigned int free_scan;
+    unsigned int gc_ent_budget;
+    unsigned int file_births[256];
+    unsigned int file_birth_max;
+} Xpost_Memory_Image;
+
+/**
+ * @brief Capture a whole-VM image of @p mem into @p img (allocating the
+ * copies). Returns 1 on success, 0 on allocation failure. A prior image in
+ * @p img is freed first.
+ */
+int xpost_memory_image_capture(Xpost_Memory_File *mem, Xpost_Memory_Image *img);
+
+/**
+ * @brief Restore @p mem to the state captured in @p img. Allocates nothing
+ * and cannot fail (the file only ever grows, so its store and table are at
+ * least as large as the image). No-op if @p img is not valid.
+ */
+void xpost_memory_image_restore(Xpost_Memory_File *mem, const Xpost_Memory_Image *img);
+
+/**
+ * @brief Release the copies an image holds and mark it invalid.
+ */
+void xpost_memory_image_free(Xpost_Memory_Image *img);
+
 /*
  * The ent -> pointer middle layer.
  *

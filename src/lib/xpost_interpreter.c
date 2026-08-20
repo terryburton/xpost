@@ -52,6 +52,7 @@
 #include "xpost_context.h"
 #include "xpost_save.h"  /* save/restore vm */
 #include "xpost_string.h"  /* eval functions examine strings */
+#include "xpost_font.h"    /* the job boundary flushes the glyph mask cache */
 #include "xpost_array.h"  /* eval functions examine arrays */
 #include "xpost_name.h"  /* eval functions examine names */
 #include "xpost_dict.h"  /* eval functions examine dicts */
@@ -3880,33 +3881,116 @@ static void _make_start_device(Xpost_Context *ctx)
                       "making the device the run was started with");
 }
 
-/* Rewind virtual memory to the snapshots this call took at its start.
-   Only to a snapshot it took: a save level is the substack its records
-   go on, and that substack is an allocation the memory file can refuse;
-   the refusal is answered with a null, and a run that pushed no level
-   and rewinds anyway pops whichever level it finds -- one belonging to
-   whatever put it there, whose records are then played back over VM that
-   has moved on since. The local snapshot is read the same way. */
-static void _rewind_job_snapshots(Xpost_Context *ctx,
-                                  Xpost_Object gsav,
-                                  Xpost_Object lsav)
+/* Capture the fixed baseline the job boundary reverts to: a whole-VM image
+   of both banks plus the baseline of the per-job interpreter state that
+   lives outside virtual memory. Taken once, when the language and any
+   server-level prelude have loaded -- the PLRM 3.7.7 "initial VM" a job
+   begins from. Returns 1 on success. */
+static int _job_capture_baseline(Xpost_Context *ctx)
 {
-    if (xpost_object_get_type(gsav) == savetype)
-        xpost_save_restore_snapshot(ctx->gl);
-    if (xpost_object_get_type(lsav) == savetype)
-    {
-        unsigned int vs = xpost_memory_save_stack_ent(ctx->lo);
-        integer llev;
+    if (!ctx->job_baseline_lo)
+        ctx->job_baseline_lo = calloc(1, sizeof *ctx->job_baseline_lo);
+    if (!ctx->job_baseline_gl)
+        ctx->job_baseline_gl = calloc(1, sizeof *ctx->job_baseline_gl);
+    if (!ctx->job_baseline_lo || !ctx->job_baseline_gl)
+        return 0;
+    if (!xpost_memory_image_capture(ctx->lo, ctx->job_baseline_lo))
+        return 0;
+    if (!xpost_memory_image_capture(ctx->gl, ctx->job_baseline_gl))
+        return 0;
+    ctx->job_rand_next = ctx->rand_next;
+    ctx->job_vmmode = ctx->vmmode;
+    ctx->job_packing = ctx->packing;
+    ctx->job_baseline_ds = xpost_stack_count(ctx->lo, ctx->ds);
+    return 1;
+}
 
-        /* the depth is counted, the level recorded: comparing them in
-           the wider signed type keeps a depth that came back short of
-           the level below it rather than above it */
-        for ( llev = xpost_stack_count(ctx->lo, vs);
-                llev > (integer)lsav.save_.lev;
-                llev-- )
-        {
-            xpost_save_restore_snapshot(ctx->lo);
-        }
+/* Revert the whole context to the fixed baseline: the job-encapsulation
+   boundary (PLRM 3.7.7 steps 5 and 6, both banks). It runs in C, after the
+   job's execution is over, so no job code -- no redefinition, error handler,
+   or unbalanced save -- can intercept, prevent, or partly execute it. The
+   two banks are put back by whole-VM image restore, which is
+     total       -- every byte of both arenas returns to the baseline, so
+                     strings and stack contents revert with the objects and
+                     nothing the job wrote survives;
+     infallible   -- the restore copies the baseline back into storage the
+                     file already owns and allocates nothing, so no VM state
+                     a job can arrange makes it fail;
+     leak-free    -- the arena cursors return to the baseline, discarding
+                     everything the job allocated in one stroke rather than
+                     accumulating a save level or garbage per job.
+   The handful of per-job values that do not live in the arena are reset
+   here beside it (the RNG seed, the allocation mode, the packing mode) and
+   the name cache is turned over so a resolution cached against the reverted
+   bindings cannot be served to the next job. */
+static void _job_revert_to_baseline(Xpost_Context *ctx)
+{
+    if (!ctx->job_baseline_lo || !ctx->job_baseline_lo->valid
+        || !ctx->job_baseline_gl || !ctx->job_baseline_gl->valid)
+    {
+        ctx->job_boundary_failed = 1;
+        return;
+    }
+    xpost_memory_image_restore(ctx->lo, ctx->job_baseline_lo);
+    xpost_memory_image_restore(ctx->gl, ctx->job_baseline_gl);
+    ctx->rand_next = ctx->job_rand_next;
+    ctx->vmmode = ctx->job_vmmode;
+    ctx->packing = ctx->job_packing;
+    ++ctx->namebind_gen;
+    ctx->es_over = ctx->os_over = ctx->ds_over = 0;
+    ctx->onerr_run = 0;
+    /* the one cache outside virtual memory the image restore cannot reach
+       and whose key the restore invalidates: a procedure/Type-3 glyph mask
+       is keyed by a font serial minted in virtual memory, which the restore
+       reverts, so a later job could mint the same serial and be answered an
+       earlier job's glyph. Drop those masks (FreeType-face glyphs are kept:
+       their key is the face pointer, which does not revert). */
+    xpost_font_mask_cache_flush();
+}
+
+/* The job boundary as xpost_run reaches it: release the out-of-VM side state
+   any frame the run left on the exec stack holds -- a wrapped-operator frame's
+   saved operands and a filenameforall enumeration's matched paths (the image
+   restore drops the frame entries but not that side state) -- then either
+   revert to the baseline (every job after the first) or, on the first run,
+   establish the baseline the later jobs revert to. */
+static void _job_boundary(Xpost_Context *ctx)
+{
+    while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
+    {
+        Xpost_Object x = xpost_stack_pop(ctx->lo, ctx->es);
+
+        if (xpost_object_get_type(x) == globtype)
+            xpost_context_glob_release(ctx, (unsigned int)x.glob_.id);
+
+        if (xpost_object_get_type(x) == operatortype &&
+            (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone) ||
+             x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed)))
+            xpost_operator_wrapped_release(ctx,
+                    xpost_stack_pop(ctx->lo, ctx->es));
+    }
+
+    if (!ctx->job_snapshots)
+        return;
+
+    if (ctx->job_baseline_lo && ctx->job_baseline_lo->valid
+        && ctx->job_encapsulated)
+    {
+        /* an encapsulated run reverts to the baseline */
+        _job_revert_to_baseline(ctx);
+    }
+    else
+    {
+        /* the first run establishes the baseline the later jobs revert to
+           (the loaded language and any prelude the embedder ran), and a run
+           left unencapsulated by exitserver / `true password startjob` folds
+           its state into the baseline so its definitions persist. Either
+           way, clear the operand and scratch stacks so the baseline carries
+           the empty operand stack a job begins from (PLRM 3.7.7). */
+        xpost_stack_clear(ctx->lo, ctx->os);
+        xpost_stack_clear(ctx->lo, ctx->hold);
+        if (!_job_capture_baseline(ctx))
+            XPOST_LOG_ERR("cannot capture the job baseline image");
     }
 }
 
@@ -3926,8 +4010,6 @@ static void _close_run_input(Xpost_Context *ctx)
 
 XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
-    Xpost_Object gsav = null;
-    Xpost_Object lsav = null;
     const char *ps_str = NULL;
     const char *ps_file = NULL;
     const FILE *ps_file_ptr = NULL;
@@ -3970,6 +4052,9 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
     ctx->run_error_name[0] = '\0';
     ctx->run_error_info[0] = '\0';
     ctx->run_uncaught = 0;
+    /* a fresh run is encapsulated until it executes exitserver / a `true`
+       startjob; its boundary reverts unless one of those makes it persist */
+    ctx->job_encapsulated = 1;
 
     /* prime the exec stack
        so it starts with a 'start*' procedure,
@@ -4075,12 +4160,6 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
             xpost_interpreter_load_language(ctx);
             _make_start_device(ctx);
         }
-
-        if (ctx->sysdict_load_done)
-        {
-            gsav = xpost_save_create_snapshot_object(ctx->gl);
-            lsav = xpost_save_create_snapshot_object(ctx->lo);
-        }
     }
 
     /* Run! */
@@ -4107,35 +4186,20 @@ run:
         if (ret == XPOST_MAINLOOP_YIELDED)
             return XPOST_RUN_YIELDED;
 
-        /* the run stops at its quit operator, leaving the frames
-           beneath it -- the run's own scheduling tail -- on the
-           exec stack. A persistent context serving many runs
-           accumulates them, and an error unwind can later walk
-           down into a stale frame and execute it out of context.
-           Discard everything this run left behind, for errored
-           runs just as for completed ones. A run abandoned inside a
-           wrapped operator leaves that call's frame here too: let go
-           of the operands saved for it, or a context serving run after
-           run fills the room the copies are taken from. A run abandoned
-           part-way through a filenameforall leaves that enumeration's
-           frame here as well, and the paths it matched are held outside
-           virtual memory until they are given back. */
-        while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
-        {
-            Xpost_Object x = xpost_stack_pop(ctx->lo, ctx->es);
-
-            if (xpost_object_get_type(x) == globtype)
-                xpost_context_glob_release(ctx, (unsigned int)x.glob_.id);
-
-            if (xpost_object_get_type(x) == operatortype &&
-                (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone) ||
-                 x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed)))
-                xpost_operator_wrapped_release(ctx,
-                        xpost_stack_pop(ctx->lo, ctx->es));
-        }
-
-        _rewind_job_snapshots(ctx, gsav, lsav);
+        /* the run stops at its quit operator, leaving the frames beneath
+           it -- the run's own scheduling tail -- on the exec stack; the
+           boundary discards them (and reverts the whole context to the
+           baseline) whether the run completed or errored. This is where a
+           XPOST_SHOWPAGE_RETURN job ends: the yield above returns without a
+           boundary, so the revert happens once, on the call that finishes
+           the multi-call job. */
+        /* close the file this run wrapped around its program before the
+           boundary reverts virtual memory: the file object is a local
+           entity the run created, so the revert discards it, and closing
+           the stream has to happen while the entity that names it is still
+           there */
         _close_run_input(ctx);
+        _job_boundary(ctx);
         return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
     }
 
@@ -4207,8 +4271,8 @@ run:
 	}
     }
 
-    _rewind_job_snapshots(ctx, gsav, lsav);
     _close_run_input(ctx);
+    _job_boundary(ctx);
     return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
 }
 
@@ -4228,6 +4292,44 @@ XPAPI void xpost_batch_set(Xpost_Context *ctx, int enable)
 XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable)
 {
     ctx->job_snapshots = enable;
+}
+
+/* fold the current state into the baseline every later job reverts to */
+XPAPI void xpost_job_baseline_set(Xpost_Context *ctx)
+{
+    if (!ctx)
+        return;
+    xpost_stack_clear(ctx->lo, ctx->os);
+    xpost_stack_clear(ctx->lo, ctx->hold);
+    if (!_job_capture_baseline(ctx))
+        XPOST_LOG_ERR("cannot capture the job baseline image");
+}
+
+/* set the StartJobPassword that startjob/exitserver check */
+XPAPI void xpost_startjob_password_set(Xpost_Context *ctx, const char *password)
+{
+    if (!ctx)
+        return;
+    if (!password)
+        password = "";
+    /* truncation only lengthens a password, never opens the door */
+    snprintf(ctx->startjob_password, sizeof ctx->startjob_password, "%s", password);
+}
+
+/* revert the whole context to the baseline, readying a fresh job */
+XPAPI int xpost_new_job(Xpost_Context *ctx)
+{
+    if (!ctx)
+        return 0;
+    if (ctx->job_baseline_lo && ctx->job_baseline_lo->valid)
+    {
+        _job_revert_to_baseline(ctx);
+        return !ctx->job_boundary_failed;
+    }
+    /* no baseline yet: the current state becomes it */
+    xpost_stack_clear(ctx->lo, ctx->os);
+    xpost_stack_clear(ctx->lo, ctx->hold);
+    return _job_capture_baseline(ctx);
 }
 
 XPAPI void xpost_stdout_handler_set(Xpost_Context *ctx,

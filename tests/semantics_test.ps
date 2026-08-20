@@ -213,11 +213,14 @@ gsave 8 8 true [8 0 0 -8 0 8] {<AA55AA55AA55AA55>} imagemask grestore
 gsave 8 8 true [8 0 0 -8 0 8] {<AA55AA55AA55AA55>} imagemask grestore
 count st.c0 eq (a cached stencil leaves the stack clean) assert
 
-% --- the job server accepts exitserver ---
-countdictstack
+% --- the job server: exitserver ends the encapsulated job and begins an
+% unencapsulated one, resetting the stacks (PLRM 3.7.7) -- serverdict comes
+% off the dictionary stack and the operand stack is cleared ---
+countdictstack /st.esd exch def
 { serverdict begin 0 exitserver } stopped not
     (exitserver continues the job) assert
-countdictstack eq (exitserver unwinds the begun serverdict) assert
+count 0 eq (exitserver clears the operand stack) assert
+countdictstack st.esd eq (exitserver unwinds the begun serverdict) assert
 
 % --- dict growth: inserting far past a small dict's capacity grows and
 % rehashes it in place, repeatedly. Regression for a heap-use-after-free
