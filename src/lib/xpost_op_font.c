@@ -3069,11 +3069,24 @@ int _show_glyph(Xpost_Context *ctx,
            pixel, not the floor, so a pen an epsilon shy of a pixel
            boundary (the linear advance's 16.16 quantization) lands
            where exact arithmetic would put it */
-        _draw_bitmap(ctx, devdic, putpix, ts,
-                     buffer, rows, width, pitch, pixel_mode,
-                     (int)floor(*xpos + left + 0.5),
-                     (int)floor(*ypos - top + 0.5),
-                     ncomp, comp1, comp2, comp3, comp4, inked);
+        {
+            double px = floor(*xpos + left + 0.5);
+            double py = floor(*ypos - top + 0.5);
+            /* The pen can be driven far off the page, or to a non-finite
+               position by an overflowing advance. Converting a double past
+               int range is undefined, and _draw_bitmap's clip arithmetic
+               subtracts the origin, which overflows near the int extremes;
+               the glyph is off the page either way. Draw it only where the
+               origin is a representable pixel coordinate with room for that
+               arithmetic -- any real page sits far inside this -- and drop
+               it otherwise. */
+            if (isfinite(px) && isfinite(py)
+                && px > -1.0e9 && px < 1.0e9 && py > -1.0e9 && py < 1.0e9)
+                _draw_bitmap(ctx, devdic, putpix, ts,
+                             buffer, rows, width, pitch, pixel_mode,
+                             (int)px, (int)py,
+                             ncomp, comp1, comp2, comp3, comp4, inked);
+        }
     }
     /* a /Metrics entry for this glyph overrides the face's advance */
     _metrics_advance(ctx, ts, glyphname, &advance_x, &advance_y);
@@ -4265,6 +4278,14 @@ int _maskcachehit(Xpost_Context *ctx,
 
     dx = xpost_object_number(x);
     dy = xpost_object_number(y);
+
+    /* a non-finite or out-of-int-range pen position is undefined to convert
+       to the pixel coordinates below and would overflow the clip
+       arithmetic; the cached glyph is off the page, so skip it as the clip
+       test further down already does */
+    if (!isfinite(dx) || !isfinite(dy)
+        || dx <= -1.0e9 || dx >= 1.0e9 || dy <= -1.0e9 || dy >= 1.0e9)
+        goto refuse;
 
     {
         double c[4];
