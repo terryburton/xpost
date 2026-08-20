@@ -81,6 +81,14 @@ DEV /BlendPix known DEV /TextAlphaBits known and
 16777216 4095 16 [ 0.00001 0 0 0.01 0 0 ] paint not
     (a mask whose byte count is negative in 32 bits is refused) assert
 
+% A matrix that places the mask's device box across the whole integer
+% range: forming its width as one int minus another overflows, so the
+% painter must refuse on the coordinates before it casts them rather than
+% subtract past the type. (m0*w reaches +2e9 and the translate -2e9, so
+% the box spans ~4e9.)
+16 8 16 [ 250000000 0 0 0.01 -2000000000 0 ] paint not
+    (a mask whose device box spans more than the int range is refused) assert
+
 % and the painter still works afterwards: a refusal must not have left
 % the device or the graphics state disturbed
 16 8 16 unit paint

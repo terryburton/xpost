@@ -4008,7 +4008,7 @@ int _stencilaa(Xpost_Context *ctx,
     }
     if (w <= 0 || h <= 0)
         goto refuse;
-    rowbytes = (w + 7) / 8;
+    rowbytes = w / 8 + (w % 8 ? 1 : 0);   /* w may be near INT_MAX; w + 7 would overflow */
     /* the mask has to fit its buffer, and the buffer's capacity counted
        in rows answers that: the byte count the two dimensions multiply
        to need not itself stay within the integer range, and a mask
@@ -4024,6 +4024,13 @@ int _stencilaa(Xpost_Context *ctx,
     fx0 = xa < xb ? xa : xb; fx1 = xa < xb ? xb : xa;
     ya = m[5]; yb = m[3] * h + m[5];
     fy0 = ya < yb ? ya : yb; fy1 = ya < yb ? yb : ya;
+    /* fx0..fy1 come from a program-controlled matrix; cast and subtract
+       them only where the origin is a representable pixel coordinate with
+       room for the arithmetic, as _show_glyph does. A mask placed past
+       this is off any real page. */
+    if (!(isfinite(fx0) && isfinite(fx1) && isfinite(fy0) && isfinite(fy1)
+          && fx0 > -1.0e9 && fx1 < 1.0e9 && fy0 > -1.0e9 && fy1 < 1.0e9))
+        goto refuse;
     ix0 = (int)floor(fx0); iy0 = (int)floor(fy0);
     devw = (int)ceil(fx1) - ix0;
     devh = (int)ceil(fy1) - iy0;
@@ -4353,10 +4360,10 @@ int _maskcacheput(Xpost_Context *ctx,
     DGET("buf", buf, stringtype);
     DGET("mat", mat, arraytype);
     DGET("key", key, arraytype);
-    { double t; DNUM("w", t); w = (int)t; }
-    { double t; DNUM("h", t); h = (int)t; }
-    { double t; DNUM("bx0", t); bx0 = (int)t; }
-    { double t; DNUM("by0", t); by0 = (int)t; }
+    { double t; DNUM("w", t); if (!(t > -2.0e9 && t < 2.0e9)) return rangecheck; w = (int)t; }
+    { double t; DNUM("h", t); if (!(t > -2.0e9 && t < 2.0e9)) return rangecheck; h = (int)t; }
+    { double t; DNUM("bx0", t); if (!(t > -2.0e9 && t < 2.0e9)) return rangecheck; bx0 = (int)t; }
+    { double t; DNUM("by0", t); if (!(t > -2.0e9 && t < 2.0e9)) return rangecheck; by0 = (int)t; }
     DNUM("ox", ox);
     DNUM("oy", oy);
     DNUM("advx", advx);
@@ -4379,6 +4386,12 @@ int _maskcacheput(Xpost_Context *ctx,
     if (!_fixed16(advx, &qax) || !_fixed16(advy, &qay))
         return 0;
     bytes = (unsigned char *)xpost_string_get_pointer(ctx, buf);
+    /* ox/oy come out of the dictionary; a non-finite or out-of-range
+       origin leaves the mask unfiled rather than casting past the int
+       range (the same finite-coordinate rule as _show_glyph). */
+    if (!(isfinite(ox) && isfinite(oy)
+          && ox > -1.0e9 && ox < 1.0e9 && oy > -1.0e9 && oy < 1.0e9))
+        return 0;
     left = bx0 - (int)floor(ox + 0.5);
     top = (int)floor(oy + 0.5) - by0;
     (void)xpost_mask_cache_insert(NULL, k2, m, 0,
