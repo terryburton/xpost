@@ -253,6 +253,7 @@ esac
 # unregistered is the state a new test is in, and the register cannot be
 # allowed to answer only for the ones somebody remembered.
 : > "$work/measured"
+: > "$work/figures"
 nrun=0
 for f in "$src"/tests/*.ps; do
     b=$(basename "$f")
@@ -433,8 +434,9 @@ xg.one xg.one xg.one xg.one xg.one
 (\n) print
 flush
 PS
-        lout=$(cd "$work/case" && xg_limit 900 \
+        lout=$(cd "$work/case" && xg_limit 1800 \
                    "$xpost" -q --no-sandbox -d null patience.ps </dev/null 2>/dev/null)
+        lst=$?
         lwin=$(printf '%s\n' "$lout" | LC_ALL=C \
                    sed -n 's/^XGLONG \([0-9 -][0-9 -]*\)$/\1/p' | tail -1)
         if [ -n "$lwin" ]; then
@@ -443,6 +445,14 @@ PS
                                                         if ($i + 0 < m) m = $i + 0
                                                     print m }')
         fi
+        # A conviction is a claim about figures, so the figures travel
+        # with it: what the three-run window read, what the longer one
+        # read, and how the longer one's run ended. A longer look that
+        # was killed or came back unreadable is not eleven positive
+        # readings, and a report that cannot tell those apart turns the
+        # next host that differs into another day of guessing.
+        printf '%s|%s|%s|%s\n' "$b" "$win" "${lwin:-did not report}" "$lst" \
+            >> "$work/figures"
     fi
     if [ "$least" -le 0 ]; then
         if [ "$cost" -le 0 ]; then
@@ -498,10 +508,22 @@ while read -r name class extra; do
         costs)
             printf '%s  used to reach nothing and now holds %s bytes on every\n' \
                 "$name" "$extra" >> "$work/problems"
-            printf '        run of the settled window, eleven measured runs of it, so\n' \
+            printf '        measured run of the settled window, so something it does\n' \
                 >> "$work/problems"
-            printf '        something it does is held rather than given back\n' \
-                >> "$work/problems" ;;
+            printf '        is held rather than given back\n' \
+                >> "$work/problems"
+            # the readings behind the verdict, so the next host that
+            # differs is a comparison of figures rather than a guess
+            fig=$(awk -F'|' -v n="$name" '$1 == n { print; exit }' \
+                      "$work/figures" 2>/dev/null)
+            if [ -n "$fig" ]; then
+                printf '        runs six through eight read: %s\n' \
+                    "$(printf '%s' "$fig" | cut -d'|' -f2)" >> "$work/problems"
+                printf '        the longer look, runs six through sixteen, read: %s\n' \
+                    "$(printf '%s' "$fig" | cut -d'|' -f3)" >> "$work/problems"
+                printf '        and its run ended with status %s\n' \
+                    "$(printf '%s' "$fig" | cut -d'|' -f4)" >> "$work/problems"
+            fi ;;
         *)  printf '%s  ran cleanly twice and no longer does, so it is not\n' \
                 "$name" >> "$work/problems"
             printf '        measuring anything here any more\n' >> "$work/problems" ;;
