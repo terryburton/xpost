@@ -76,8 +76,23 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
        ends where one does. What that rounding adds is between one and
        eight bytes a string of this length does not count and nothing can
        read through it. */
-    room = ((sz + sizeof(Xpost_Object)) / sizeof(Xpost_Object))
-           * sizeof(Xpost_Object);
+    {
+        /* Rounded in a width the sum cannot wrap: sz is as wide as the
+           length a string counts on the large-object build, so a size in
+           the top few of that range rounds to more than the width can
+           hold. Left to wrap it would round to a tiny allocation the zero
+           fill below then writes sz bytes into. Refuse it here -- no
+           string, which the caller reads as a refusal -- rather than round
+           into an allocation smaller than asked for. */
+        size_t rounded = (((size_t)sz + sizeof(Xpost_Object))
+                          / sizeof(Xpost_Object)) * sizeof(Xpost_Object);
+        if (rounded > (size_t)~(unsigned int)0)
+        {
+            XPOST_LOG_ERR("string of %u rounds to more storage than the allocator counts", sz);
+            return null;
+        }
+        room = (unsigned int)rounded;
+    }
     if (!xpost_memory_table_alloc(mem, room, stringtype, &ent))
     {
         XPOST_LOG_ERR("cannot allocate string");

@@ -233,6 +233,11 @@ wide {
     { 4294967296 array } result /limitcheck eq (an array past the wider field is limitcheck) assert
     { 4294967296 string } result /limitcheck eq (and a string past it) assert
     { 4294967296 dict } result /limitcheck eq (and a dict past it) assert
+    % A size the field still counts but whose storage, rounded up to whole
+    % objects, would run past what the length can hold: refused, not rounded
+    % down to a tiny allocation the zero fill then writes the full size into.
+    { 4294967295 string } result /VMerror eq (a string whose rounded storage overflows is refused) assert
+    { 4294967280 string } result /VMerror eq (across the rest of that rounding window) assert
 } if
 
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
