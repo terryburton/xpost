@@ -952,6 +952,18 @@ test('name-length',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Interning a name walks the name tree a character at a time; the insert
+# must do it in a loop, not by recursing per character, or a long enough
+# name overruns the C stack. The wide build, whose composite ceiling lets
+# a name run far past the narrow limit, is where a recursive insert
+# crashes; the narrow build refuses the string at the ceiling, itself a
+# clean return.
+test('name-intern',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/name_intern_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # PLRM 8.2 gives the two clocks different jobs: realtime counts in real
 # time independently of the interpreter's execution, and usertime counts
 # the execution the interpreter has done. An interval spent asleep shows

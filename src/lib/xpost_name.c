@@ -362,7 +362,17 @@ unsigned int tstsearch(Xpost_Memory_File *mem,
     return 0;
 }
 
-/* add a counted string to the ternary search tree */
+/* add a counted string to the ternary search tree
+
+   Walking the tree with a loop rather than by recursion. A name descends
+   the equal-child chain one character per step, so a recursive insert
+   would call itself as deep as the name is long, and a long enough name
+   -- one a program can build with a string and cvn, or write as a single
+   token -- would run the C stack out. The loop keeps the stack it uses
+   flat whatever the name, the way the sibling lookup tstsearch already
+   does. Node numbers survive the storage moving under a growth, so the
+   walk carries the current node as a number and re-reads it after any
+   allocation rather than holding a pointer across one. */
 static
 int tstinsert(Xpost_Memory_File *mem,
               unsigned int ti,
@@ -370,10 +380,7 @@ int tstinsert(Xpost_Memory_File *mem,
               unsigned int n,
               unsigned int *retval)
 {
-    tst *p;
-    unsigned int t; //temporary
-    unsigned int nstk;
-    int ret;
+    unsigned int cur;
     unsigned int key = n ? (unsigned char)*s : TST_END;
 
     if (!ti) {
@@ -385,31 +392,64 @@ int tstinsert(Xpost_Memory_File *mem,
         }
         _tstnode(mem, ti)->val = key;
     }
-    p = _tstnode(mem, ti);
-    if (key < p->val) {
-        ret = tstinsert(mem, p->lo, s, n, &t);
-        if (ret)
-            return ret;
-        p = _tstnode(mem, ti); //recalc pointer
-        p->lo = t;
-    } else if (key == p->val) {
-        if (key != TST_END) {
-            ret = tstinsert(mem, p->eq, s + 1, n - 1, &t);
-            if (ret)
-                return ret;
-            p = _tstnode(mem, ti); //recalc pointer
-            p->eq = t;
-        }else {
-            nstk = xpost_memory_name_stack_ent(mem);
-            p->eq = xpost_stack_count(mem, nstk); /* payload at the terminator */
+
+    cur = ti;
+    for (;;) {
+        tst *p = _tstnode(mem, cur);
+        unsigned int val = p->val;
+        unsigned int child;
+
+        key = n ? (unsigned char)*s : TST_END;
+
+        if (key < val) {
+            child = p->lo;
+            if (!child) {
+                child = _tsttab_new(mem);
+                if (!child)
+                {
+                    XPOST_LOG_ERR("cannot allocate tree node");
+                    return VMerror;
+                }
+                _tstnode(mem, child)->val = key;
+                _tstnode(mem, cur)->lo = child; //recalc pointer after alloc
+            }
+            cur = child;
+        } else if (key == val) {
+            if (key == TST_END) {
+                unsigned int nstk = xpost_memory_name_stack_ent(mem);
+                _tstnode(mem, cur)->eq = xpost_stack_count(mem, nstk); /* payload at the terminator */
+                break;
+            }
+            s++, n--;
+            child = p->eq;
+            if (!child) {
+                unsigned int nkey = n ? (unsigned char)*s : TST_END;
+                child = _tsttab_new(mem);
+                if (!child)
+                {
+                    XPOST_LOG_ERR("cannot allocate tree node");
+                    return VMerror;
+                }
+                _tstnode(mem, child)->val = nkey;
+                _tstnode(mem, cur)->eq = child; //recalc pointer after alloc
+            }
+            cur = child;
+        } else {
+            child = p->hi;
+            if (!child) {
+                child = _tsttab_new(mem);
+                if (!child)
+                {
+                    XPOST_LOG_ERR("cannot allocate tree node");
+                    return VMerror;
+                }
+                _tstnode(mem, child)->val = key;
+                _tstnode(mem, cur)->hi = child; //recalc pointer after alloc
+            }
+            cur = child;
         }
-    } else {
-        ret = tstinsert(mem, p->hi, s, n, &t);
-        if (ret)
-            return ret;
-        p = _tstnode(mem, ti); //recalc pointer
-        p->hi = t;
     }
+
     *retval = ti;
     return 0;
 }

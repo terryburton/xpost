@@ -1,0 +1,45 @@
+% Interning a name must not recurse once per character, run through
+% `xpost -d null` by run-ps-test.sh: prints SUCCESS iff the run returns.
+%
+% A name is entered into the name tree one character at a time down the
+% tree's equal-child chain. An insert that walked that chain by calling
+% itself would descend as deep as the name is long, so a long enough
+% name would overflow the C stack -- a crash from ordinary input. A large
+% main-thread stack survives even the longest name the length field
+% admits, but a small one does not: the interpreter's own sanitizer
+% build, a worker thread, or a platform whose main stack is a megabyte
+% all overrun on a name this size. The insert walks the chain in a loop
+% instead, so the stack it uses does not grow with the name.
+%
+% Intern a name near the longest the length field admits -- long enough
+% that a frame per character overruns any but a large stack -- and
+% require the interpreter to come back. It is interned on every build; a
+% recursive insert crashes here instead of returning, and a crash reaches
+% neither the assertion nor SUCCESS.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+/result { % {proc} . any
+    count 1 sub /r.depth exch def
+    stopped { $error /errorname get }{ count r.depth eq { null } if } ifelse
+    /r.val exch def
+    count r.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+    r.val
+} def
+
+% make a novel name of n characters and intern it through cvn
+/internlong { % n . -
+    string 0 1 2 index length 1 sub { 1 index exch 97 put } for
+    cvn pop
+} def
+
+% Near the longest name the length field admits, and far past the frame
+% count a small stack could hold. A recursive insert overruns the stack
+% and crashes here instead of returning, and a crash reaches neither the
+% assertion nor SUCCESS.
+{ 60000 internlong } result null eq
+    (interning a very long name returns rather than overflowing the stack) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
