@@ -752,6 +752,21 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             return 0;
         }
 
+        if (_interrupt_pending)
+        {
+            /* An external interrupt request -- the CLI's Ctrl-C, or an
+               embedder's xpost_interrupt to abort a runaway job -- is read
+               between elements here too, not only in the interpreter loop.
+               A fused procedure runs its elements without returning to that
+               loop, so a tail-recursive procedure (one whose last element
+               re-invokes a procedure by name) would otherwise spin with the
+               request unseen and be unabortable short of killing the
+               process. Raise it as the loop does, by returning the error. */
+            _interrupt_pending = 0;
+            EVALARRAY_SYNC_SLOT();
+            return interrupt;
+        }
+
         /* between elements is a safe point just like the interpreter
            loop: a requested collection must not starve while a fused
            procedure runs through a long allocation-heavy stretch */

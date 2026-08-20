@@ -329,6 +329,7 @@ vm test build-personality
 vm test c-held-objects
 vm test check-vm-address
 vm test check-compaction-safe-point
+vm test check-interrupt-fused
 vm test composite-limit
 vm test context-*
 vm test dict-capacity*

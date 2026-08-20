@@ -54,6 +54,7 @@ tests/check-pattern-facts.sh \
 tests/pattern-facts \
 tests/check-image-devclip.sh \
 tests/check-image-facts.sh \
+tests/check-interrupt-fused.sh \
 tests/image-facts \
 tests/check-font-facts.sh \
 tests/font-facts \

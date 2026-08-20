@@ -2818,6 +2818,15 @@ test('interrupt',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# An interrupt request must reach a procedure running in the fused element
+# loop, not only the interpreter loop: a tail-recursive procedure runs its
+# elements without returning to the interpreter loop, so read only there
+# the request goes unseen and the job is unabortable short of a kill.
+test('check-interrupt-fused',
+  find_program('tests/check-interrupt-fused.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast)
+
 # Composite-size limits: the small-object build holds Appendix B.1's 65,535
 # ceiling with limitcheck; the large-object build carries composites to
 # memory. The test probes the build and holds it to its own contract.
