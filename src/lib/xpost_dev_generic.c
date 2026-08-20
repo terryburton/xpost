@@ -3116,6 +3116,16 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
                     int *rowa = band ? cc : pc;
                     int *rowb = cc;
 
+                    /* Hold the row span inside the page and finite before
+                       it becomes a loop bound: an origin past INT_MAX
+                       would wrap the cast to INT_MIN and spin the loop
+                       across the int range. Rows off the page paint
+                       nothing, so this changes no output. */
+                    if (!(lo >= 0)) lo = 0;
+                    if (lo > devh) lo = devh;
+                    if (!(hi >= 0)) hi = 0;
+                    if (hi > devh) hi = devh;
+
                     for (dy = (int)floor(lo); dy < hi; dy++)
                     {
                         double v;
@@ -3235,7 +3245,15 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
     if (ya > yb) { t = ya; ya = yb; yb = t; }
     if (ya < cy0) ya = cy0;
     if (yb > cy1) yb = cy1;
-    if (ya < 0) ya = 0;
+    /* Hold both bounds inside the page and finite before the cast below.
+       A device-space origin past INT_MAX -- reachable from a large CTM
+       scale -- would wrap (int)floor to INT_MIN and spin this loop across
+       the whole int range, uninterruptibly; the tests here comparing
+       against 0 also reject a non-finite bound, which no ordering would.
+       Rows outside the page paint nothing, so clamping changes no output. */
+    if (!(ya >= 0)) ya = 0;
+    if (ya > devh) ya = devh;
+    if (!(yb >= 0)) yb = 0;
     if (yb > devh) yb = devh;
 
     for (dy = (int)floor(ya); dy < yb; dy++)

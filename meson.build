@@ -5340,6 +5340,16 @@ test('check-image-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# A raster image whose device-space row origin is driven past INT_MAX by a
+# large CTM scale must not spin its device-row loop across the int range:
+# the loop bound is cast from a double, and without a clamp an origin past
+# INT_MAX wraps the cast and iterates billions of times per sample row.
+test('check-image-devclip',
+  find_program('tests/check-image-devclip.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font family has no dispatch: the type is re-read at thirteen places
 # in data/font.ps and two in data/cid.ps, and between them they ask only
 # three questions. A site asking half of what it needs looks reasonable on

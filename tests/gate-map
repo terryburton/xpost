@@ -155,6 +155,7 @@ device test bbox-device
 device test blit-*
 device test check-buffer-family
 device test check-device-*
+device test check-image-devclip
 device test check-page-output
 device test check-pdf-docinfo
 device test check-test-devices
