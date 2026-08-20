@@ -908,8 +908,14 @@ static int _recordimage(Xpost_Context *ctx,
     }
     for (i = 0; i < (int)nrun; i++)
     {
-        unsigned int need = (unsigned int)img.width
-                          * (img.planar ? 1u : (unsigned int)img.ncomp);
+        /* 64-bit: img.width is unbounded here (only < 1 was refused), so a
+           32-bit product wraps -- width 2^30 by 4 components comes to zero,
+           and a tiny row then passes a check it should fail, after which
+           the record layer copies the true (huge) length off the end of
+           the row. The comparison is against a composite size, so a need
+           past what any string holds simply refuses every row. */
+        size_t need = (size_t)img.width
+                    * (img.planar ? (size_t)1 : (size_t)img.ncomp);
 
         o = xpost_array_get(ctx, rows, i);
         if (xpost_object_get_type(o) != stringtype || o.comp_.sz < need)
@@ -977,9 +983,20 @@ static int _recordimage(Xpost_Context *ctx,
             img.tlutrgb = tl;
     }
 
-    img.mbits = img.mrowb > 0
-        ? _bdstr(ctx, bd, BK_MBITS,
-                 (unsigned int)img.mrowb * (unsigned int)img.height) : NULL;
+    /* 64-bit, then held to what a string can carry: mrowb and height are
+       both unbounded ints from the dictionary, so their 32-bit product
+       wraps and a small size is validated against the mask string while
+       the record layer copies the true (huge) one off the end. A size no
+       string can hold means there is no mask to take. */
+    if (img.mrowb > 0)
+    {
+        size_t mneed = (size_t)img.mrowb * (size_t)img.height;
+
+        img.mbits = mneed <= (size_t)XPOST_OBJECT_COMP_MAX_SZ
+            ? _bdstr(ctx, bd, BK_MBITS, (unsigned int)mneed) : NULL;
+    }
+    else
+        img.mbits = NULL;
     if (!img.mbits)
         img.mrowb = 0;
 
