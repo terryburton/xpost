@@ -1412,15 +1412,32 @@ a85_readch(Xpost_File *f)
         return EOF;
 
     {
-        unsigned int tuple = 0;
+        unsigned long long tuple = 0;
+        unsigned int t32;
         int i, nbytes = n - 1;
 
         for (i = 0; i < 5; i++)
             tuple = tuple * 85 + (i < n ? grp[i] : 84);  /* pad with 'u' */
-        ff->out[0] = (tuple >> 24) & 0xff;
-        ff->out[1] = (tuple >> 16) & 0xff;
-        ff->out[2] = (tuple >> 8) & 0xff;
-        ff->out[3] = tuple & 0xff;
+        /* A five-character group encodes a 32-bit value (PLRM 3.13.3), so a
+           complete group whose base-85 value exceeds 2^32-1 -- the largest
+           valid one is "s8W-!", and "uuuuu" comes to 4,437,053,124 -- is not
+           a valid encoding. Assembled in 64 bits above so the excess is
+           visible rather than wrapped to the low 32 bits, which would emit
+           bytes the stream never encoded. End the stream at the bad group,
+           as the filter already does for a character outside the alphabet.
+           (A short final group cannot reach this: padding a valid one with
+           'u' raises it by less than a base-85 place, never past the limit.) */
+        if (n == 5 && tuple > 0xFFFFFFFFULL)
+        {
+            XPOST_LOG_ERR("group value exceeds 2^32-1 in ASCII85Decode stream");
+            ff->base.eod = 1;
+            return EOF;
+        }
+        t32 = (unsigned int)tuple;
+        ff->out[0] = (t32 >> 24) & 0xff;
+        ff->out[1] = (t32 >> 16) & 0xff;
+        ff->out[2] = (t32 >> 8) & 0xff;
+        ff->out[3] = t32 & 0xff;
         ff->outn = nbytes;
         ff->outi = 1;
         return ff->out[0];
