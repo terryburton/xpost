@@ -1505,16 +1505,29 @@ int xpost_op_currentobjectformat(Xpost_Context *ctx)
 }
 
 static
+/* A binary object sequence for interchange is small; this ceiling on its
+   measured size is far above any real one. It bounds two things a hostile
+   program could otherwise make unbounded: the total size, so it cannot wrap
+   the width it is computed in and leave the buffer allocated too small for
+   what is then written into it; and the walk that measures it, which shared
+   references -- a graph rather than a tree -- could otherwise make
+   exponential, since the walk does not remember a node it has already
+   counted. The check rides at the head of the walk, so a subtree that has
+   already carried the count past the ceiling ends it there. */
+#define BOS_SEQ_MAX ((size_t)1 << 27)
+
 int _bos_measure(Xpost_Context *ctx,
                  Xpost_Object o,
                  int depth,
-                 unsigned int *recs,
-                 unsigned int *data)
+                 size_t *recs,
+                 size_t *data)
 {
     unsigned int i;
     int ret;
 
     if (depth > 32)
+        return limitcheck;
+    if (*recs + *data > BOS_SEQ_MAX)
         return limitcheck;
     switch (xpost_object_get_type(o))
     {
@@ -1680,7 +1693,7 @@ int _bos_build(Xpost_Context *ctx,
                unsigned int *outlen)
 {
     Bos b;
-    unsigned int recs = 0, data = 0, hdrlen, total;
+    size_t recs = 0, data = 0, hdrlen, total;
     int fmt = _objfmt_get(ctx);
     int ret;
 
@@ -1697,21 +1710,21 @@ int _bos_build(Xpost_Context *ctx,
     b.buf = calloc(total, 1);
     if (!b.buf)
         return VMerror;
-    b.base = hdrlen;
+    b.base = (unsigned int)hdrlen;
     b.nextrec = 8;
-    b.nextdata = recs;
+    b.nextdata = (unsigned int)recs;
     b.le = fmt == 2 || fmt == 4;
     b.buf[0] = (unsigned char)(127 + fmt);
     if (hdrlen == 4)
     {
         b.buf[1] = 1;
-        _bos_put16(&b, b.buf + 2, total);
+        _bos_put16(&b, b.buf + 2, (unsigned int)total);
     }
     else
     {
         b.buf[1] = 0;
         _bos_put16(&b, b.buf + 2, 1);
-        _bos_put32(&b, b.buf + 4, total);
+        _bos_put32(&b, b.buf + 4, (unsigned int)total);
     }
     ret = _bos_emit(&b, o, tag, 0);
     if (ret)

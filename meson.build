@@ -3037,6 +3037,16 @@ test('filter-predictor',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Writing a binary object sequence measures its size before allocating the
+# buffer for it; the measure must not overflow the width it counts in, nor
+# walk a shared reference graph as though it were a tree, or a tiny graph
+# overflows the buffer or hangs the measure.
+test('printobject-overflow',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/printobject_overflow_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every mutating operator against restore. Whether an operator records
 # what it overwrites is a property of the operator, not of the type, so
 # one reverting says nothing about the next.

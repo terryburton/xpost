@@ -232,6 +232,7 @@ filter test file-*
 filter test filter-*
 filter test fopen-funnel
 filter test numstring-decode
+filter test printobject-overflow
 filter test op-bytesavailable
 filter test op-closed-read
 filter test op-file-*

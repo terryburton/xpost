@@ -1,0 +1,47 @@
+% Writing a binary object sequence must measure its size in a width the
+% size cannot overflow, and must not walk a shared reference graph without
+% end, run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff
+% both hold.
+%
+% printobject and writeobject measure the sequence, allocate a buffer that
+% size, then write the objects into it. The measure counted records and
+% bytes in a 32-bit field with no ceiling, and a program can make the
+% measured size exceed 2^32 with a tiny graph by pointing many references
+% at one large object: the field wraps, the buffer is allocated far too
+% small, and the write runs off its end with bytes and a length the
+% program chose -- a heap overflow from ordinary, unprivileged PostScript.
+% The same measure walked the graph as though it were a tree, visiting a
+% shared subtree once per reference, so a graph a few dozen nodes deep made
+% it traverse billions of nodes and hang.
+%
+% Both are refused now: the size is measured against a ceiling far above
+% any real sequence, and the walk ends at the ceiling too. Neither the
+% overflow nor the endless walk should reach the interpreter; each is a
+% limitcheck the measure raises before a buffer is ever sized.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+/errname { % {proc} . name-or-null
+    stopped { $error /errorname get }{ null } ifelse
+} def
+
+1 setobjectformat
+
+% Many references to one large string: the measured data size is
+% 2 * 65535 * 65535, which is more than 2^32.
+/s 65535 string def
+/L 65535 array def
+0 1 65534 { L exch s put } for
+{ [ L L ] 0 printobject } errname /limitcheck eq
+    (a print whose measured size overflows the size width is refused) assert
+
+% A doubling graph: each array holds two references to the one below, so a
+% tree-walk of it visits 2^31 nodes.
+/a [ 0 ] def
+0 1 30 { pop /a [ a a ] def } for
+{ a 0 printobject } errname /limitcheck eq
+    (a print whose measure would walk a graph without end is refused) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
