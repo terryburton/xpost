@@ -3919,6 +3919,46 @@ static int _job_capture_baseline(Xpost_Context *ctx)
     return 1;
 }
 
+/* Close the files and filters a job opened, before the arena revert drops
+   their entities. The revert returns a bank to its baseline image, but a
+   file's stream and its operating-system descriptor live outside the arena,
+   in a handle the revert cannot reach; a file left open at the boundary
+   would leak both for the life of the server, one per job that opened one,
+   until the process runs out of descriptors -- exactly the leak the restore
+   operator avoids by closing the files born since a save (PLRM 3.8.2). A
+   file the baseline held at this same entity, in the same storage, is one of
+   the baseline's own and stays open; every other file entity is one the job
+   opened and is closed here, which frees the handle the revert would strand. */
+static void _job_close_born_files(Xpost_Memory_File *mem,
+                                  const Xpost_Memory_Image *base)
+{
+    __typeof__(mem->table.tab) btab = (void *)base->tab;
+    unsigned int ent;
+
+    for (ent = mem->start; ent < mem->table.nextent; ent++)
+    {
+        if (mem->table.tab[ent].tag != filetype)
+            continue;
+        /* Keyed on the entity number, which is stable, and not on the
+           storage address, which a compaction during the job moves: a
+           file the baseline held at this entity is one of its own. (A job
+           that closed one of the baseline's files and opened another at
+           the freed entity is not distinguished, but that costs one leaked
+           handle at most, where the entity number alone catches every file
+           a job opens at a fresh entity, which is all of them in practice.) */
+        if (ent < base->nextent && btab[ent].tag == filetype)
+            continue;
+        {
+            Xpost_Object o = { 0 };
+
+            o.mark_.tag = filetype;
+            o.mark_.pad0 = 0;
+            o.mark_.padw = ent;
+            (void)xpost_file_object_close(mem, o);
+        }
+    }
+}
+
 /* Revert the whole context to the fixed baseline: the job-encapsulation
    boundary (PLRM 3.7.7 steps 5 and 6, both banks). It runs in C, after the
    job's execution is over, so no job code -- no redefinition, error handler,
@@ -3945,6 +3985,8 @@ static void _job_revert_to_baseline(Xpost_Context *ctx)
         ctx->job_boundary_failed = 1;
         return;
     }
+    _job_close_born_files(ctx->lo, ctx->job_baseline_lo);
+    _job_close_born_files(ctx->gl, ctx->job_baseline_gl);
     xpost_memory_image_restore(ctx->lo, ctx->job_baseline_lo);
     xpost_memory_image_restore(ctx->gl, ctx->job_baseline_gl);
     ctx->rand_next = ctx->job_rand_next;

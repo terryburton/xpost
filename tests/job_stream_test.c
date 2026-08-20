@@ -118,6 +118,44 @@ static void stream_reclaim(Xpost_Showpage_Semantics semantics, const char *what)
     xpost_destroy(ctx);
 }
 
+/* A file or filter a job opens and leaves open at the boundary must be
+ * closed there. Its stream and, for a real file, its operating-system
+ * descriptor live outside the arena the boundary reverts, so a boundary
+ * that did not close it would leak both -- one per job that opened one --
+ * until a long-running server ran out of descriptors. The leak, if it is
+ * there, is a handle unreferenced after the run: the sanitizer build
+ * reports it at exit, so this case needs no assertion of its own beyond
+ * the next job still running. */
+static void stream_file_leak(Xpost_Showpage_Semantics semantics, const char *what)
+{
+    Xpost_Context *ctx;
+    static const char prog[] =
+        "/f (0102) 0 dict /ASCIIHexDecode filter def\004"
+        "(clean)print flush";
+
+    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL, semantics,
+                       XPOST_OUTPUT_MESSAGE_QUIET, XPOST_USE_SIZE, 100, 100);
+    if (!ctx)
+    {
+        report_failure("%s: xpost_create", what);
+        return;
+    }
+    xpost_job_snapshots_set(ctx, 1);
+    xpost_jobserver_set(ctx, 1);
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+
+    outlen = 0;
+    (void) xpost_run(ctx, XPOST_INPUT_STRING, prog, sizeof prog - 1);
+    outbuf[outlen < sizeof outbuf ? outlen : sizeof outbuf - 1] = '\0';
+
+    if (!strstr(outbuf, "clean"))
+        report_failure("%s: the job after one that left a filter open did not run",
+                       what);
+
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
+}
+
 int main(void)
 {
     if (!xpost_init())
@@ -130,6 +168,8 @@ int main(void)
     stream(XPOST_SHOWPAGE_RETURN, "returning");
     stream_reclaim(XPOST_SHOWPAGE_NOPAUSE, "reclaim-nopause");
     stream_reclaim(XPOST_SHOWPAGE_RETURN, "reclaim-returning");
+    stream_file_leak(XPOST_SHOWPAGE_NOPAUSE, "fileleak-nopause");
+    stream_file_leak(XPOST_SHOWPAGE_RETURN, "fileleak-returning");
 
     xpost_quit();
     return verdict();
