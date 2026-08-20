@@ -328,4 +328,15 @@ shfailed not (shfill runs with a program's currentcolorspace defined) assert
 shfailed not { shgot shwant eq }{ false } ifelse
     (shfill paints the same page with currentcolorspace defined) assert
 
+% The == / pstack / error-report machinery is the interpreter's own and is
+% bound (init.ps .bindscope over ==dict), so a program redefining an
+% operator it uses is not honoured when it runs. Flag a redefinition of
+% type -- which == dispatches an array's printing through -- and confirm
+% == does not reach it.
+userdict /tamper.seen false put
+userdict /type { userdict /tamper.seen true put //type exec } put
+[1] ==
+userdict /type undef
+userdict /tamper.seen get not (== does not honour a program's redefined type) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

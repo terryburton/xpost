@@ -593,6 +593,14 @@ systemdict begin
         } ifelse
     } def
 
+    % The == machinery is the interpreter's own; a program redefining an
+    % operator it uses (forall, type, exec, print, ...) must not have that
+    % redefinition honoured when == or pstack or an error report runs. This
+    % dict is anonymous, so the systemdict/userdict bind sweep never reaches
+    % it: bind its procedures here, as =string already is, freezing every
+    % operator name to the operator.
+    currentdict //.xpostsys /.bindscope get exec
+
 /==only {
     %traceon
     //==dict begin
