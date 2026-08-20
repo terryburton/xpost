@@ -1004,6 +1004,20 @@ int xpost_scanner_rep_number(unsigned int rep, const unsigned char *p, Xpost_Obj
     return syntaxerror;
 }
 
+/* True when the span [base+value, base+value+len) lies within a buffer of
+   buflen bytes. The sum is taken in 64 bits: base, value and len are each
+   attacker-supplied 32-bit fields, and adding them in 32 bits lets a value
+   near 2^32 wrap the sum below buflen and pass a check the span should fail,
+   after which the read advances by the true (huge) offset off the end of the
+   buffer. Every offset-bearing record arm below routes its bound through here
+   so no one arm can reintroduce the 32-bit wrap. */
+static int
+bt_span_within(unsigned int base, unsigned int value,
+               unsigned long long len, unsigned int buflen)
+{
+    return (unsigned long long)base + value + len <= buflen;
+}
+
 /* Binary object sequence (PLRM 3.14.1): a self-delimiting block of
    encoded objects. The header carries the top-level count and total
    length; each object is an 8-byte record, with composite bodies
@@ -1069,7 +1083,7 @@ int bt_seq_object(Xpost_Context *ctx,
             {
                 char *nm;
                 if (!le || length > 127
-                 || base + value + length > buflen)
+                 || !bt_span_within(base, value, length, buflen))
                     return syntaxerror;
                 nm = malloc(length + 1);
                 if (!nm)
@@ -1097,7 +1111,7 @@ int bt_seq_object(Xpost_Context *ctx,
             obj = xpost_bool_cons(value != 0);
             break;
         case 5:  /* string */
-            if (length && (!le || base + value + length > buflen))
+            if (length && (!le || !bt_span_within(base, value, length, buflen)))
                 return syntaxerror;
             obj = xpost_string_cons(ctx, length, (char *)(buf + base + value));
             if (xpost_object_get_type(obj) == nulltype)
@@ -1108,7 +1122,8 @@ int bt_seq_object(Xpost_Context *ctx,
                 unsigned int i;
                 int ret;
 
-                if (length && (!le || base + value + (unsigned int)length * 8 > buflen))
+                if (length && (!le || !bt_span_within(base, value,
+                                                      (unsigned long long)length * 8, buflen)))
                     return syntaxerror;
                 obj = xpost_array_cons(ctx, length);
                 if (xpost_object_get_type(obj) == nulltype)
