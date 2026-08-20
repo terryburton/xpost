@@ -660,8 +660,19 @@ currentglobal true setglobal
 % space accepted as one thing and recorded as another, which no program
 % could see until it used that space.
 .xpostsys /.spacereduce {
+    % A colour space reaches its device space in as many steps as it
+    % nests, which is a handful; a space that reaches itself would reduce
+    % forever. Count the steps and refuse a space that has not reduced in
+    % far more than any real space nests -- it names itself -- rather than
+    % follow the cycle with no end and no allocation to trip a limit. The
+    % count rides under the space on the stack and is dropped at either
+    % exit, so a caller sees only the space it passed reduced.
+    256 exch
     {
-        dup type /arraytype ne { exit } if
+        exch 1 sub dup 0 lt
+            { pop /setcolorspace cvx /typecheck signalerror } if
+        exch
+        dup type /arraytype ne { exch pop exit } if
         dup 0 get /Indexed eq { 1 get }{
         dup 0 get dup /Separation eq exch /DeviceN eq or {
             2 get
@@ -669,7 +680,7 @@ currentglobal true setglobal
         //.xpostsys /.ciefams get 1 index 0 get known {
             pop /DeviceRGB
         }{
-            exit
+            exch pop exit
         } ifelse } ifelse } ifelse
     } loop
 } put

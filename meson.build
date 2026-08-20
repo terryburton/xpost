@@ -3034,6 +3034,16 @@ test('colorspace-matrix',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Reducing a colour space to its device space walks Indexed bases and
+# Separation/DeviceN alternatives; a space that names itself would walk
+# forever. The walk is bounded, so a self-referential space is refused
+# rather than followed, and ordinary nested spaces still reduce.
+test('colorspace-cycle',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/colorspace_cycle_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Program code is called out to through one bracket. This holds the tree
 # to it: every graphicsdict slot is registered as one a bracket saves or
 # one the render owns outright, and the dictionary-scope escape has one

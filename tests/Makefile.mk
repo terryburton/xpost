@@ -121,6 +121,7 @@ tests/check-wrapped-bind.sh \
 tests/cid_show_test.ps \
 tests/clip_region_test.ps \
 tests/clock_test.c \
+tests/colorspace_cycle_test.ps \
 tests/colorspace_matrix_test.ps \
 tests/colour_range_test.ps \
 tests/colour_sampling_test.ps \

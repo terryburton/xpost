@@ -1,0 +1,44 @@
+% Reducing a colour space to its device space must not follow a space
+% that names itself, run through `xpost -d null` by run-ps-test.sh:
+% prints SUCCESS iff every assertion holds.
+%
+% setcolorspace walks a space down through Indexed bases, Separation and
+% DeviceN alternatives, and CIE families to the device space a colour in
+% it is finally recorded in. A space that reaches itself along that walk
+% -- an Indexed base or a Separation alternative that is the space itself
+% -- would reduce forever: a loop that allocates nothing, so no VMerror
+% breaks it, and cannot be interrupted. The walk is bounded well above
+% any real nesting, so a self-referential space is refused (typecheck, as
+% the oracles give it) rather than walked without end.
+%
+% The bound must not change anything else: a space that names an unknown
+% family is still undefined, not refused as though it were a cycle, and
+% every ordinary nested space still reduces and is accepted.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+/errname { % {proc} . name-or-null
+    stopped { $error /errorname get }{ null } ifelse
+} def
+
+% self-referential spaces are refused, not walked forever
+{ /cs [ /Indexed /DeviceRGB 1 <0000> ] def cs 1 cs put cs setcolorspace } errname
+    /typecheck eq (a colour space whose Indexed base is itself is refused) assert
+{ /d [ /Separation /S /DeviceRGB { } ] def d 2 d put d setcolorspace } errname
+    /typecheck eq (a Separation whose alternative is itself is refused) assert
+
+% ordinary nested spaces still reduce and are accepted
+{ [ /Indexed /DeviceRGB 255 <000000> ] setcolorspace } errname
+    null eq (an Indexed space over DeviceRGB is accepted) assert
+{ [ /Indexed [ /Separation /Spot /DeviceCMYK { pop 0 0 0 0 } ] 1 <00> ] setcolorspace } errname
+    null eq (an Indexed space over a Separation is accepted) assert
+{ [ /DeviceN [ /a /b ] /DeviceCMYK { pop pop 0 0 0 0 } ] setcolorspace } errname
+    null eq (a DeviceN space is accepted) assert
+
+% an unknown family is undefined, not caught by the bound as a cycle
+{ [ /Bogus /DeviceRGB ] setcolorspace } errname
+    /undefined eq (a space naming an unknown family is undefined, not refused as a cycle) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse

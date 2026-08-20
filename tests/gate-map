@@ -261,6 +261,7 @@ graphics test *-matrix
 graphics test bbox-device
 graphics test cacheparams-range
 graphics test clip-*
+graphics test colorspace-cycle
 graphics test colorspace-matrix
 graphics test colour-*
 graphics test empty-clip
