@@ -71,7 +71,17 @@ typedef struct
 {
     unsigned int *ents;
     int n, cap;
+    int depth;   /* live descent depth, so a runtime-built nest cannot
+                    recurse the C stack away */
+    int toodeep; /* set when the cap was hit; the top level raises limitcheck */
 } Bind_Seen;
+
+/* How deep bind will descend into nested executable arrays. The scanner
+   caps a SOURCE procedure's nesting far below this, but an array built at
+   run time and made executable bypasses that cap, and bind then recurses
+   one C frame per level. Real procedures nest a handful deep; this is far
+   above anything legitimate and far below what exhausts the stack. */
+#define XPOST_BIND_MAX_DEPTH 1000
 
 static
 Xpost_Object bind(Xpost_Context *ctx,
@@ -146,7 +156,17 @@ Xpost_Object bind(Xpost_Context *ctx,
                    procedure keeps its finished contents) untouched */
                 if (xpost_object_is_exe(t))
                 {
+                    if (seen->depth >= XPOST_BIND_MAX_DEPTH)
+                    {
+                        /* too deep to descend safely: stop here and let
+                           the top level report it, rather than recurse the
+                           C stack to destruction */
+                        seen->toodeep = 1;
+                        break;
+                    }
+                    ++seen->depth;
                     t = bind(ctx, t, seen);
+                    --seen->depth;
                     /* as above: i indexes the array being walked */
                     XPOST_REFUSAL_IMPOSSIBLE(
                         xpost_array_put_memory(
@@ -164,11 +184,17 @@ int Pbind(Xpost_Context *ctx,
           Xpost_Object P)
 {
     Bind_Seen seen;
+    Xpost_Object bound;
 
     seen.ents = NULL;
     seen.n = seen.cap = 0;
-    xpost_stack_push(ctx->lo, ctx->os, bind(ctx, P, &seen));
+    seen.depth = 0;
+    seen.toodeep = 0;
+    bound = bind(ctx, P, &seen);
     free(seen.ents);
+    if (seen.toodeep)
+        return limitcheck;
+    xpost_stack_push(ctx->lo, ctx->os, bound);
     return 0;
 }
 
