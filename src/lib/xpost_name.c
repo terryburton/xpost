@@ -459,6 +459,18 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
     unsigned int tstk;
     int ret;
 
+    /* A name is interned by a per-character recursive descent -- the
+       search below, then tstinsert -- whose depth is the name's length.
+       The scanner never hands in a name longer than its own token buffer,
+       but cvn of a program-built string reaches here directly, and on the
+       wide build a string may be far longer than the narrow build's 65535,
+       which is the length this recursion is known to survive. Refuse a
+       longer name at the single interning entry, before either walk
+       begins; the caller reports it as it already reports an intern that
+       could not be made. */
+    if (n > 65535u)
+        return invalid;
+
     _name_lookup_charge();
 
     /* LOCAL IS SEARCHED FIRST, AND THE ORDER IS LOAD-BEARING.
