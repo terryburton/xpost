@@ -32,28 +32,26 @@
 # after its closing brace keeps the header as its heading.
 #
 # disposition  header[:structure]  member  [reason, for an address]
-count    xpost_context.h:_Xpost_Context     ds
-count    xpost_context.h:_Xpost_Context     es
-count    xpost_context.h:_Xpost_Context     hold
-count    xpost_context.h:_Xpost_Context     os
-count    xpost_memory.h:Xpost_Memory_File   free_substack
-address  xpost_memory.h:Xpost_Memory_File   high_water               the offset one past the last byte handed out, which a rearrangement would set to its new value rather than move
-address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
-count    xpost_object.h                     stk
-count    xpost_span.h:band_span             band
-count    xpost_span.h:band_span             dirn
-count    xpost_stack.h                      nextseg
-count    xpost_stack.h                      prevseg
 count    xpost_context.h:_Xpost_Context     batch
 count    xpost_context.h:_Xpost_Context     callback_error
 count    xpost_context.h:_Xpost_Context     device_made
+count    xpost_context.h:_Xpost_Context     ds
 count    xpost_context.h:_Xpost_Context     ds_over
+count    xpost_context.h:_Xpost_Context     es
 count    xpost_context.h:_Xpost_Context     es_over
 count    xpost_context.h:_Xpost_Context     es_run_base
 count    xpost_context.h:_Xpost_Context     globs_size
+count    xpost_context.h:_Xpost_Context     hold
 count    xpost_context.h:_Xpost_Context     id
 count    xpost_context.h:_Xpost_Context     ignoreinvalidaccess
+count    xpost_context.h:_Xpost_Context     job_baseline_ds
+count    xpost_context.h:_Xpost_Context     job_boundary_failed
+count    xpost_context.h:_Xpost_Context     job_encapsulated
+count    xpost_context.h:_Xpost_Context     job_packing
+count    xpost_context.h:_Xpost_Context     job_rand_next
 count    xpost_context.h:_Xpost_Context     job_snapshots
+count    xpost_context.h:_Xpost_Context     job_vmmode
+count    xpost_context.h:_Xpost_Context     jobserver
 count    xpost_context.h:_Xpost_Context     namebind_gen
 count    xpost_context.h:_Xpost_Context     namecache_gen
 count    xpost_context.h:_Xpost_Context     namecache_size
@@ -61,6 +59,7 @@ count    xpost_context.h:_Xpost_Context     nest_depth
 count    xpost_context.h:_Xpost_Context     onerr_run
 count    xpost_context.h:_Xpost_Context     op_restore_n
 count    xpost_context.h:_Xpost_Context     operator_install_refused
+count    xpost_context.h:_Xpost_Context     os
 count    xpost_context.h:_Xpost_Context     os_over
 count    xpost_context.h:_Xpost_Context     packing
 count    xpost_context.h:_Xpost_Context     pagedevice_depth
@@ -122,6 +121,8 @@ count    xpost_file.h:Xpost_DiskFile        input
 count    xpost_file.h:Xpost_DiskFile        poll_before_read
 count    xpost_file.h:Xpost_File            closed
 count    xpost_file.h:Xpost_File            ent
+count    xpost_file.h:Xpost_File            eot
+count    xpost_file.h:Xpost_File            job_stream
 count    xpost_file.h:Xpost_File            owned
 count    xpost_file.h:Xpost_File            refs
 count    xpost_file.h:Xpost_MemoryFile      is_malloc
@@ -135,6 +136,7 @@ count    xpost_file.h:Xpost_ProcFile        running
 count    xpost_file.h:Xpost_ProcFile        started
 count    xpost_interpreter.h                cid
 count    xpost_interpreter.h                in_onerror
+count    xpost_memory.h:Xpost_Memory_File   compact_pending
 count    xpost_memory.h:Xpost_Memory_File   end
 count    xpost_memory.h:Xpost_Memory_File   ent
 count    xpost_memory.h:Xpost_Memory_File   ent_exhausted
@@ -143,12 +145,13 @@ count    xpost_memory.h:Xpost_Memory_File   fd
 count    xpost_memory.h:Xpost_Memory_File   file_birth_max
 count    xpost_memory.h:Xpost_Memory_File   file_births
 count    xpost_memory.h:Xpost_Memory_File   free_list_alloc_is_installed
-count    xpost_memory.h:Xpost_Memory_File   compact_pending
 count    xpost_memory.h:Xpost_Memory_File   free_scan
+count    xpost_memory.h:Xpost_Memory_File   free_substack
 count    xpost_memory.h:Xpost_Memory_File   garbage_collect_auto
 count    xpost_memory.h:Xpost_Memory_File   garbage_collect_is_installed
 count    xpost_memory.h:Xpost_Memory_File   garbage_collect_pending
 count    xpost_memory.h:Xpost_Memory_File   gc_ent_budget
+address  xpost_memory.h:Xpost_Memory_File   high_water               the offset one past the last byte handed out, which a rearrangement would set to its new value rather than move
 count    xpost_memory.h:Xpost_Memory_File   interpreter_cid_get_context_is_installed
 count    xpost_memory.h:Xpost_Memory_File   last
 count    xpost_memory.h:Xpost_Memory_File   max
@@ -159,6 +162,16 @@ count    xpost_memory.h:Xpost_Memory_File   start
 count    xpost_memory.h:Xpost_Memory_File   steps
 count    xpost_memory.h:Xpost_Memory_File   threshold
 count    xpost_memory.h:Xpost_Memory_File   threshold_bytes
+count    xpost_memory.h:Xpost_Memory_Image  file_birth_max
+count    xpost_memory.h:Xpost_Memory_Image  file_births
+count    xpost_memory.h:Xpost_Memory_Image  free_scan
+count    xpost_memory.h:Xpost_Memory_Image  free_substack
+count    xpost_memory.h:Xpost_Memory_Image  gc_ent_budget
+count    xpost_memory.h:Xpost_Memory_Image  nextent
+count    xpost_memory.h:Xpost_Memory_Image  start
+count    xpost_memory.h:Xpost_Memory_Image  used
+count    xpost_memory.h:Xpost_Memory_Image  valid
+address  xpost_memory.h:Xpost_Memory_Table  adr                      where an entity's bytes begin, and the one every other reference is turned into a place through
 count    xpost_memory.h:Xpost_Memory_Table  freerow
 count    xpost_memory.h:Xpost_Memory_Table  mark
 count    xpost_memory.h:Xpost_Memory_Table  max
@@ -167,10 +180,10 @@ count    xpost_memory.h:Xpost_Memory_Table  nextfree
 count    xpost_memory.h:Xpost_Memory_Table  sz
 count    xpost_memory.h:Xpost_Memory_Table  tag
 count    xpost_memory.h:Xpost_Memory_Table  used
-count    xpost_name.h:tst                   val
 count    xpost_name.h:tst                   eq
 count    xpost_name.h:tst                   hi
 count    xpost_name.h:tst                   lo
+count    xpost_name.h:tst                   val
 count    xpost_object.h                     cpy
 count    xpost_object.h                     ent
 count    xpost_object.h                     fraction
@@ -182,14 +195,15 @@ count    xpost_object.h                     pad0
 count    xpost_object.h                     padw
 count    xpost_object.h                     sign_exp
 count    xpost_object.h                     src
+count    xpost_object.h                     stk
 count    xpost_object.h                     sz
 count    xpost_object.h                     tag
-count    xpost_operator.h:Xpost_Operator   sigadr
-count    xpost_operator.h:Xpost_Signature  t
 count    xpost_operator.h                   in
 count    xpost_operator.h:Xpost_Operator    n
 count    xpost_operator.h:Xpost_Operator    name
+count    xpost_operator.h:Xpost_Operator   sigadr
 count    xpost_operator.h:Xpost_Signature   in
+count    xpost_operator.h:Xpost_Signature  t
 count    xpost_record.h                     cmyk
 count    xpost_record.h                     height
 count    xpost_record.h                     interp
@@ -203,4 +217,8 @@ count    xpost_record.h                     rgbrows
 count    xpost_record.h                     width
 count    xpost_span.h                       hi
 count    xpost_span.h                       lo
+count    xpost_span.h:band_span             band
+count    xpost_span.h:band_span             dirn
+count    xpost_stack.h                      nextseg
+count    xpost_stack.h                      prevseg
 count    xpost_stack.h                      top
