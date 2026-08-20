@@ -231,6 +231,7 @@ filter test error-binary
 filter test file-*
 filter test filter-*
 filter test fopen-funnel
+filter test lzwencode-early
 filter test numstring-decode
 filter test printobject-overflow
 filter test op-bytesavailable

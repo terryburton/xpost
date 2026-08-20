@@ -3047,6 +3047,15 @@ test('printobject-overflow',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# LZWEncode's EarlyChange gates the code-table reset; an out-of-range value
+# defeats it and lets the encoder write past the fixed table. It must be
+# refused, and a valid value must still encode and round-trip.
+test('lzwencode-early',
+  find_program('tests/run-lzwencode-early-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every mutating operator against restore. Whether an operator records
 # what it overwrites is a property of the operator, not of the type, so
 # one reverting says nothing about the next.

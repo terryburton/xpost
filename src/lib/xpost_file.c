@@ -4563,10 +4563,17 @@ lzwenc_encode(Xpost_EncBase *base, int c)
         }
     if (lzwenc_emit(ff, ff->prefix) == EOF)
         return EOF;
-    ff->suffix[ff->nextcode] = (unsigned char)c;
-    ff->sibling[ff->nextcode] = ff->child[ff->prefix];
-    ff->child[ff->prefix] = (short)ff->nextcode;
-    ff->nextcode++;
+    /* Add the new entry only while the table has room, as the decoder does
+       at the matching site. The reset below keeps the counter below this for
+       any valid EarlyChange, so this is the hard floor the fixed table
+       cannot be written past whatever EarlyChange was handed in. */
+    if (ff->nextcode < 4096)
+    {
+        ff->suffix[ff->nextcode] = (unsigned char)c;
+        ff->sibling[ff->nextcode] = ff->child[ff->prefix];
+        ff->child[ff->prefix] = (short)ff->nextcode;
+        ff->nextcode++;
+    }
     /* the decoder adds this entry only after the next code arrives,
        so its width grows one code later than a naive mirror would */
     if (ff->nextcode + ff->early > (1 << ff->codewidth)

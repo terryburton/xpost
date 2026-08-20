@@ -515,7 +515,15 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
             return invalidaccess;
         ec = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EarlyChange"));
         if (xpost_object_get_type(ec) == integertype)
+        {
+            /* EarlyChange is 0 or 1 (PLRM 3.13.3). Any other value -- a
+               negative one, or one large enough to overflow the sum -- would
+               defeat the code-table reset test it feeds and let the code
+               counter run past the fixed table the encoder writes into. */
+            if (ec.int_.val != 0 && ec.int_.val != 1)
+                return rangecheck;
             early = ec.int_.val;
+        }
         f = (enc ? xpost_file_cons_filter_enc_lzw
                  : xpost_file_cons_filter_lzw)(ctx->lo, F, early);
         if (xpost_object_get_type(f) == invalidtype)
