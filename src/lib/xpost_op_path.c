@@ -439,12 +439,26 @@ _path_append(Xpost_Context *ctx, Xpost_Object gstate, Xpost_Object *pathp,
     if (used + esz > _path_get_u32(p, 12))
     {
         Xpost_Object ns;
-        unsigned int newcap = _path_get_u32(p, 12) * 2;
+        unsigned int newcap;
         char *np;
         int ret;
 
+        /* The path extent lives in a 32-bit header. A curve whose
+           flattening needs more than that -- a huge control polygon
+           subdivided to the flatness tolerance can ask for it -- cannot
+           be represented, and the capacity-doubling below would wrap past
+           2^32 and allocate a buffer smaller than the data already in
+           hand, which the copy then overruns. Refuse at the limit rather
+           than overrun. */
+        if (esz > 0xFFFFFFFFu - used)
+            return limitcheck;
+        newcap = _path_get_u32(p, 12);
         while (newcap < used + esz)
+        {
+            if (newcap > 0xFFFFFFFFu / 2)
+                return limitcheck;
             newcap *= 2;
+        }
         ns = _path_cons(ctx, newcap);
         if (xpost_object_get_type(ns) == invalidtype)
             return VMerror;
@@ -2025,7 +2039,26 @@ typedef struct
 {
     Xpost_Object gstate;
     Xpost_Object path;
+    long segments; /* line segments emitted so far, to bound a flatten of a
+                      curve whose extent dwarfs the device: the depth cap
+                      bounds the stack, this bounds the work */
 } _flatten_dst;
+
+/* The most line segments one flatten may emit before it is refused. A real
+   curve flattens to a few hundred; a curve whose control points started
+   enormous asks for astronomically many tiny off-device segments, which
+   the depth cap alone still lets pile up. This is far above anything a
+   genuine path needs and far below a denial of service. */
+#define FLATTEN_MAX_SEGMENTS 4000000L
+
+/* The deepest _chopcurve will subdivide. A curve converges to the
+   flatness tolerance in a handful of levels; far more than this means the
+   sub-curve has shrunk to where floating-point rounding keeps its
+   flatness measure oscillating around the tolerance and it never comes
+   under -- which a curve whose control points started enormous does, and
+   used to recurse the C stack away. At the cap, take the sub-curve as a
+   line: it is smaller than the tolerance in every case that matters. */
+#define CHOPCURVE_MAX_DEPTH 32
 
 static
 int _chopcurve(Xpost_Context *ctx, _flatten_dst *dst,
@@ -2033,12 +2066,24 @@ int _chopcurve(Xpost_Context *ctx, _flatten_dst *dst,
                real x1, real y1,
                real x2, real y2,
                real x3, real y3,
-               real tol)
+               real tol,
+               int depth)
 {
     real x01, y01, x12, y12, x23, y23,
          x012, y012, x123, y123,
          x0123, y0123;
     real x03, y03;
+
+    /* A non-finite control point never converges: the subdivision test
+       below compares a distance that stays infinite (or NaN) against the
+       tolerance, so it is never met and the recursion runs until the C
+       stack is gone. Such a coordinate reached the path through an
+       ordinary curveto of an out-of-range value (e.g. an overflowing
+       multiply that produced an infinity); refuse to flatten it rather
+       than subdivide it forever. */
+    if (!isfinite(x0) || !isfinite(y0) || !isfinite(x1) || !isfinite(y1)
+     || !isfinite(x2) || !isfinite(y2) || !isfinite(x3) || !isfinite(y3))
+        return limitcheck;
 
 #define MEDIAN(x, y, xA, yA, xB, yB) \
     x = (real)(((xA)+(xB))/2.0); \
@@ -2056,9 +2101,11 @@ int _chopcurve(Xpost_Context *ctx, _flatten_dst *dst,
 #define DIST(xA, yA, xB, yB) \
     sqrt((xB-xA)*(xB-xA) + (yB-yA)*(yB-yA))
 
-    if (DIST(x03, y03, x0123, y0123) < tol)
+    if (depth >= CHOPCURVE_MAX_DEPTH || DIST(x03, y03, x0123, y0123) < tol)
     {
         real co[2];
+        if (++dst->segments > FLATTEN_MAX_SEGMENTS)
+            return limitcheck;
         co[0] = x3;
         co[1] = y3;
         return _path_append(ctx, dst->gstate, &dst->path, PATH_CMD_LINE, co, 2);
@@ -2066,10 +2113,12 @@ int _chopcurve(Xpost_Context *ctx, _flatten_dst *dst,
     else
     {
         int ret;
-        ret = _chopcurve(ctx, dst, x0, y0, x01, y01, x012, y012, x0123, y0123, tol);
+        ret = _chopcurve(ctx, dst, x0, y0, x01, y01, x012, y012, x0123, y0123,
+                         tol, depth + 1);
         if (ret)
             return ret;
-        return _chopcurve(ctx, dst, x0123, y0123, x123, y123, x23, y23, x3, y3, tol);
+        return _chopcurve(ctx, dst, x0123, y0123, x123, y123, x23, y23, x3, y3,
+                          tol, depth + 1);
     }
 }
 
@@ -2092,8 +2141,21 @@ int _flattenpath (Xpost_Context *ctx)
     flat = xpost_dict_get(ctx, gstate, nameflat);
     /* the flatness value bounds the error in device pixels; subdivide
        well inside it so a curve's polygonization classifies the same
-       boundary pixels as a renderer that meets the bound exactly */
-    tol = NUM(flat) * 0.25;
+       boundary pixels as a renderer that meets the bound exactly.
+
+       setflat clamps flatness to [0.2, 100], but it is not the only
+       writer: the value is read here straight from the graphics-state
+       dictionary, which a program can reach and set to zero (or NaN)
+       by another path. A non-positive tolerance makes the subdivision
+       test below never true, so _chopcurve recurses until the C stack
+       is gone. Enforce the same floor at the point the value is used,
+       so the reader is safe whatever the dictionary holds. */
+    {
+        real f = NUM(flat);
+        if (!(f >= 0.2)) f = 0.2;          /* also catches NaN */
+        else if (f > 100.0) f = 100.0;
+        tol = f * 0.25;
+    }
 
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
@@ -2129,6 +2191,7 @@ int _flattenpath (Xpost_Context *ctx)
     p = xpost_string_get_pointer(ctx, path);
     dst.gstate = gstate;
     dst.path = xpost_dict_get(ctx, gstate, namecurrpath);
+    dst.segments = 0;
 
     for (o = PATH_HDR; o < used; o += esz)
     {
@@ -2146,7 +2209,7 @@ int _flattenpath (Xpost_Context *ctx)
             ret = _chopcurve(ctx, &dst,
                              cp[0], cp[1],
                              co[0], co[1], co[2], co[3], co[4], co[5],
-                             tol);
+                             tol, 0);
             if (ret)
                 return ret;
             cp[0] = co[4];
