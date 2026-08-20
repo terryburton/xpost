@@ -316,6 +316,19 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     d.tag = dicttype | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     d.comp_.sz = sz;
     d.comp_.off = 0;
+    /* The table byte-size is passed to an allocator whose size parameter is
+       32 bits wide. On the wide build the size field above admits a capacity
+       whose table would exceed that: DICTABSZ(sz) then wraps, a huge
+       dictionary is backed by a small allocation, and the table-clearing loop
+       below writes past it. Size the table in 64 bits here, at the one point
+       it is sized, and refuse what the allocator cannot represent -- a
+       dictionary that will not fit is a VMerror, not a buffer overrun. */
+    if ((unsigned long long)sizeof(dichead)
+        + (2ULL * sz + 1) * sizeof(dicrec) > 0xFFFFFFFFULL)
+    {
+        XPOST_LOG_ERR("dictionary table size overflows the allocator");
+        return null;
+    }
     if (!xpost_memory_table_alloc(mem, sizeof(dichead) + DICTABSZ(sz), dicttype, &ent))
     {
         XPOST_LOG_ERR("cannot allocate dictionary");
