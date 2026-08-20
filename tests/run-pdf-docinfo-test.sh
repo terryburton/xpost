@@ -12,8 +12,7 @@ set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT INT TERM
+verdict_workdir
 
 # 1. Injection attempt: a key that, unescaped, would close the name with
 #    ">>", end the Info object, and open "50 0 obj << /Injected (pwned) >>".

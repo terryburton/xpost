@@ -52,9 +52,9 @@ tests/check-colourspace-facts.sh \
 tests/colourspace-facts \
 tests/check-pattern-facts.sh \
 tests/pattern-facts \
-tests/check-image-devclip.sh \
+tests/run-image-devclip-test.sh \
 tests/check-image-facts.sh \
-tests/check-interrupt-fused.sh \
+tests/run-interrupt-fused-test.sh \
 tests/image-facts \
 tests/check-font-facts.sh \
 tests/font-facts \
@@ -91,7 +91,7 @@ tests/check-one-bytebuf.sh \
 tests/check-op-references.sh \
 tests/check-opsigs-writer.sh \
 tests/check-page-output.sh \
-tests/check-pdf-docinfo.sh \
+tests/run-pdf-docinfo-test.sh \
 tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \

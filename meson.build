@@ -2158,7 +2158,7 @@ test('bbox-device',
 # name; this holds an injection to the one name it belongs to and leaves
 # ordinary metadata intact.
 test('check-pdf-docinfo',
-  find_program('tests/check-pdf-docinfo.sh'),
+  find_program('tests/run-pdf-docinfo-test.sh'),
   args: [ xpost_exe ],
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
@@ -2823,7 +2823,7 @@ test('interrupt',
 # elements without returning to the interpreter loop, so read only there
 # the request goes unseen and the job is unabortable short of a kill.
 test('check-interrupt-fused',
-  find_program('tests/check-interrupt-fused.sh'),
+  find_program('tests/run-interrupt-fused-test.sh'),
   args: [ xpost_exe ],
   suite: cost_fast)
 
@@ -5354,7 +5354,7 @@ test('check-image-facts',
 # the loop bound is cast from a double, and without a clamp an origin past
 # INT_MAX wraps the cast and iterates billions of times per sample row.
 test('check-image-devclip',
-  find_program('tests/check-image-devclip.sh'),
+  find_program('tests/run-image-devclip-test.sh'),
   args: [ xpost_exe ],
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })

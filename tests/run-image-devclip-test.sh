@@ -11,8 +11,7 @@ set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT INT TERM
+verdict_workdir
 
 # An enormous negative scale double-flips Y into a huge positive device
 # origin; a forty-row image then drives the row loop forty times.

@@ -13,9 +13,9 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/verdict.sh"
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT INT TERM
+verdict_workdir
 
 # Return 0 if the program stops within a few seconds of the interrupt.
 interruptible() {   # $1 program text
