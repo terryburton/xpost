@@ -172,13 +172,21 @@ done
 # What is left named is the files that ARE run and still judge no run of
 # the interpreter, which no rule distinguishes and which therefore have
 # to say so themselves.
-verdict_exempt='run-profile.sh gate.sh'
-verdict_exempt_n=2
+verdict_exempt='run-profile.sh gate.sh run-interrupt-fused-test.sh'
+verdict_exempt_n=3
 #   run-profile.sh   drives meson over a selection of the suite rather
 #                    than running the interpreter; the runs it starts
 #                    report to meson, which is what it reads back
 #   gate.sh          the same, over a selection made from what changed
 #                    rather than from what a test costs
+#   run-interrupt-fused-test.sh
+#                    judges whether the interpreter takes an interrupt
+#                    request, by signalling a running one and reading
+#                    whether it stopped and with what exit -- a verdict on
+#                    a signal's effect. The run it interrupts is meant to
+#                    exit non-zero, so neither verdict_ok nor verdict_run
+#                    fits it; it reads the exit status itself and refuses a
+#                    crash
 
 # The two rules as one pass over a wrapper, so the self-check below can
 # put cases to them rather than trusting that patterns which find nothing

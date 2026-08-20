@@ -30,7 +30,15 @@ interruptible() {   # $1 program text
     kill -INT "$ip_pid" 2>/dev/null
     ip_i=0
     while [ "$ip_i" -lt 4 ]; do
-        kill -0 "$ip_pid" 2>/dev/null || { wait "$ip_pid" 2>/dev/null; return 0; }
+        if ! kill -0 "$ip_pid" 2>/dev/null; then
+            wait "$ip_pid"; status=$?
+            # A clean stop on the interrupt exits without a crash signal; a
+            # 128+N exit (139 SIGSEGV, 134 SIGABRT or an ASan abort) is a
+            # crash, not a stop, and must not read as the interrupt working.
+            [ "$status" -lt 128 ] && return 0
+            echo "FAIL: the interrupt did not stop the run cleanly (exit $status)"
+            return 1
+        fi
         sleep 1
         ip_i=$((ip_i + 1))
     done

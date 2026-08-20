@@ -3933,6 +3933,10 @@ static void _job_close_born_files(Xpost_Memory_File *mem,
                                   const Xpost_Memory_Image *base)
 {
     __typeof__(mem->table.tab) btab = (void *)base->tab;
+    /* how many entities the baseline's table copy holds -- a bound on the
+       copy this reads, not a test of a live entity's validity, so it is
+       read into a name of its own rather than compared against in place */
+    unsigned int baseline_ents = base->nextent;
     unsigned int ent;
 
     for (ent = mem->start; ent < mem->table.nextent; ent++)
@@ -3946,7 +3950,7 @@ static void _job_close_born_files(Xpost_Memory_File *mem,
            the freed entity is not distinguished, but that costs one leaked
            handle at most, where the entity number alone catches every file
            a job opens at a fresh entity, which is all of them in practice.) */
-        if (ent < base->nextent && btab[ent].tag == filetype)
+        if (ent < baseline_ents && btab[ent].tag == filetype)
             continue;
         {
             Xpost_Object o = { 0 };
