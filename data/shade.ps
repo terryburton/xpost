@@ -569,6 +569,11 @@ currentglobal true setglobal
     false 2 //.mrdinit exec
     sh /ShadingType get 5 eq {
         /vpr sh /VerticesPerRow get def
+        % PLRM 4.9.3: a lattice mesh has at least two vertices per row.
+        % A row of fewer consumes no vertices from the source, so the read
+        % position never advances and the row loop below never reaches its
+        % source-exhausted exit -- a single shfill that spins for ever.
+        vpr 2 lt { /shfill cvx /rangecheck signalerror } if
         /prev null def
         {
             //.mrdmore exec not { exit } if
