@@ -34,8 +34,7 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include <stdlib.h> /* NULL strtod */
-#include <string.h>
+#include <string.h> /* strlen/memcmp for the startjob password */
 
 #include "xpost.h"
 #include "xpost_log.h"

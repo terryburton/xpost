@@ -17,8 +17,6 @@
 #include <stdlib.h>
 #include <string.h> /* memcpy: the merge settles into a scratch array */
 
-#include "xpost.h"
-#include "xpost_log.h"
 #include "xpost_object.h"
 #include "xpost_error.h"
 #include "xpost_op_path.h" /* XPOST_PATH_BREAK */

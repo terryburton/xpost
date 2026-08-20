@@ -35,7 +35,6 @@
 #endif
 
 #include <assert.h>
-#include <stdlib.h> /* NULL */
 
 #include "xpost.h"
 #include "xpost_memory.h"

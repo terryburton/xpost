@@ -35,9 +35,6 @@
 #define _USE_MATH_DEFINES /* needed for M_PI with Visual Studio */
 #include <assert.h>
 #include <math.h>
-#include <stdio.h>
-#include <stdlib.h> /* NULL strtod */
-#include <string.h>
 
 #include "xpost.h"
 #include "xpost_log.h"

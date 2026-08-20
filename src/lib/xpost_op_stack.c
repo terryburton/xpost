@@ -36,7 +36,6 @@
 #include <stddef.h>
 
 #include <assert.h>
-#include <stdio.h>
 
 #include "xpost.h"
 #include "xpost_memory.h"

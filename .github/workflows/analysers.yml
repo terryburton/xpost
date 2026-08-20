@@ -486,6 +486,55 @@ jobs:
         retention-days: 30
       if: always()
 
+  iwyu:
+    name: include-what-you-use
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build \
+          iwyu clang-17
+    # iwyu re-parses each unit with the clang it was built against, and
+    # reads the flags to hand that clang out of the compile database, so
+    # the database is generated with the matching clang; flags gcc would
+    # put there are flags iwyu cannot read back.
+    - name: setup
+      run: CC=clang-17 meson setup builddir
+    # This one counts rather than blocks: most of the library disagrees
+    # with iwyu today about what each file should name, so the findings
+    # are the ratchet and cannot be the gate. What is held is that the
+    # run happened: iwyu_tool folds per-unit failures into the same log
+    # a finding goes to, so the number of units it reported on is read
+    # against a floor well under what the database holds, for the
+    # difference between most of them and none.
+    - name: run
+      run: |
+        iwyu_tool -p builddir -j "$(nproc)" -- \
+          -Xiwyu --no_fwd_decls \
+          -Xiwyu --keep='*config.h*' \
+          > iwyu.log || true
+        echo '--- translation units reported ---'
+        reported=$(grep -cE 'should add these lines:|has correct #includes' iwyu.log || true)
+        echo "$reported"
+        [ "$reported" -ge 120 ] || {
+          echo "iwyu reported on $reported units; the database has more"
+          exit 1
+        }
+        echo '--- files with findings ---'
+        grep -oE '^\S+ should add these lines:' iwyu.log | sort -u | wc -l
+        echo '--- suggested removals, most common ---'
+        awk '/should remove these lines:/{r=1;next} /^$/{r=0} r&&/^- /' iwyu.log \
+          | sed 's/ *\/\/.*//' | sort | uniq -c | sort -rn | head -15
+    - uses: actions/upload-artifact@v4
+      with:
+        name: iwyu
+        path: iwyu.log
+        retention-days: 30
+      if: always()
+
   scan-build:
     name: clang static analyser
     runs-on: ubuntu-24.04

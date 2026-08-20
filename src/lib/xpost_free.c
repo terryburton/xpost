@@ -33,13 +33,11 @@
 # include <config.h>
 #endif
 
-#include <assert.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h> /* calloc malloc qsort free: the slide gathers its live rows */
 #include <string.h>
 
-#include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_memory.h" /* Xpost_Memory_File */
 #include "xpost_object.h" /* Xpost_Object */

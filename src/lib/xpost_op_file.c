@@ -37,7 +37,6 @@
 
 #include <assert.h>
 #include <ctype.h>
-#include <errno.h>
 //#include <poll.h>
 #include <stdio.h>
 #include <string.h>

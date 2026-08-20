@@ -33,7 +33,6 @@
 # include <config.h>
 #endif
 
-#include <assert.h>
 #include <stdio.h> /* FILE* */
 #include <stdlib.h> /* free */
 #include <string.h> /* memset */
@@ -52,7 +51,6 @@
 #include "xpost_memory.h"
 #include "xpost_stack.h"
 #include "xpost_free.h"  //  initializes free list
-#include "xpost_error.h"
 #include "xpost_save.h"  // initializes save/restore stacks
 
 #include "xpost_context.h"

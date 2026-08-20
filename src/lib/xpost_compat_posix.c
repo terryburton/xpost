@@ -84,7 +84,6 @@ char *realpath(const char *restrict file_name, char *restrict resolved_name);
 int fpurge(FILE *);
 #endif
 
-#include "xpost.h"
 #include "xpost_compat.h"
 #include "xpost_log.h"
 

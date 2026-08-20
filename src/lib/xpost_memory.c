@@ -32,7 +32,6 @@
 # include <config.h>
 #endif
 
-#include <assert.h>
 #include <ctype.h> /* isprint */
 #include <errno.h>
 #include <stdlib.h> /* free malloc realloc */
@@ -40,7 +39,6 @@
 #include <string.h> /* memset strerror */
 
 #include <sys/stat.h> /* open */
-#include <fcntl.h> /* open */
 
 #ifdef HAVE_SYS_MMAN_H
 # include <sys/mman.h> /* mmap munmap mremap */

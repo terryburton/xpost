@@ -32,7 +32,6 @@
 # include <config.h>
 #endif
 
-#include <assert.h>
 #include <stddef.h> /* offsetof */
 #include <stdlib.h> /* abs */
 //#include <stdio.h>
