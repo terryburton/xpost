@@ -2141,6 +2141,17 @@ test('bbox-device',
 # reach the content stream in, its page tree and its metadata. The input
 # is a single fill large enough to overflow the content buffer,
 # exercising the flush path.
+# A DOCINFO pdfmark's key and value reach the Info dictionary in the file,
+# so neither may carry the bytes that would end a name or a string and
+# begin a new object. The key is escaped as a name and a name value as a
+# name; this holds an injection to the one name it belongs to and leaves
+# ordinary metadata intact.
+test('check-pdf-docinfo',
+  find_program('tests/check-pdf-docinfo.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 test('pdf-device',
   find_program('tests/run-pdf-test.sh'),
   args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],

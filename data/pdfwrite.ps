@@ -836,15 +836,27 @@
             /infoobj .nextobj def
             infoobj .recordoff
             infoobj 20 string cvs .vw ( 0 obj\n<<) .vw
+            % A DOCINFO key is a name and its value is whatever the mark
+            % carried; both reach the file, so both are escaped where they
+            % could otherwise carry the bytes that end a name or a string
+            % and start an object. The key is a name, escaped as one; a
+            % string value is wrapped and its parens and backslashes
+            % escaped; a name value is emitted as a name and escaped as
+            % one; a number or other value converts to a token that has no
+            % delimiter to inject.
             .docinfo {
-                exch ( /) .vw 127 string cvs .vw ( ) .vw
+                exch ( /) .vw 127 string cvs .escname .vw ( ) .vw
                 dup type /stringtype eq {
                     (\() .vw
                     { dup 40 eq 1 index 41 eq or 1 index 92 eq or { (\\) .vw } if
                       1 string dup 0 4 -1 roll put .vw } forall
                     (\)) .vw
                 }{
-                    127 string cvs .vw
+                    dup type /nametype eq {
+                        (/) .vw 127 string cvs .escname .vw
+                    }{
+                        127 string cvs .vw
+                    } ifelse
                 } ifelse
             } forall
             ( >>\nendobj\n) .vw

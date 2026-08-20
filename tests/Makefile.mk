@@ -89,6 +89,7 @@ tests/check-one-bytebuf.sh \
 tests/check-op-references.sh \
 tests/check-opsigs-writer.sh \
 tests/check-page-output.sh \
+tests/check-pdf-docinfo.sh \
 tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
