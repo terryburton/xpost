@@ -25,4 +25,10 @@
 { -3000000000.0 cvi } stopped { $error /errorname get /rangecheck eq }{ -2000000000 lt } ifelse
 (cvi of a large negative real does not wrap) assert
 
+% cvi of a NaN has no integer to truncate to: undefinedresult, never a
+% silent conversion to the smallest integer. NaN arrives from real
+% overflow -- inf, then inf minus inf.
+{ 1e200 1e200 mul dup sub cvi } stopped { $error /errorname get /undefinedresult eq }{ pop false } ifelse
+(cvi of a NaN is undefinedresult, not a wrap) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

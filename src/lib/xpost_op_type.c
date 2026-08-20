@@ -381,6 +381,11 @@ int Ncvi(Xpost_Context *ctx,
         double v = (double)n.real_.val;
         /* cvi truncates toward zero; PLRM raises rangecheck when the real is
            too large to represent as an integer */
+        /* a NaN fails every comparison, so the range guard below lets it
+           through to (integer)NaN, which is undefined; it has no integer
+           to truncate to. (NaN reaches cvi from real overflow: inf - inf.) */
+        if (isnan(v))
+            return undefinedresult;
         if (v >= XPOST_INTEGER_HI_D + 1.0 || v <= XPOST_INTEGER_LO_D - 1.0)
             return rangecheck;
         n = xpost_int_cons((integer)v);
